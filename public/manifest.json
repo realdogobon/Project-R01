@@ -1,0 +1,22 @@
+{
+  "name": "Omni-Tech Scanner Absolute",
+  "short_name": "OmniScanner",
+  "description": "Progressive Web App with WebGL, WebAssembly, and Edge AI Document Scanner capabilities.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0a0a",
+  "theme_color": "#2563eb",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "https://img.icons8.com/color/192/scanner.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "https://img.icons8.com/color/512/scanner.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

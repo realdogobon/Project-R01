@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Omni-Tech Scanner Absolute</title>
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#2563eb" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <script async src="https://docs.opencv.org/4.8.0/opencv.js" id="opencvjs" type="text/javascript"></script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+    <script>
+      if ("serviceWorker" in navigator) {
+        // Only attempt to register service worker if not running inside an iframe (e.g. AI Studio preview)
+        // or other third-party framed environments where the browser blocks SW registration by design.
+        const isIFrame = window.self !== window.top;
+        if (!isIFrame) {
+          window.addEventListener("load", () => {
+            navigator.serviceWorker.register("/sw.js")
+              .then((reg) => console.log("Omni-Scanner SW Registered successfully:", reg.scope))
+              .catch((err) => {
+                // Use console.warn to log registration blockages without triggering automated error-alerts
+                console.warn("SW Registration failed:", err);
+              });
+          });
+        } else {
+          console.log("Service worker registration skipped: running inside an iframe workspace.");
+        }
+      }
+    </script>
+  </body>
+</html>
+
