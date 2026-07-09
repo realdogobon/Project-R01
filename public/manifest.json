@@ -1,0 +1,22 @@
+{
+  "name": "RoyScript TSR",
+  "short_name": "RoyScript",
+  "description": "Progressive Web App featuring translation, document scanning, real-time typing metrics, examination mode, and context-aware RAG search.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0a0a",
+  "theme_color": "#2563eb",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "https://img.icons8.com/color/192/scanner.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "https://img.icons8.com/color/512/scanner.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
