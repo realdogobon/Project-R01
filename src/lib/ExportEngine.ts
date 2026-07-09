@@ -99,7 +99,7 @@ export class ExportEngine {
     return await pdfDoc.save();
   }
 
-  static async exportReportPDF(documents: ScanDocument[], filename: string = "Omni_RAG_Report.pdf", watermark?: string) {
+  static async exportReportPDF(documents: ScanDocument[], filename: string = "RoyScript_TSR_Report.pdf", watermark?: string) {
      const bytes = await this.generateCombinedPDF(documents, { watermark });
      const blob = new Blob([bytes], { type: "application/pdf" });
      saveAs(blob, filename);

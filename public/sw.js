@@ -1,4 +1,4 @@
-const CACHE_NAME = "omni-scanner-cache-v1";
+const CACHE_NAME = "royscript-tsr-cache-v1";
 const ASSETS_TO_CACHE = [
   "/",
   "/index.html"

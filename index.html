@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Omni-Tech Scanner Absolute</title>
+    <title>RoyScript TSR</title>
     <link rel="manifest" href="/manifest.json" />
     <meta name="theme-color" content="#2563eb" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -21,7 +21,7 @@
         if (!isIFrame) {
           window.addEventListener("load", () => {
             navigator.serviceWorker.register("/sw.js")
-              .then((reg) => console.log("Omni-Scanner SW Registered successfully:", reg.scope))
+              .then((reg) => console.log("RoyScript TSR SW Registered successfully:", reg.scope))
               .catch((err) => {
                 // Use console.warn to log registration blockages without triggering automated error-alerts
                 console.warn("SW Registration failed:", err);

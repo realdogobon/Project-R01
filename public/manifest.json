@@ -1,7 +1,7 @@
 {
-  "name": "Omni-Tech Scanner Absolute",
-  "short_name": "OmniScanner",
-  "description": "Progressive Web App with WebGL, WebAssembly, and Edge AI Document Scanner capabilities.",
+  "name": "RoyScript TSR",
+  "short_name": "RoyScript",
+  "description": "Progressive Web App featuring translation, document scanning, real-time typing metrics, examination mode, and context-aware RAG search.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0a0a0a",

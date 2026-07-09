@@ -130,7 +130,7 @@ export class ScannerProEngine {
           ctx.fillStyle = "rgba(220, 220, 220, 0.25)";
           ctx.font = "bold 24px sans-serif";
           ctx.textAlign = "center";
-          ctx.fillText("OMNI PASSPORT / ID SCANNER WORKSPACE", 400, 565);
+          ctx.fillText("ROYSCRIPT PASSPORT / ID SCANNER WORKSPACE", 400, 565);
 
 
           const cardW = 540;
