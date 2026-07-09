@@ -1,0 +1,6 @@
+{
+  "name": "RoyScript TSR",
+  "description": "An advanced productivity workspace integrating professional translation, document scanning, real-time typing metrics, examination mode, and intelligent RAG search powered by Gemini.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
