@@ -8,16 +8,45 @@ import {
   Sun,
   Moon,
   Monitor,
-  Coffee, CloudRain, Droplets, Waves, Flame, Plane, Snowflake, Bug,
-  Circle, TrainFront, Activity, Wind, Timer, Fan, Radio, Sparkles, Bird,
-  GlassWater, MapPin, CloudLightning, Save, Trash2, Plus
+  Coffee,
+  CloudRain,
+  Droplets,
+  Waves,
+  Flame,
+  Plane,
+  Snowflake,
+  Bug,
+  Circle,
+  TrainFront,
+  Activity,
+  Wind,
+  Timer,
+  Fan,
+  Radio,
+  Sparkles,
+  Bird,
+  GlassWater,
+  MapPin,
+  CloudLightning,
+  Save,
+  Trash2,
+  Plus,
 } from "lucide-react";
 import { useTheme } from "next-themes";
-import { useSettings, FONT_OPTIONS, THEME_OPTIONS, TypingFont, KeyboardThemeName, SwitchType } from "../../contexts/SettingsContext";
-import { SOUND_VARIANTS, ERROR_SOUND_VARIANTS } from "../../hooks/useSoundEngine";
+import {
+  useSettings,
+  FONT_OPTIONS,
+  THEME_OPTIONS,
+  TypingFont,
+  KeyboardThemeName,
+  SwitchType,
+} from "../../contexts/SettingsContext";
+import {
+  SOUND_VARIANTS,
+  ERROR_SOUND_VARIANTS,
+} from "../../hooks/useSoundEngine";
 import { motion, AnimatePresence } from "motion/react";
 import { SmoothInput } from "../ui/SmoothInputs";
-
 
 function cn(...classes: (string | undefined | null | boolean)[]) {
   return classes.filter(Boolean).join(" ");
@@ -51,30 +80,30 @@ interface SettingsModalProps {
   onClose: () => void;
 }
 
-
 interface ThemeSliderProps {
   value: number;
   onChange: (v: number) => void;
   accentColor: string;
 }
 
-export function ThemeSlider({ value, onChange, accentColor }: ThemeSliderProps) {
+export function ThemeSlider({
+  value,
+  onChange,
+  accentColor,
+}: ThemeSliderProps) {
   const percent = value * 100;
 
   return (
     <div className="relative flex-1 flex items-center h-5 select-none group">
-
       <div className="relative w-full h-1 bg-neutral-200 dark:bg-white/10 rounded-full overflow-hidden">
-
         <div
           className="absolute left-0 top-0 h-full rounded-full transition-all duration-75 ease-out"
           style={{
             width: `${percent}%`,
-            backgroundColor: accentColor
+            backgroundColor: accentColor,
           }}
         />
       </div>
-
 
       <div
         className="absolute size-3 -translate-x-1/2 rounded-full pointer-events-none transition-all duration-75 ease-out shadow-[0_1px_3px_rgba(0,0,0,0.15)] bg-white dark:bg-neutral-100"
@@ -136,7 +165,6 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     setErrorSoundProfile,
     setKeyboardModel,
 
-
     setAutoPairSound,
     setWordFadeOut,
     setBetterPerformance,
@@ -150,42 +178,47 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     resetToDefaults,
   } = useSettings();
 
-  const [view, setView] = useState<"main" | "themes" | "fonts" | "profiles" | "atmosphere" | "errorSounds">("main");
+  const [view, setView] = useState<
+    "main" | "themes" | "fonts" | "profiles" | "atmosphere" | "errorSounds"
+  >("main");
   const [isSavingPreset, setIsSavingPreset] = useState(false);
   const [newPresetName, setNewPresetName] = useState("");
   const scrollRef = React.useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (scrollRef.current) {
-
-
       const timer = setTimeout(() => {
         if (scrollRef.current) {
-          scrollRef.current.scrollTo({ top: 0, behavior: 'instant' });
+          scrollRef.current.scrollTo({ top: 0, behavior: "instant" });
         }
       }, 150);
       return () => clearTimeout(timer);
     }
   }, [view, isOpen]);
 
-  const activeSoundsList = Object.keys(ambientMix).filter(id => ambientMix[id] > 0);
+  const activeSoundsList = Object.keys(ambientMix).filter(
+    (id) => ambientMix[id] > 0,
+  );
   let atmosphereLabel = "None";
   if (activeSoundsList.length === 1) {
-    atmosphereLabel = AMBIENT_SOUNDS.find(s => s.id === activeSoundsList[0])?.label || "Custom Mix";
+    atmosphereLabel =
+      AMBIENT_SOUNDS.find((s) => s.id === activeSoundsList[0])?.label ||
+      "Custom Mix";
   } else if (activeSoundsList.length > 1) {
     atmosphereLabel = "Custom Mix";
     for (const [presetName, mix] of Object.entries(savedAmbientMixes || {})) {
-      const presetActive = Object.keys(mix).filter(id => mix[id] > 0);
+      const presetActive = Object.keys(mix).filter((id) => mix[id] > 0);
       if (presetActive.length !== activeSoundsList.length) continue;
 
-      const isMatch = activeSoundsList.every(id => mix[id] === ambientMix[id]);
+      const isMatch = activeSoundsList.every(
+        (id) => mix[id] === ambientMix[id],
+      );
       if (isMatch) {
-         atmosphereLabel = presetName;
-         break;
+        atmosphereLabel = presetName;
+        break;
       }
     }
   }
-
 
   useEffect(() => {
     if (!isOpen) {
@@ -193,8 +226,10 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     }
   }, [isOpen]);
 
-  const currentThemeObj = THEME_OPTIONS.find((t) => t.id === accent) || THEME_OPTIONS[0];
-  const selectedFont = FONT_OPTIONS.find((f) => f.id === font) || FONT_OPTIONS[0];
+  const currentThemeObj =
+    THEME_OPTIONS.find((t) => t.id === accent) || THEME_OPTIONS[0];
+  const selectedFont =
+    FONT_OPTIONS.find((f) => f.id === font) || FONT_OPTIONS[0];
   const accentColor = currentThemeObj.colors[2];
 
   return (
@@ -204,7 +239,6 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           className="fixed inset-0 z-[100] flex items-center justify-center select-none font-sans"
           data-settings-panel="true"
         >
-
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -212,7 +246,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             onClick={onClose}
             className={cn(
               "fixed inset-0 bg-neutral-950/20 dark:bg-black/60 transition-opacity transform-gpu",
-              !betterPerformance && "backdrop-blur-[2px]"
+              !betterPerformance && "backdrop-blur-[2px]",
             )}
           />
 
@@ -227,15 +261,17 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 : { type: "tween", ease: [0.16, 1, 0.3, 1], duration: 0.3 }
             }
             className={cn(
-              "fixed right-3 top-3 bottom-w bottom-3 w-[340px] max-w-[calc(100vw-24px)] h-[calc(100dvh-24px)] flex flex-col z-[105] overflow-hidden rounded-2xl transform-gpu transition-all bg-white dark:bg-[#121214] border border-neutral-200/50 dark:border-white/[0.05] shadow-2xl"
+              "fixed right-3 top-3 bottom-w bottom-3 w-[340px] max-w-[calc(100vw-24px)] h-[calc(100dvh-24px)] flex flex-col z-[105] overflow-hidden rounded-2xl transform-gpu transition-all bg-white dark:bg-[#121214] border border-neutral-200/50 dark:border-white/[0.05] shadow-2xl",
             )}
             style={{
               fontFamily: "var(--app-font-family), monospace",
-              transform: "none !important" // Strict blocker for page scale
+              transform: "none !important", // Strict blocker for page scale
             }}
           >
             {/* Scoped CSS Blocker injected directly inside panel */}
-            <style dangerouslySetInnerHTML={{ __html: `
+            <style
+              dangerouslySetInnerHTML={{
+                __html: `
               [data-settings-panel] button,
               [data-settings-panel] select,
               [data-settings-panel] [role="button"],
@@ -264,7 +300,9 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               .dark [data-settings-panel] .custom-scrollbar::-webkit-scrollbar-thumb {
                 background: rgba(255,255,255,0.06);
               }
-            ` }} />
+            `,
+              }}
+            />
 
             {/* Pristine Drawer Header */}
             <div className="px-5 pt-5 pb-2 flex items-center justify-between shrink-0">
@@ -303,7 +341,17 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                       <ArrowLeft className="w-3.5 h-3.5" />
                     </button>
                     <span className="font-semibold text-neutral-800 dark:text-neutral-100 text-[13px] tracking-tight">
-                      {view === "themes" ? "Themes" : view === "fonts" ? "Font" : view === "soundCentre" ? "Choose Clicky Sounds" : view === "profiles" ? "Keyboard Sounds" : view === "errorSounds" ? "Error Sounds" : "Atmosphere"}
+                      {view === "themes"
+                        ? "Themes"
+                        : view === "fonts"
+                          ? "Font"
+                          : view === "soundCentre"
+                            ? "Choose Clicky Sounds"
+                            : view === "profiles"
+                              ? "Keyboard Sounds"
+                              : view === "errorSounds"
+                                ? "Error Sounds"
+                                : "Atmosphere"}
                     </span>
                   </motion.div>
                 )}
@@ -319,7 +367,10 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             </div>
 
             {/* Main scrollable grid layout */}
-            <div ref={scrollRef} className="flex-1 overflow-y-auto custom-scrollbar px-5 py-4 flex flex-col min-h-0 space-y-5">
+            <div
+              ref={scrollRef}
+              className="flex-1 overflow-y-auto custom-scrollbar px-5 py-4 flex flex-col min-h-0 space-y-5"
+            >
               <AnimatePresence mode="wait">
                 {view === "main" ? (
                   <motion.div
@@ -343,7 +394,11 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                           <>
                             <span className="flex h-3.5 w-8 overflow-hidden rounded-full ring-1 ring-neutral-200 dark:ring-white/10 shrink-0">
                               {currentThemeObj.colors.map((c, idx) => (
-                                <span key={idx} className="flex-1" style={{ backgroundColor: c }} />
+                                <span
+                                  key={idx}
+                                  className="flex-1"
+                                  style={{ backgroundColor: c }}
+                                />
                               ))}
                             </span>
                             <span className="text-[11px] font-medium text-neutral-500 dark:text-neutral-400">
@@ -373,7 +428,11 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                         <div className="relative isolate flex h-8 rounded-full border border-neutral-200 dark:border-white/10 bg-neutral-100 dark:bg-white/[0.06] p-1">
                           {[
                             { key: "classic", label: "Classic" },
-                            { key: "das_keyboard_4", label: "Das Keyboard (Soon)", disabled: true },
+                            {
+                              key: "das_keyboard_4",
+                              label: "Das Keyboard (Soon)",
+                              disabled: true,
+                            },
                           ].map(({ key, label, disabled }) => {
                             const isActive = keyboardModel === key;
                             return (
@@ -381,7 +440,9 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                                 key={key}
                                 onClick={() => {
                                   if (!disabled) {
-                                    setKeyboardModel(key as "classic" | "das_keyboard_4");
+                                    setKeyboardModel(
+                                      key as "classic" | "das_keyboard_4",
+                                    );
                                   }
                                 }}
                                 disabled={disabled}
@@ -390,8 +451,8 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                                   disabled
                                     ? "opacity-40 cursor-not-allowed text-neutral-400 dark:text-neutral-500"
                                     : isActive
-                                    ? "text-neutral-900 dark:text-neutral-50 font-bold cursor-pointer"
-                                    : "text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200 cursor-pointer"
+                                      ? "text-neutral-900 dark:text-neutral-50 font-bold cursor-pointer"
+                                      : "text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200 cursor-pointer",
                                 )}
                                 type="button"
                                 style={{ transform: "none" }}
@@ -400,7 +461,11 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                                   <motion.div
                                     layoutId="activeKeyboardModel"
                                     className="absolute inset-0 rounded-full bg-neutral-300/40 dark:bg-white/10"
-                                    transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                                    transition={{
+                                      type: "spring",
+                                      stiffness: 380,
+                                      damping: 30,
+                                    }}
                                   />
                                 )}
                                 <span className="relative z-10">{label}</span>
@@ -433,7 +498,17 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                             onClick={() => setView("soundCentre")}
                             preview={
                               <span className="text-[11px] font-medium text-neutral-500 dark:text-neutral-400 capitalize max-w-[150px] truncate text-right">
-                                {SOUND_VARIANTS.find(v => v.id === activeSwitch)?.label || activeSwitch.replace("cdn_", "")} / {errorSoundProfile === "off" ? "Off" : (ERROR_SOUND_VARIANTS.find(v => v.id === errorSoundProfile)?.label || errorSoundProfile.replace("err_", ""))}
+                                {SOUND_VARIANTS.find(
+                                  (v) => v.id === activeSwitch,
+                                )?.label ||
+                                  activeSwitch.replace("cdn_", "")}{" "}
+                                /{" "}
+                                {errorSoundProfile === "off"
+                                  ? "Off"
+                                  : ERROR_SOUND_VARIANTS.find(
+                                      (v) => v.id === errorSoundProfile,
+                                    )?.label ||
+                                    errorSoundProfile.replace("err_", "")}
                               </span>
                             }
                           />
@@ -529,7 +604,9 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                         label="Better Performance"
                         description="Limit high-intensity blurs for maximum FPS"
                         enabled={betterPerformance}
-                        onToggle={() => setBetterPerformance(!betterPerformance)}
+                        onToggle={() =>
+                          setBetterPerformance(!betterPerformance)
+                        }
                         activeColor={accentColor}
                       />
                     </Section>
@@ -546,7 +623,11 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                       </button>
 
                       <div className="text-[9.5px] text-neutral-350 dark:text-neutral-500 tracking-wide font-normal">
-                        Press <kbd className="font-mono px-1 py-0.5 border border-neutral-200 dark:border-neutral-800 rounded bg-neutral-50 dark:bg-black/20 text-neutral-400">Ctrl+K</kbd> to toggle
+                        Press{" "}
+                        <kbd className="font-mono px-1 py-0.5 border border-neutral-200 dark:border-neutral-800 rounded bg-neutral-50 dark:bg-black/20 text-neutral-400">
+                          Ctrl+K
+                        </kbd>{" "}
+                        to toggle
                       </div>
                     </div>
                   </motion.div>
@@ -571,10 +652,12 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                               "group relative flex flex-col gap-2 rounded-xl px-3 py-3 text-left transition-all duration-150 cursor-pointer border",
                               selected
                                 ? "bg-neutral-550/[0.08] dark:bg-white/[0.06]"
-                                : "bg-transparent border-transparent hover:bg-neutral-500/[0.04] dark:hover:bg-white/[0.03]"
+                                : "bg-transparent border-transparent hover:bg-neutral-500/[0.04] dark:hover:bg-white/[0.03]",
                             )}
                             style={{
-                              borderColor: selected ? accentColor : "transparent",
+                              borderColor: selected
+                                ? accentColor
+                                : "transparent",
                             }}
                           >
                             {/* Palette strip — 3 colors */}
@@ -599,7 +682,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                                   "font-medium text-xs capitalize transition-colors duration-150 leading-none",
                                   selected
                                     ? "text-neutral-900 dark:text-neutral-50 font-bold"
-                                    : "text-neutral-400 group-hover:text-neutral-800 dark:group-hover:text-neutral-200"
+                                    : "text-neutral-400 group-hover:text-neutral-800 dark:group-hover:text-neutral-200",
                                 )}
                               >
                                 {t.label}
@@ -656,7 +739,8 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                         onClick={() => setView("profiles")}
                         preview={
                           <span className="text-[11px] font-medium text-neutral-500 dark:text-neutral-400 capitalize max-w-[150px] truncate text-right">
-                            {SOUND_VARIANTS.find(v => v.id === activeSwitch)?.label || activeSwitch.replace("cdn_", "")}
+                            {SOUND_VARIANTS.find((v) => v.id === activeSwitch)
+                              ?.label || activeSwitch.replace("cdn_", "")}
                           </span>
                         }
                       />
@@ -665,7 +749,12 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                         onClick={() => setView("errorSounds")}
                         preview={
                           <span className="text-[11px] font-medium text-neutral-500 dark:text-neutral-400 capitalize max-w-[150px] truncate text-right">
-                            {errorSoundProfile === "off" ? "Off" : (ERROR_SOUND_VARIANTS.find(v => v.id === errorSoundProfile)?.label || errorSoundProfile.replace("err_", ""))}
+                            {errorSoundProfile === "off"
+                              ? "Off"
+                              : ERROR_SOUND_VARIANTS.find(
+                                  (v) => v.id === errorSoundProfile,
+                                )?.label ||
+                                errorSoundProfile.replace("err_", "")}
                           </span>
                         }
                       />
@@ -682,11 +771,18 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                   >
                     <div className="space-y-4">
                       <div>
-                        <p className="px-3 mb-1.5 text-[10px] font-bold tracking-wider text-neutral-400 dark:text-neutral-500 uppercase">Classic Switches</p>
+                        <p className="px-3 mb-1.5 text-[10px] font-bold tracking-wider text-neutral-400 dark:text-neutral-500 uppercase">
+                          Classic Switches
+                        </p>
                         <div className="space-y-0.5">
                           {(["blue", "brown", "red"] as const).map((sw) => {
                             const selected = activeSwitch === sw;
-                            const switchImg = sw === "blue" ? "/assets/images/CherryMX2ABlue.png" : sw === "brown" ? "/assets/images/CherryMX2ABrown.png" : "/assets/images/CherryMX2ARed.png";
+                            const switchImg =
+                              sw === "blue"
+                                ? "/assets/images/CherryMX2ABlue.png"
+                                : sw === "brown"
+                                  ? "/assets/images/CherryMX2ABrown.png"
+                                  : "/assets/images/CherryMX2ARed.png";
                             return (
                               <button
                                 key={sw}
@@ -695,17 +791,24 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                                   "flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left transition-colors cursor-pointer",
                                   selected
                                     ? "bg-neutral-500/[0.05] dark:bg-white/[0.05]"
-                                    : "hover:bg-neutral-500/[0.03] dark:hover:bg-white/[0.03]"
+                                    : "hover:bg-neutral-500/[0.03] dark:hover:bg-white/[0.03]",
                                 )}
                               >
                                 <span className="flex items-center gap-3">
                                   <img
                                     src={switchImg}
                                     alt={`${sw} switch`}
-                                    className="w-12 h-12 object-contain select-none"
+                                    className="w-15 h-15 object-contain select-none"
                                     referrerPolicy="no-referrer"
                                   />
-                                  <span className={cn("text-xs font-medium capitalize", selected ? "text-neutral-900 dark:text-neutral-50 font-bold" : "text-neutral-500 dark:text-neutral-400")}>
+                                  <span
+                                    className={cn(
+                                      "text-xs font-medium capitalize",
+                                      selected
+                                        ? "text-neutral-900 dark:text-neutral-50 font-bold"
+                                        : "text-neutral-500 dark:text-neutral-400",
+                                    )}
+                                  >
                                     {sw} tactile switch
                                   </span>
                                 </span>
@@ -723,9 +826,15 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                       </div>
 
                       <div>
-                        <p className="px-3 mb-1.5 text-[10px] font-bold tracking-wider text-neutral-400 dark:text-neutral-500 uppercase">Premium Hardware</p>
+                        <p className="px-3 mb-1.5 text-[10px] font-bold tracking-wider text-neutral-400 dark:text-neutral-500 uppercase">
+                          Premium Hardware
+                        </p>
                         <div className="space-y-0.5">
-                          {SOUND_VARIANTS.filter(v => parseInt(v.id.split("_")[1]) >= 17 || v.id === "cdn_4").map((v) => {
+                          {SOUND_VARIANTS.filter(
+                            (v) =>
+                              parseInt(v.id.split("_")[1]) >= 17 ||
+                              v.id === "cdn_4",
+                          ).map((v) => {
                             const selected = activeSwitch === v.id;
                             return (
                               <button
@@ -735,12 +844,23 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                                   "flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left transition-colors cursor-pointer",
                                   selected
                                     ? "bg-neutral-500/[0.05] dark:bg-white/[0.05]"
-                                    : "hover:bg-neutral-500/[0.03] dark:hover:bg-white/[0.03]"
+                                    : "hover:bg-neutral-500/[0.03] dark:hover:bg-white/[0.03]",
                                 )}
                               >
                                 <span className="flex items-center gap-2">
-                                  <span className={cn("w-1.5 h-1.5 rounded-full bg-neutral-400 dark:bg-neutral-600")} />
-                                  <span className={cn("text-xs font-medium", selected ? "text-neutral-900 dark:text-neutral-50 font-bold" : "text-neutral-500 dark:text-neutral-400")}>
+                                  <span
+                                    className={cn(
+                                      "w-1.5 h-1.5 rounded-full bg-neutral-400 dark:bg-neutral-600",
+                                    )}
+                                  />
+                                  <span
+                                    className={cn(
+                                      "text-xs font-medium",
+                                      selected
+                                        ? "text-neutral-900 dark:text-neutral-50 font-bold"
+                                        : "text-neutral-500 dark:text-neutral-400",
+                                    )}
+                                  >
                                     {v.label}
                                   </span>
                                 </span>
@@ -758,11 +878,13 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                       </div>
 
                       <div>
-                        <p className="px-3 mb-1.5 text-[10px] font-bold tracking-wider text-neutral-400 dark:text-neutral-500 uppercase">Arcade & Effects</p>
+                        <p className="px-3 mb-1.5 text-[10px] font-bold tracking-wider text-neutral-400 dark:text-neutral-500 uppercase">
+                          Arcade & Effects
+                        </p>
                         <div className="space-y-0.5">
-                          {SOUND_VARIANTS.filter(v => {
+                          {SOUND_VARIANTS.filter((v) => {
                             const num = parseInt(v.id.split("_")[1]);
-                            return (num >= 1 && num <= 16 && num !== 4);
+                            return num >= 1 && num <= 16 && num !== 4;
                           }).map((v) => {
                             const selected = activeSwitch === v.id;
                             return (
@@ -773,12 +895,23 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                                   "flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left transition-colors cursor-pointer",
                                   selected
                                     ? "bg-neutral-500/[0.05] dark:bg-white/[0.05]"
-                                    : "hover:bg-neutral-500/[0.03] dark:hover:bg-white/[0.03]"
+                                    : "hover:bg-neutral-500/[0.03] dark:hover:bg-white/[0.03]",
                                 )}
                               >
                                 <span className="flex items-center gap-2">
-                                  <span className={cn("w-1.5 h-1.5 rounded-full bg-neutral-400 dark:bg-neutral-600")} />
-                                  <span className={cn("text-xs font-medium", selected ? "text-neutral-900 dark:text-neutral-50 font-bold" : "text-neutral-500 dark:text-neutral-400")}>
+                                  <span
+                                    className={cn(
+                                      "w-1.5 h-1.5 rounded-full bg-neutral-400 dark:bg-neutral-600",
+                                    )}
+                                  />
+                                  <span
+                                    className={cn(
+                                      "text-xs font-medium",
+                                      selected
+                                        ? "text-neutral-900 dark:text-neutral-50 font-bold"
+                                        : "text-neutral-500 dark:text-neutral-400",
+                                    )}
+                                  >
                                     {v.label}
                                   </span>
                                 </span>
@@ -807,24 +940,47 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                   >
                     <div className="space-y-4">
                       <div>
-                        <p className="px-3 mb-1.5 text-[10px] font-bold tracking-wider text-neutral-400 dark:text-neutral-500 uppercase">Error Sounds</p>
+                        <p className="px-3 mb-1.5 text-[10px] font-bold tracking-wider text-neutral-400 dark:text-neutral-500 uppercase">
+                          Error Sounds
+                        </p>
                         <div className="space-y-0.5">
-                          {[{ id: "off", label: "Off (Silent)" }, { id: "default", label: "Default Buzzer" }, ...ERROR_SOUND_VARIANTS].map((v) => {
-                            const selected = errorSoundProfile === v.id || (errorSoundProfile === "" && v.id === "off");
+                          {[
+                            { id: "off", label: "Off (Silent)" },
+                            { id: "default", label: "Default Buzzer" },
+                            ...ERROR_SOUND_VARIANTS,
+                          ].map((v) => {
+                            const selected =
+                              errorSoundProfile === v.id ||
+                              (errorSoundProfile === "" && v.id === "off");
                             return (
                               <button
                                 key={v.id}
-                                onClick={() => setErrorSoundProfile(v.id as import("@/contexts/SettingsContext").ErrorSoundType)}
+                                onClick={() =>
+                                  setErrorSoundProfile(
+                                    v.id as import("@/contexts/SettingsContext").ErrorSoundType,
+                                  )
+                                }
                                 className={cn(
                                   "flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left transition-colors cursor-pointer",
                                   selected
                                     ? "bg-neutral-500/[0.05] dark:bg-white/[0.05]"
-                                    : "hover:bg-neutral-500/[0.03] dark:hover:bg-white/[0.03]"
+                                    : "hover:bg-neutral-500/[0.03] dark:hover:bg-white/[0.03]",
                                 )}
                               >
                                 <span className="flex items-center gap-2">
-                                  <span className={cn("w-1.5 h-1.5 rounded-full bg-neutral-400 dark:bg-neutral-600")} />
-                                  <span className={cn("text-xs font-medium", selected ? "text-neutral-900 dark:text-neutral-50 font-bold" : "text-neutral-500 dark:text-neutral-400")}>
+                                  <span
+                                    className={cn(
+                                      "w-1.5 h-1.5 rounded-full bg-neutral-400 dark:bg-neutral-600",
+                                    )}
+                                  />
+                                  <span
+                                    className={cn(
+                                      "text-xs font-medium",
+                                      selected
+                                        ? "text-neutral-900 dark:text-neutral-50 font-bold"
+                                        : "text-neutral-500 dark:text-neutral-400",
+                                    )}
+                                  >
                                     {v.label}
                                   </span>
                                 </span>
@@ -852,7 +1008,9 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                     className="space-y-2 pb-8"
                   >
                     <div className="flex items-center justify-between px-2 mb-2 pb-2 border-b border-neutral-200 dark:border-neutral-800">
-                      <div className="text-[10px] font-bold tracking-wider text-neutral-400 dark:text-neutral-500 uppercase">Profiles</div>
+                      <div className="text-[10px] font-bold tracking-wider text-neutral-400 dark:text-neutral-500 uppercase">
+                        Profiles
+                      </div>
                       <button
                         onClick={() => setIsSavingPreset(!isSavingPreset)}
                         className="text-[10px] flex items-center gap-1 font-medium text-neutral-500 hover:text-neutral-900 dark:hover:text-white transition-colors"
@@ -875,7 +1033,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                                 if (e.key === "Enter" && newPresetName.trim()) {
                                   setSavedAmbientMixes({
                                     ...savedAmbientMixes,
-                                    [newPresetName.trim()]: ambientMix
+                                    [newPresetName.trim()]: ambientMix,
                                   });
                                   setNewPresetName("");
                                   setIsSavingPreset(false);
@@ -899,94 +1057,130 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                             const mix = savedAmbientMixes[presetName];
 
                             // Check if current active sounds match the preset sounds and volumes
-                            const presetKeys = Object.keys(mix).filter(k => mix[k] > 0);
-                            const activeKeys = Object.keys(ambientMix).filter(k => ambientMix[k] > 0);
-                            const isActive = presetKeys.length === activeKeys.length && presetKeys.every(k => ambientMix[k] === mix[k]);
+                            const presetKeys = Object.keys(mix).filter(
+                              (k) => mix[k] > 0,
+                            );
+                            const activeKeys = Object.keys(ambientMix).filter(
+                              (k) => ambientMix[k] > 0,
+                            );
+                            const isActive =
+                              presetKeys.length === activeKeys.length &&
+                              presetKeys.every((k) => ambientMix[k] === mix[k]);
 
                             return (
-                            <div key={presetName} className={cn("flex items-center group justify-between rounded px-2 py-1.5 transition-colors", isActive ? "bg-neutral-500/[0.05] dark:bg-white/[0.05]" : "hover:bg-neutral-100 dark:hover:bg-neutral-800")}>
-                              <button
-                                onClick={() => {
-                                  if (isActive) {
-                                    setAmbientMix({});
-                                  } else {
-                                    setAmbientMix(mix);
-                                  }
-                                }}
-                                className={cn("flex-1 text-left text-xs font-medium", isActive ? "text-neutral-900 dark:text-white font-bold" : "text-neutral-700 dark:text-neutral-300")}
+                              <div
+                                key={presetName}
+                                className={cn(
+                                  "flex items-center group justify-between rounded px-2 py-1.5 transition-colors",
+                                  isActive
+                                    ? "bg-neutral-500/[0.05] dark:bg-white/[0.05]"
+                                    : "hover:bg-neutral-100 dark:hover:bg-neutral-800",
+                                )}
                               >
-                                {presetName}
-                              </button>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  const newMixes = { ...savedAmbientMixes };
-                                  delete newMixes[presetName];
-                                  setSavedAmbientMixes(newMixes);
-                                }}
-                                className="opacity-0 group-hover:opacity-100 p-1 text-red-500 hover:bg-red-500/10 rounded transition-all"
-                              >
-                                <Trash2 size={12} />
-                              </button>
-                            </div>
-                          )})}
+                                <button
+                                  onClick={() => {
+                                    if (isActive) {
+                                      setAmbientMix({});
+                                    } else {
+                                      setAmbientMix(mix);
+                                    }
+                                  }}
+                                  className={cn(
+                                    "flex-1 text-left text-xs font-medium",
+                                    isActive
+                                      ? "text-neutral-900 dark:text-white font-bold"
+                                      : "text-neutral-700 dark:text-neutral-300",
+                                  )}
+                                >
+                                  {presetName}
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    const newMixes = { ...savedAmbientMixes };
+                                    delete newMixes[presetName];
+                                    setSavedAmbientMixes(newMixes);
+                                  }}
+                                  className="opacity-0 group-hover:opacity-100 p-1 text-red-500 hover:bg-red-500/10 rounded transition-all"
+                                >
+                                  <Trash2 size={12} />
+                                </button>
+                              </div>
+                            );
+                          })}
                         </div>
                       )}
 
-                      <div className="px-2 mb-2 text-[10px] font-bold tracking-wider text-neutral-400 dark:text-neutral-500 uppercase">Sounds</div>
+                      <div className="px-2 mb-2 text-[10px] font-bold tracking-wider text-neutral-400 dark:text-neutral-500 uppercase">
+                        Sounds
+                      </div>
                       <div className="space-y-0.5">
                         {AMBIENT_SOUNDS.map(({ id, label, Icon }) => {
-                        const currentVolume = ambientMix[id] || 0;
-                        const selected = currentVolume > 0;
+                          const currentVolume = ambientMix[id] || 0;
+                          const selected = currentVolume > 0;
 
-                        const toggleSound = () => {
-                          if (selected) {
-                            const newMix = { ...ambientMix };
-                            delete newMix[id];
-                            setAmbientMix(newMix);
-                          } else {
-                            setAmbientMix({ ...ambientMix, [id]: 0.5 });
-                          }
-                        };
+                          const toggleSound = () => {
+                            if (selected) {
+                              const newMix = { ...ambientMix };
+                              delete newMix[id];
+                              setAmbientMix(newMix);
+                            } else {
+                              setAmbientMix({ ...ambientMix, [id]: 0.5 });
+                            }
+                          };
 
-                        return (
-                          <div
-                            key={id}
-                            className={cn(
-                              "w-full rounded-lg px-3 py-2.5 transition-colors",
-                              selected
-                                ? "bg-neutral-500/[0.05] dark:bg-white/[0.05]"
-                                : "hover:bg-neutral-500/[0.03] dark:hover:bg-white/[0.03]"
-                            )}
-                          >
-                            <button
-                              onClick={toggleSound}
-                              className="flex w-full items-center justify-between text-left cursor-pointer outline-none"
-                            >
-                              <span className={cn("text-xs font-medium flex items-center gap-2", selected ? "text-neutral-900 dark:text-neutral-50 font-bold" : "text-neutral-500 dark:text-neutral-400")}>
-                                <Icon size={14} className={cn(selected ? "opacity-100" : "opacity-70")} />
-                                {label}
-                              </span>
-                              {selected && (
-                                <Check
-                                  style={{ color: accentColor }}
-                                  className="stroke-[3.5px]"
-                                  size={12}
-                                />
+                          return (
+                            <div
+                              key={id}
+                              className={cn(
+                                "w-full rounded-lg px-3 py-2.5 transition-colors",
+                                selected
+                                  ? "bg-neutral-500/[0.05] dark:bg-white/[0.05]"
+                                  : "hover:bg-neutral-500/[0.03] dark:hover:bg-white/[0.03]",
                               )}
-                            </button>
-                            {selected && (
-                              <div className="pt-3 pb-1 pl-1 pr-1">
-                                <ThemeSlider
-                                  value={currentVolume}
-                                  onChange={(v) => setAmbientMix({ ...ambientMix, [id]: v })}
-                                  accentColor={accentColor}
-                                />
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
+                            >
+                              <button
+                                onClick={toggleSound}
+                                className="flex w-full items-center justify-between text-left cursor-pointer outline-none"
+                              >
+                                <span
+                                  className={cn(
+                                    "text-xs font-medium flex items-center gap-2",
+                                    selected
+                                      ? "text-neutral-900 dark:text-neutral-50 font-bold"
+                                      : "text-neutral-500 dark:text-neutral-400",
+                                  )}
+                                >
+                                  <Icon
+                                    size={14}
+                                    className={cn(
+                                      selected ? "opacity-100" : "opacity-70",
+                                    )}
+                                  />
+                                  {label}
+                                </span>
+                                {selected && (
+                                  <Check
+                                    style={{ color: accentColor }}
+                                    className="stroke-[3.5px]"
+                                    size={12}
+                                  />
+                                )}
+                              </button>
+                              {selected && (
+                                <div className="pt-3 pb-1 pl-1 pr-1">
+                                  <ThemeSlider
+                                    value={currentVolume}
+                                    onChange={(v) =>
+                                      setAmbientMix({ ...ambientMix, [id]: v })
+                                    }
+                                    accentColor={accentColor}
+                                  />
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   </motion.div>
@@ -1032,7 +1226,7 @@ function ThemeSwitcher({ className }: { className?: string }) {
     <div
       className={cn(
         "relative isolate flex h-8 rounded-full border border-neutral-200 dark:border-white/10 bg-neutral-100 dark:bg-white/[0.06] p-1",
-        className
+        className,
       )}
     >
       {themes.map(({ key, icon: Icon, label }) => {
@@ -1059,7 +1253,7 @@ function ThemeSwitcher({ className }: { className?: string }) {
                 "relative z-10 w-3.5 h-3.5 transition-colors",
                 isActive
                   ? "text-neutral-900 dark:text-foreground font-bold"
-                  : "text-neutral-400 group-hover:text-neutral-600 dark:group-hover:text-neutral-300"
+                  : "text-neutral-400 group-hover:text-neutral-600 dark:group-hover:text-neutral-300",
               )}
             />
           </button>
@@ -1080,7 +1274,13 @@ interface FontGroupProps {
   themeAccent: string;
 }
 
-function FontGroup({ label, fonts, active, onSelect, themeAccent }: FontGroupProps) {
+function FontGroup({
+  label,
+  fonts,
+  active,
+  onSelect,
+  themeAccent,
+}: FontGroupProps) {
   return (
     <div className="space-y-1 block text-left">
       <p className="mb-1.5 px-3 font-semibold text-[10px] text-neutral-400 dark:text-neutral-500 uppercase tracking-widest">
@@ -1096,7 +1296,7 @@ function FontGroup({ label, fonts, active, onSelect, themeAccent }: FontGroupPro
                 "group/font flex w-full items-center justify-between rounded-lg px-3 py-2 text-left transition-colors duration-150 select-none cursor-pointer border border-transparent",
                 selected
                   ? "bg-neutral-100 dark:bg-white/[0.06]"
-                  : "bg-transparent hover:bg-neutral-500/[0.03] dark:hover:bg-white/[0.03]"
+                  : "bg-transparent hover:bg-neutral-500/[0.03] dark:hover:bg-white/[0.03]",
               )}
               onClick={() => onSelect(f.id)}
               style={{ transform: "none" }}
@@ -1106,11 +1306,11 @@ function FontGroup({ label, fonts, active, onSelect, themeAccent }: FontGroupPro
                   "text-xs transition-colors duration-150 leading-none",
                   selected
                     ? "font-bold text-neutral-900 dark:text-neutral-50"
-                    : "text-neutral-400 group-hover/font:text-neutral-800 dark:group-hover/font:text-neutral-200"
+                    : "text-neutral-400 group-hover/font:text-neutral-800 dark:group-hover/font:text-neutral-200",
                 )}
                 style={{
                   fontFamily: f.cssFamily,
-                  color: selected ? themeAccent : undefined
+                  color: selected ? themeAccent : undefined,
                 }}
               >
                 {f.label}
@@ -1133,7 +1333,13 @@ function FontGroup({ label, fonts, active, onSelect, themeAccent }: FontGroupPro
 /* ─────────────────────────────────────────────────────────────
    Custom structural visual sub-components
 ───────────────────────────────────────────────────────────── */
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
   return (
     <section className="space-y-1 block text-left shrink-0">
       <p className="mb-2 px-3 font-semibold text-[10px] text-neutral-400 dark:text-neutral-500 uppercase tracking-widest leading-none">
@@ -1144,12 +1350,18 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function Row({ label, children }: { label: string; children: React.ReactNode }) {
+function Row({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
   return (
-    <div
-      className="flex items-center justify-between rounded-lg px-3 py-2.5 transition-colors hover:bg-neutral-500/[0.03] dark:hover:bg-white/[0.03] min-h-12 shrink-0"
-    >
-      <span className="text-neutral-800 dark:text-neutral-200 text-xs font-medium tracking-tight">{label}</span>
+    <div className="flex items-center justify-between rounded-lg px-3 py-2.5 transition-colors hover:bg-neutral-500/[0.03] dark:hover:bg-white/[0.03] min-h-12 shrink-0">
+      <span className="text-neutral-800 dark:text-neutral-200 text-xs font-medium tracking-tight">
+        {label}
+      </span>
       {children}
     </div>
   );
@@ -1170,7 +1382,9 @@ function SubDrawerRow({
       className="group flex w-full items-center justify-between rounded-lg px-3 py-2.5 transition-colors hover:bg-neutral-500/[0.03] dark:hover:bg-white/[0.03] text-left min-h-12 shrink-0 cursor-pointer border border-transparent"
       style={{ transform: "none" }}
     >
-      <span className="text-neutral-800 dark:text-neutral-200 text-xs font-medium tracking-tight">{label}</span>
+      <span className="text-neutral-800 dark:text-neutral-200 text-xs font-medium tracking-tight">
+        {label}
+      </span>
       <span className="flex items-center gap-1.5 shrink-0">
         {preview}
         <ChevronRight
@@ -1205,7 +1419,9 @@ function Toggle({
       style={{ transform: "none" }}
     >
       <div className="flex flex-col gap-0.5 text-left select-none">
-        <span className="text-neutral-800 dark:text-neutral-200 text-xs font-medium tracking-tight">{label}</span>
+        <span className="text-neutral-800 dark:text-neutral-200 text-xs font-medium tracking-tight">
+          {label}
+        </span>
         {description && (
           <span className="text-[10px] text-neutral-400 dark:text-neutral-500 leading-tight">
             {description}
@@ -1219,7 +1435,7 @@ function Toggle({
           "relative h-5 w-9 shrink-0 rounded-full transition-colors duration-200 p-0.5 border outline-none border-transparent",
           enabled
             ? "bg-neutral-400 dark:bg-neutral-800"
-            : "bg-neutral-200 dark:bg-white/10"
+            : "bg-neutral-200 dark:bg-white/10",
         )}
         style={
           enabled
@@ -1232,7 +1448,7 @@ function Toggle({
         <span
           className={cn(
             "absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white transition-transform duration-200 shadow-sm",
-            enabled ? "translate-x-4" : "translate-x-0"
+            enabled ? "translate-x-4" : "translate-x-0",
           )}
         />
       </div>
