@@ -42,6 +42,10 @@ export const ERROR_SOUND_VARIANTS: SoundVariant[] = [
 ];
 
 export function getCdnUrl(variantId: string, sampleIndex: number, type: 'click' | 'error'): string {
+  // fahhhhh keeps its original filename and format from Keythm
+  if (type === 'error' && variantId === 'err_5') {
+    return `${CDN_SOUND_BASE_URL}/error5/fahhhhh.mp3`;
+  }
   const id = variantId.replace(type === 'click' ? "cdn_" : "err_", "");
   return `${CDN_SOUND_BASE_URL}/${type === 'click' ? 'click' : 'error'}${id}/${sampleIndex}.wav`;
 }
@@ -103,10 +107,10 @@ const backgroundPreloadAllSounds = async () => {
     await new Promise(resolve => setTimeout(resolve, 100));
   }
 
-  // Optimize: Only preload the 3 core switches (blue -> cdn_6, brown -> cdn_15, red -> cdn_7)
+  // Preload the 3 core switches (blue -> cdn_20, brown -> cdn_22, red -> cdn_19)
   // to avoid hitting the browser's parallel connection limits and lagging the UI.
   const coreVariants = SOUND_VARIANTS.filter(v =>
-    v.id === "cdn_6" || v.id === "cdn_15" || v.id === "cdn_7"
+    v.id === "cdn_20" || v.id === "cdn_22" || v.id === "cdn_19"
   );
 
   for (const variant of coreVariants) {
@@ -116,9 +120,9 @@ const backgroundPreloadAllSounds = async () => {
 };
 
 export function resolveSwitchToCdn(sw: string): string {
-  if (sw === "blue") return "cdn_6";      // Osu (clicky)
-  if (sw === "brown") return "cdn_15";    // Rubber keys (tactile)
-  if (sw === "red") return "cdn_7";       // Hitmarker (linear/smooth)
+  if (sw === "blue") return "cdn_20";     // CherryMX Blue ABS (clicky)
+  if (sw === "brown") return "cdn_22";    // CherryMX Brown PBT (tactile)
+  if (sw === "red") return "cdn_19";      // CherryMX Black PBT (linear — closest to MX Red)
   return sw;
 }
 
