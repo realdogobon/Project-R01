@@ -38,7 +38,7 @@ export const ERROR_SOUND_VARIANTS: SoundVariant[] = [
   { id: "err_2", label: "triangle", samples: 1 },
   { id: "err_3", label: "square", samples: 1 },
   { id: "err_4", label: "missed punch", samples: 2 },
-  { id: "err_5", label: "faah", samples: 1 },
+  { id: "err_5", label: "fahhhhh", samples: 1 },
 ];
 
 export function getCdnUrl(variantId: string, sampleIndex: number, type: 'click' | 'error'): string {
@@ -355,6 +355,32 @@ export function useSoundEngine() {
       if (!ctx || ctx.state === "closed") return;
       if (ctx.state === "suspended") {
         void ctx.resume();
+      }
+
+      // Default buzzer: synthesized oscillator tone — no file needed
+      if (errorSoundProfile === "default") {
+        const playBuzzer = () => {
+          const oscillator = ctx.createOscillator();
+          const gainNode = ctx.createGain();
+          oscillator.type = "sine";
+          oscillator.frequency.value = 440;
+          gainNode.gain.value = soundVolume * 0.35;
+          gainNode.gain.setTargetAtTime(0, ctx.currentTime + 0.05, 0.04);
+          oscillator.connect(gainNode);
+          gainNode.connect(ctx.destination);
+          oscillator.onended = () => {
+            oscillator.disconnect();
+            gainNode.disconnect();
+          };
+          oscillator.start(0);
+          oscillator.stop(ctx.currentTime + 0.18);
+        };
+        if (ctx.state === "suspended") {
+          void ctx.resume().then(playBuzzer);
+        } else {
+          playBuzzer();
+        }
+        return;
       }
 
       if (errorSoundProfile && errorSoundProfile !== "off" && errorSoundBuffers[errorSoundProfile]) {

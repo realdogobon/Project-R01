@@ -12,7 +12,7 @@ export type SwitchType =
   | "cdn_14" | "cdn_15" | "cdn_16" | "cdn_17" | "cdn_18" | "cdn_19" | "cdn_20"
   | "cdn_21" | "cdn_22" | "cdn_23" | "cdn_24" | "cdn_25" | "cdn_26";
 
-export type ErrorSoundType = "off" | "err_1" | "err_2" | "err_3" | "err_4";
+export type ErrorSoundType = "off" | "default" | "err_1" | "err_2" | "err_3" | "err_4" | "err_5";
 
 export interface FontOption {
   id: string;
