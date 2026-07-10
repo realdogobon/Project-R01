@@ -76,6 +76,7 @@ import { useSettings, THEME_OPTIONS } from "../contexts/SettingsContext";
 import { SettingsModal } from "../components/modals/SettingsModal";
 import { useSoundEngine } from "../hooks/useSoundEngine";
 import { useAmbientEngine } from "../hooks/useAmbientEngine";
+import { getSharedAudioContext } from "../lib/audioContext";
 import ReactCrop, { Crop } from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
 import * as pdfjsLib from 'pdfjs-dist';
@@ -4514,7 +4515,11 @@ function ExamOverlay({
       setIsPopupVisible(true);
     } else if (status === "timeout" && isPopupVisible) {
       try {
-        const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const audioCtx = getSharedAudioContext();
+        if (!audioCtx) return;
+        if (audioCtx.state === "suspended") {
+          void audioCtx.resume();
+        }
 
         const playChime = (freq: number, start: number) => {
           const osc = audioCtx.createOscillator();

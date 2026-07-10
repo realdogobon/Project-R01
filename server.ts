@@ -86,16 +86,36 @@ async function startServer() {
   };
 
   app.get("/sound.ogg", (req, res) => {
-    res.sendFile(getAssetPath("sound.ogg"));
+    const file = getAssetPath("sound.ogg");
+    if (fs.existsSync(file)) {
+      res.sendFile(file);
+    } else {
+      res.status(404).send("Not found");
+    }
   });
   app.get("/sounds/sound.ogg", (req, res) => {
-    res.sendFile(getAssetPath("sound.ogg"));
+    const file = getAssetPath("sound.ogg");
+    if (fs.existsSync(file)) {
+      res.sendFile(file);
+    } else {
+      res.status(404).send("Not found");
+    }
   });
   app.get("/fahhhhh.mp3", (req, res) => {
-    res.sendFile(getAssetPath("fahhhhh.mp3"));
+    const file = getAssetPath("fahhhhh.mp3");
+    if (fs.existsSync(file)) {
+      res.sendFile(file);
+    } else {
+      res.status(404).send("Not found");
+    }
   });
   app.get("/sounds/fahhhhh.mp3", (req, res) => {
-    res.sendFile(getAssetPath("fahhhhh.mp3"));
+    const file = getAssetPath("fahhhhh.mp3");
+    if (fs.existsSync(file)) {
+      res.sendFile(file);
+    } else {
+      res.status(404).send("Not found");
+    }
   });
 
 

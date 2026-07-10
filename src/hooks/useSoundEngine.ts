@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useSettings } from "../contexts/SettingsContext";
+import { getSharedAudioContext } from "../lib/audioContext";
 
 export const CDN_SOUND_BASE_URL = "/assets/sounds/keyboard";
 
@@ -48,178 +49,12 @@ export function getCdnUrl(variantId: string, sampleIndex: number, type: 'click' 
 export type SoundType = "press" | "release" | "space" | "down" | "up";
 export type SwitchType = "blue" | "brown" | "red" | string;
 
-let audioCtx: AudioContext | null = null;
-
 const cdnSoundBuffers: Record<string, AudioBuffer[]> = {};
 const errorSoundBuffers: Record<string, AudioBuffer[]> = {};
 const loadingCdnVariants: Set<string> = new Set();
 const loadingErrorVariants: Set<string> = new Set();
 
-let ambientSources: (AudioScheduledSourceNode | OscillatorNode | GainNode | any)[] = [];
-let ambientGainNode: GainNode | null = null;
 let hasStartedBackgroundPreload = false;
-
-const ensureAudioContext = () => {
-  if (!audioCtx && typeof window !== "undefined") {
-    audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ latencyHint: "interactive" });
-  }
-  return audioCtx;
-};
-
-const stopAmbientSound = () => {
-  if (ambientSources.length > 0) {
-    ambientSources.forEach((src) => {
-      try {
-        src.stop();
-      } catch {}
-    });
-    ambientSources = [];
-  }
-  const anySources = ambientSources as any;
-  if (anySources._birdInterval) {
-    clearInterval(anySources._birdInterval);
-    anySources._birdInterval = null;
-  }
-  if (ambientGainNode) {
-    try {
-      ambientGainNode.disconnect();
-    } catch {}
-    ambientGainNode = null;
-  }
-};
-
-const playAmbientSound = (
-  ctx: AudioContext,
-  type: "rain" | "celestial" | "forest",
-  volume: number
-) => {
-  stopAmbientSound();
-
-  if (ctx.state === "closed") return;
-
-  ambientGainNode = ctx.createGain();
-  ambientGainNode.gain.setValueAtTime(volume * 0.12, ctx.currentTime);
-  ambientGainNode.connect(ctx.destination);
-
-  if (type === "rain") {
-    const bufferSize = ctx.sampleRate * 2;
-    const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-    const output = noiseBuffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) {
-      output[i] = Math.random() * 2 - 1;
-    }
-
-    const noiseSource = ctx.createBufferSource();
-    noiseSource.buffer = noiseBuffer;
-    noiseSource.loop = true;
-
-    const filter = ctx.createBiquadFilter();
-    filter.type = "lowpass";
-    filter.frequency.setValueAtTime(850, ctx.currentTime);
-
-    const bpFilter = ctx.createBiquadFilter();
-    bpFilter.type = "bandpass";
-    bpFilter.frequency.setValueAtTime(400, ctx.currentTime);
-    bpFilter.Q.setValueAtTime(0.8, ctx.currentTime);
-
-    noiseSource.connect(filter);
-    filter.connect(bpFilter);
-    bpFilter.connect(ambientGainNode);
-
-    noiseSource.start(0);
-    ambientSources.push(noiseSource);
-
-  } else if (type === "celestial") {
-    const freqs = [65.41, 98.0, 110.0, 146.83];
-    freqs.forEach((freq, idx) => {
-      const osc = ctx.createOscillator();
-      osc.type = idx % 2 === 0 ? "sine" : "triangle";
-      osc.frequency.setValueAtTime(freq, ctx.currentTime);
-
-      const lfo = ctx.createOscillator();
-      lfo.frequency.setValueAtTime(0.06 + idx * 0.02, ctx.currentTime);
-      const lfoGain = ctx.createGain();
-      lfoGain.gain.setValueAtTime(1.2, ctx.currentTime);
-
-      lfo.connect(lfoGain);
-      lfoGain.connect(osc.frequency);
-      lfo.start(0);
-
-      const filter = ctx.createBiquadFilter();
-      filter.type = "lowpass";
-      filter.frequency.setValueAtTime(204, ctx.currentTime);
-
-      osc.connect(filter);
-      filter.connect(ambientGainNode!);
-
-      osc.start(0);
-      ambientSources.push(osc);
-      ambientSources.push(lfo);
-    });
-
-  } else if (type === "forest") {
-    const bufferSize = ctx.sampleRate * 2;
-    const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-    const output = noiseBuffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) {
-      output[i] = Math.random() * 2 - 1;
-    }
-
-    const windSource = ctx.createBufferSource();
-    windSource.buffer = noiseBuffer;
-    windSource.loop = true;
-
-    const windFilter = ctx.createBiquadFilter();
-    windFilter.type = "lowpass";
-    windFilter.frequency.setValueAtTime(250, ctx.currentTime);
-
-    const windLFO = ctx.createOscillator();
-    windLFO.frequency.setValueAtTime(0.1, ctx.currentTime);
-    const windLFOGain = ctx.createGain();
-    windLFOGain.gain.setValueAtTime(80, ctx.currentTime);
-
-    windLFO.connect(windLFOGain);
-    windLFOGain.connect(windFilter.frequency);
-    windLFO.start(0);
-
-    windSource.connect(windFilter);
-    windFilter.connect(ambientGainNode);
-
-    windSource.start(0);
-    ambientSources.push(windSource);
-    ambientSources.push(windLFO);
-
-    const intervalId = setInterval(() => {
-      if (ctx.state === "closed" || !ambientGainNode) {
-        clearInterval(intervalId);
-        return;
-      }
-      const now = ctx.currentTime;
-      const osc = ctx.createOscillator();
-      osc.type = "sine";
-      const startFreq = 2300 + Math.random() * 600;
-      const endFreq = 3100 + Math.random() * 400;
-
-      osc.frequency.setValueAtTime(startFreq, now);
-      osc.frequency.exponentialRampToValueAtTime(endFreq, now + 0.12);
-      osc.frequency.exponentialRampToValueAtTime(startFreq - 200, now + 0.25);
-
-      const chirpGain = ctx.createGain();
-      chirpGain.gain.setValueAtTime(0, now);
-      chirpGain.gain.linearRampToValueAtTime(0.06, now + 0.04);
-      chirpGain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
-
-      osc.connect(chirpGain);
-      chirpGain.connect(ambientGainNode);
-
-      osc.start(now);
-      osc.stop(now + 0.3);
-    }, 4500);
-
-    const anySources = ambientSources as any;
-    anySources._birdInterval = intervalId;
-  }
-};
 
 const backgroundPreloadAllSounds = async () => {
   if (hasStartedBackgroundPreload) return;
@@ -227,7 +62,7 @@ const backgroundPreloadAllSounds = async () => {
 
   await new Promise(resolve => setTimeout(resolve, 3000));
 
-  const ctx = ensureAudioContext();
+  const ctx = getSharedAudioContext();
   if (!ctx) return;
 
   const preloadVariant = async (variant: SoundVariant, type: 'click' | 'error') => {
@@ -241,7 +76,10 @@ const backgroundPreloadAllSounds = async () => {
       for (let i = 1; i <= variant.samples; i++) {
         promises.push(
           fetch(getCdnUrl(variant.id, i, type))
-            .then(res => res.arrayBuffer())
+            .then(res => {
+              if (!res.ok) throw new Error(`HTTP ${res.status}`);
+              return res.arrayBuffer();
+            })
             .then(buf => ctx.decodeAudioData(buf))
             .then(audioBuf => {
               tempBuffers[i - 1] = audioBuf;
@@ -265,9 +103,15 @@ const backgroundPreloadAllSounds = async () => {
     await new Promise(resolve => setTimeout(resolve, 100));
   }
 
-  for (const variant of SOUND_VARIANTS) {
+  // Optimize: Only preload the 3 core switches (blue -> cdn_6, brown -> cdn_15, red -> cdn_7)
+  // to avoid hitting the browser's parallel connection limits and lagging the UI.
+  const coreVariants = SOUND_VARIANTS.filter(v =>
+    v.id === "cdn_6" || v.id === "cdn_15" || v.id === "cdn_7"
+  );
+
+  for (const variant of coreVariants) {
     await preloadVariant(variant, 'click');
-    await new Promise(resolve => setTimeout(resolve, 250));
+    await new Promise(resolve => setTimeout(resolve, 200));
   }
 };
 
@@ -296,20 +140,55 @@ export function useSoundEngine() {
   const activeSwitch = settings ? settings.activeSwitch : currentSwitchState;
   const errorSoundProfile = settings ? settings.errorSoundProfile : "off";
 
+  const targetSwitch = resolveSwitchToCdn(activeSwitch);
+  const [isLoaded, setIsLoaded] = useState(() => {
+    if (!targetSwitch) return true;
+    return !!cdnSoundBuffers[targetSwitch];
+  });
+
+  const [isErrorSoundLoaded, setIsErrorSoundLoaded] = useState(() => {
+    if (!errorSoundProfile || errorSoundProfile === "off") return true;
+    return !!errorSoundBuffers[errorSoundProfile];
+  });
+
   useEffect(() => {
     backgroundPreloadAllSounds();
 
-    const targetSwitch = resolveSwitchToCdn(activeSwitch);
-    if (!targetSwitch || !targetSwitch.startsWith("cdn_")) return;
-    if (cdnSoundBuffers[targetSwitch] || loadingCdnVariants.has(targetSwitch)) return;
+    if (!targetSwitch || !targetSwitch.startsWith("cdn_")) {
+      setIsLoaded(true);
+      return;
+    }
+
+    if (cdnSoundBuffers[targetSwitch]) {
+      setIsLoaded(true);
+      return;
+    }
+
+    if (loadingCdnVariants.has(targetSwitch)) {
+      // Poll or wait for the global loading to finish
+      const interval = setInterval(() => {
+        if (cdnSoundBuffers[targetSwitch]) {
+          setIsLoaded(true);
+          clearInterval(interval);
+        }
+      }, 100);
+      return () => clearInterval(interval);
+    }
 
     const variant = SOUND_VARIANTS.find(v => v.id === targetSwitch);
-    if (!variant) return;
+    if (!variant) {
+      setIsLoaded(true);
+      return;
+    }
 
     const loadVariant = async () => {
+      setIsLoaded(false);
       loadingCdnVariants.add(targetSwitch);
-      const ctx = ensureAudioContext();
-      if (!ctx) return;
+      const ctx = getSharedAudioContext();
+      if (!ctx) {
+        setIsLoaded(true);
+        return;
+      }
 
       const buffers: AudioBuffer[] = [];
       const promises = [];
@@ -317,7 +196,10 @@ export function useSoundEngine() {
       for (let i = 1; i <= variant.samples; i++) {
         promises.push(
           fetch(getCdnUrl(targetSwitch, i, 'click'))
-            .then(res => res.arrayBuffer())
+            .then(res => {
+              if (!res.ok) throw new Error(`HTTP ${res.status}`);
+              return res.arrayBuffer();
+            })
             .then(arrayBuffer => ctx.decodeAudioData(arrayBuffer))
             .then(buffer => {
               buffers.push(buffer);
@@ -331,22 +213,47 @@ export function useSoundEngine() {
         cdnSoundBuffers[targetSwitch] = buffers;
       }
       loadingCdnVariants.delete(targetSwitch);
+      setIsLoaded(true);
     };
 
     void loadVariant();
-  }, [activeSwitch]);
+  }, [activeSwitch, targetSwitch]);
 
   useEffect(() => {
-    if (!errorSoundProfile || errorSoundProfile === "off") return;
-    if (errorSoundBuffers[errorSoundProfile] || loadingErrorVariants.has(errorSoundProfile)) return;
+    if (!errorSoundProfile || errorSoundProfile === "off") {
+      setIsErrorSoundLoaded(true);
+      return;
+    }
+
+    if (errorSoundBuffers[errorSoundProfile]) {
+      setIsErrorSoundLoaded(true);
+      return;
+    }
+
+    if (loadingErrorVariants.has(errorSoundProfile)) {
+      const interval = setInterval(() => {
+        if (errorSoundBuffers[errorSoundProfile]) {
+          setIsErrorSoundLoaded(true);
+          clearInterval(interval);
+        }
+      }, 100);
+      return () => clearInterval(interval);
+    }
 
     const variant = ERROR_SOUND_VARIANTS.find(v => v.id === errorSoundProfile);
-    if (!variant) return;
+    if (!variant) {
+      setIsErrorSoundLoaded(true);
+      return;
+    }
 
     const loadVariant = async () => {
+      setIsErrorSoundLoaded(false);
       loadingErrorVariants.add(errorSoundProfile);
-      const ctx = ensureAudioContext();
-      if (!ctx) return;
+      const ctx = getSharedAudioContext();
+      if (!ctx) {
+        setIsErrorSoundLoaded(true);
+        return;
+      }
 
       const buffers: AudioBuffer[] = [];
       const promises = [];
@@ -354,7 +261,10 @@ export function useSoundEngine() {
       for (let i = 1; i <= variant.samples; i++) {
         promises.push(
           fetch(getCdnUrl(errorSoundProfile, i, 'error'))
-            .then(res => res.arrayBuffer())
+            .then(res => {
+              if (!res.ok) throw new Error(`HTTP ${res.status}`);
+              return res.arrayBuffer();
+            })
             .then(arrayBuffer => ctx.decodeAudioData(arrayBuffer))
             .then(buffer => {
               buffers.push(buffer);
@@ -368,6 +278,7 @@ export function useSoundEngine() {
         errorSoundBuffers[errorSoundProfile] = buffers;
       }
       loadingErrorVariants.delete(errorSoundProfile);
+      setIsErrorSoundLoaded(true);
     };
 
     void loadVariant();
@@ -390,7 +301,7 @@ export function useSoundEngine() {
   const playSound = useCallback((typeOrPhase: SoundType, keyCode?: string) => {
     if (!soundEnabled) return;
 
-    const ctx = ensureAudioContext();
+    const ctx = getSharedAudioContext();
     if (!ctx || ctx.state === "closed") return;
 
     if (ctx.state === "suspended") {
@@ -401,52 +312,26 @@ export function useSoundEngine() {
 
     if (targetSwitch && typeof targetSwitch === "string" && targetSwitch.startsWith("cdn_")) {
       const buffers = cdnSoundBuffers[targetSwitch];
-      if (!buffers || buffers.length === 0) return;
+      if (buffers && buffers.length > 0) {
+        const randomIndex = Math.floor(Math.random() * buffers.length);
+        const buffer = buffers[randomIndex];
 
-      const randomIndex = Math.floor(Math.random() * buffers.length);
-      const buffer = buffers[randomIndex];
-
-      const source = ctx.createBufferSource();
-      source.buffer = buffer;
-      const gainNode = ctx.createGain();
-      gainNode.gain.value = soundVolume;
-      source.connect(gainNode);
-      gainNode.connect(ctx.destination);
-      source.start(0);
+        const source = ctx.createBufferSource();
+        source.buffer = buffer;
+        const gainNode = ctx.createGain();
+        gainNode.gain.value = soundVolume;
+        source.connect(gainNode);
+        gainNode.connect(ctx.destination);
+        source.start(0);
+      }
     }
   }, [activeSwitch, soundEnabled, soundVolume]);
 
-  const zenNoiseEnabled = settings ? settings.zenNoiseEnabled : false;
-  const zenNoiseType = settings ? settings.zenNoiseType : "rain";
-  const zenNoiseVolume = settings ? settings.zenNoiseVolume : 0.35;
-
-  useEffect(() => {
-    if (zenNoiseEnabled) {
-      const ctx = ensureAudioContext();
-      if (ctx) {
-        if (ctx.state === "suspended") {
-          const run = () => {
-             playAmbientSound(ctx, zenNoiseType, zenNoiseVolume);
-             window.removeEventListener("click", run);
-             window.removeEventListener("pointerdown", run);
-          };
-          window.addEventListener("click", run);
-          window.addEventListener("pointerdown", run);
-          playAmbientSound(ctx, zenNoiseType, zenNoiseVolume);
-        } else {
-          playAmbientSound(ctx, zenNoiseType, zenNoiseVolume);
-        }
-      }
-    } else {
-      stopAmbientSound();
-    }
-  }, [zenNoiseEnabled, zenNoiseType, zenNoiseVolume]);
-
   useEffect(() => {
     const resumeCtx = () => {
-      const ctx = ensureAudioContext();
+      const ctx = getSharedAudioContext();
       if (ctx && ctx.state === "suspended") {
-        void ctx.resume();
+        void ctx.resume().catch(() => {});
       }
     };
 
@@ -462,7 +347,7 @@ export function useSoundEngine() {
   const playErrorSound = useCallback(() => {
     if (!soundEnabled) return;
     try {
-      const ctx = ensureAudioContext();
+      const ctx = getSharedAudioContext();
       if (!ctx || ctx.state === "closed") return;
       if (ctx.state === "suspended") {
         void ctx.resume();
@@ -480,21 +365,8 @@ export function useSoundEngine() {
           source.connect(gainNode);
           gainNode.connect(ctx.destination);
           source.start(0);
-          return;
         }
       }
-
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = "sine";
-      osc.frequency.setValueAtTime(150, ctx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(110, ctx.currentTime + 0.12);
-      gain.gain.setValueAtTime(soundVolume * 0.08, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start();
-      osc.stop(ctx.currentTime + 0.12);
     } catch (err) {
       console.warn("Synthetic buzzer could not play audio context:", err);
     }
@@ -505,7 +377,7 @@ export function useSoundEngine() {
     playErrorSound,
     currentSwitch: activeSwitch,
     setCurrentSwitch,
-    isLoaded: true,
-    isErrorSoundLoaded: errorSoundProfile !== "off" ? !!errorSoundBuffers[errorSoundProfile] : true,
+    isLoaded,
+    isErrorSoundLoaded,
   };
 }
