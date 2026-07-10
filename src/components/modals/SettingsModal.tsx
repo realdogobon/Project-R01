@@ -702,7 +702,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                                   <img
                                     src={switchImg}
                                     alt={`${sw} switch`}
-                                    className="w-[13px] h-[13px] object-contain select-none"
+                                    className="w-12 h-12 object-contain select-none"
                                     referrerPolicy="no-referrer"
                                   />
                                   <span className={cn("text-xs font-medium capitalize", selected ? "text-neutral-900 dark:text-neutral-50 font-bold" : "text-neutral-500 dark:text-neutral-400")}>
