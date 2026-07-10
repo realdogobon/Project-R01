@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { SmoothInput, SmoothTextarea } from "../components/ui/SmoothInputs";
-import { ArrowLeft, Play, CheckCircle, Clock, ShieldAlert, Sparkles, Loader2, Settings2, ArrowRight, RotateCcw, X, Zap, Trophy, FileText, BookOpen, HeartPulse, FastForward, PlaySquare, Lock, Hourglass, SlidersHorizontal, ChevronDown } from "lucide-react";
+import { ArrowLeft, Play, CheckCircle, Clock, ShieldAlert, Sparkles, Loader2, Settings2, ArrowRight, RotateCcw, RotateCw, X, Zap, Trophy, FileText, BookOpen, HeartPulse, FastForward, PlaySquare, Lock, Hourglass, SlidersHorizontal, ChevronDown } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { useSoundEngine } from "../hooks/useSoundEngine";
 import { ClassicKeyboard, KeyboardThemeName, KEY_LABELS } from "../components/keyboard/ClassicKeyboard";
@@ -151,6 +151,7 @@ export interface PracticeConfig {
   advPunct: boolean;
   advNums: boolean;
   advDiff: "easy" | "hard";
+  advLanguage: string;
   durationLimit: string;
   timerHrs: number;
   timerMins: number;
@@ -358,42 +359,59 @@ export function PracticeMode({
   const [advPunct, setAdvPunct] = useState(() => cfg("advPunct") ?? false);
   const [advNums, setAdvNums] = useState(() => cfg("advNums") ?? false);
   const [advDiff, setAdvDiff] = useState<"easy" | "hard">(() => cfg("advDiff") ?? "easy");
+  const [advLanguage, setAdvLanguage] = useState<string>(() => cfg("advLanguage") ?? "english");
   const prevAdvDepsRef = useRef<any[] | null>(null);
 
+  const generateAndSetText = useCallback(async (isRefresh = false) => {
+    if (advMode === "custom" && !isRefresh) {
+      return;
+    }
+    setIsGenerating(true);
+    setGenerateError("");
+    try {
+      if (advMode === "zen") {
+        setText("");
+        setTitle("Zen Mode");
+        return;
+      }
+      if (advMode === "quote") {
+        await WordEngine.loadQuotes();
+        const { title, text: qt } = WordEngine.generateRandomQuote(advDiff);
+        setText(qt);
+        setTitle(title);
+        return;
+      }
+      const targetWordCount = isCustomWordActive && Number(customWordCount) > 0 ? Math.max(1, Number(customWordCount)) : advWordCount;
+      await WordEngine.loadDictionary(advLanguage);
+      const generated = WordEngine.generateReferenceText("words", 30, targetWordCount, advPunct, advNums, advDiff, advLanguage);
+      setText(generated);
+      setTitle(`${targetWordCount} Words Run`);
+    } catch (err: any) {
+      console.error(err);
+      setGenerateError(err.message || "Failed to generate text. Please try again.");
+    } finally {
+      setIsGenerating(false);
+    }
+  }, [advMode, advWordCount, isCustomWordActive, customWordCount, advPunct, advNums, advDiff, advLanguage]);
+
   useEffect(() => {
-    const deps = [advMode, advWordCount, isCustomWordActive, customWordCount, advPunct, advNums, advDiff];
+    const deps = [advMode, advWordCount, isCustomWordActive, customWordCount, advPunct, advNums, advDiff, advLanguage];
     const prevDeps = prevAdvDepsRef.current;
     prevAdvDepsRef.current = deps;
 
-    // Skip if this is the very first run, or if the dependency values are
-    // identical to the last run (e.g. React StrictMode's dev-only double
-    // invocation of effects right after mount). Only regenerate when a
-    // setting has actually changed.
-    if (prevDeps === null || deps.every((v, i) => v === prevDeps[i])) {
+    if (prevDeps === null) {
+      if (canRestore && (advMode !== "custom" || text.startsWith("Use this form"))) {
+        generateAndSetText();
+      }
       return;
     }
 
-    if (advMode === "custom") {
-      return;
-    }
-    if (advMode === "zen") {
-      setText("");
-      setTitle("Zen Mode");
-      return;
-    }
-    if (advMode === "quote") {
-      const { title, text: qt } = WordEngine.generateRandomQuote(advDiff);
-      setText(qt);
-      setTitle(title);
+    if (deps.every((v, i) => v === prevDeps[i])) {
       return;
     }
 
-
-    const targetWordCount = isCustomWordActive && Number(customWordCount) > 0 ? Math.min(250, Math.max(5, Number(customWordCount))) : advWordCount;
-    const generated = WordEngine.generateReferenceText("words", 30, targetWordCount, advPunct, advNums, advDiff);
-    setText(generated);
-    setTitle(`${targetWordCount} Words Run`);
-  }, [advMode, advWordCount, isCustomWordActive, customWordCount, advPunct, advNums, advDiff]);
+    generateAndSetText();
+  }, [advMode, advWordCount, isCustomWordActive, customWordCount, advPunct, advNums, advDiff, advLanguage, canRestore, generateAndSetText, text]);
 
 
 
@@ -431,6 +449,7 @@ export function PracticeMode({
       advPunct,
       advNums,
       advDiff,
+      advLanguage,
       durationLimit,
       timerHrs,
       timerMins,
@@ -450,7 +469,7 @@ export function PracticeMode({
     });
   }, [
     advMode, advWordCount, customWordCount, isCustomWordActive,
-    advPunct, advNums, advDiff,
+    advPunct, advNums, advDiff, advLanguage,
     durationLimit, timerHrs, timerMins, timerSecs, timerMs,
     isStrictModeEnabled, strictDisableBackspace,
     strictMinAccuracy, strictCustomAccuracy,
@@ -612,7 +631,9 @@ export function PracticeMode({
     try { localStorage.setItem("ais_weak_keys", JSON.stringify(val)); } catch (e) {}
   };
 
-  const generateTargetedDrill = useCallback((keys: string[]) => {
+  const generateTargetedDrill = useCallback(async (keys: string[]) => {
+    await WordEngine.loadDictionary("english");
+    await WordEngine.loadQuotes();
     if (keys.length === 0) return;
     const { title: titleStr, text: finalPassage } = WordEngine.generateCalibrationDrill(keys, 30);
     setTitle(titleStr);
@@ -868,7 +889,7 @@ export function PracticeMode({
 
   useEffect(() => {
     if (initialDrillKeys && initialDrillKeys.length > 0) {
-      generateTargetedDrill(initialDrillKeys);
+      generateTargetedDrill(initialDrillKeys).catch(console.error);
       onDrillTriggeredDone?.();
     }
   }, [initialDrillKeys, generateTargetedDrill, onDrillTriggeredDone]);
@@ -1656,6 +1677,13 @@ export function PracticeMode({
                                >
                                    <Lock className="w-4 h-4" />
                                </button>
+                               <button
+                                 onClick={() => generateAndSetText(true)}
+                                 title="Refresh/Regenerate Reference Text"
+                                 className="p-2.5 transition-all duration-300 rounded hover:bg-neutral-100 dark:hover:bg-white/5 text-neutral-500 dark:text-neutral-400"
+                               >
+                                   <RotateCw className="w-4 h-4" />
+                               </button>
                              </div>
                              <button
                                onClick={handleStartTest}
@@ -1920,6 +1948,41 @@ export function PracticeMode({
                    </div>
                  </div>
 
+
+                 {advMode === 'words' && (
+                   <div className="flex flex-col gap-1.5 animate-in slide-in-from-top-1 duration-150">
+                     <label className="text-[13px] pl-0.5">Word Dictionary</label>
+                     <div className="relative">
+                        <select
+                          value={advLanguage}
+                          onChange={e => setAdvLanguage(e.target.value)}
+                          className="w-full appearance-none bg-white dark:bg-[#2A2A35] border border-[#E5DCDA] dark:border-[#1A1A23] rounded-md px-3 py-1.5 text-[13px] outline-none shadow-sm focus:border-[var(--accent-color)]"
+                        >
+                          <option value="english">Standard English (200 words)</option>
+                          <option value="english_1k">Intermediate English (1,000 words)</option>
+                          <option value="english_5k">Advanced English (5,000 words)</option>
+                          <option value="english_10k">Master English (10,000 words)</option>
+                          <option value="english_25k">Elite English (25,000 words)</option>
+                          <option value="english_450k">Infinite Dictionary (450,000 words)</option>
+                          <option value="english_commonly_misspelled">Common Typos & Misspellings</option>
+                          <option value="english_contractions">Contractions & Apostrophes</option>
+                          <option value="english_doubleletter">Double-Letter Practice</option>
+                          <option value="english_legal">Legal Vocabulary</option>
+                          <option value="english_medical">Medical Jargon</option>
+                          <option value="english_old">Old English Prose</option>
+                          <option value="english_shakespearean">Shakespearean Prose</option>
+                          <option value="hindi_shabda">Hindi (हिंदी शब्द)</option>
+                          <option value="hinglish_baat">Hinglish (Conversational QWERTY)</option>
+                          <option value="sanskrit_mantra">Sanskrit (संस्कृत मन्त्राः)</option>
+                          <option value="bengali_shobdo">Bengali (বাংলা শব্দ)</option>
+                          <option value="marathi_shabda">Marathi (मराठी शब्द)</option>
+                          <option value="telugu_pada">Telugu (తెలుగు పదాలు)</option>
+                          <option value="tamil_varta">Tamil (தமிழ் வார்த்தைகள்)</option>
+                        </select>
+                        <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                     </div>
+                   </div>
+                 )}
                  {/* Words Count Presets */}
                  {advMode === 'words' && (
                    <div className="flex flex-col gap-1.5 animate-in slide-in-from-top-1 duration-150">
@@ -1949,15 +2012,14 @@ export function PracticeMode({
 
                        {isCustomWordActive && (
                          <div className="w-[100px] relative animate-in zoom-in-95 duration-150">
-                           <input
-                             type="number"
-                             min="5"
-                             max="250"
-                             value={customWordCount}
-                             onChange={(e) => setCustomWordCount(e.target.value)}
-                             className="w-full bg-white dark:bg-[#2A2A35] border border-[#E5DCDA] dark:border-[#1A1A23] rounded-md px-3 py-1.5 text-[13px] outline-none shadow-sm focus:border-[var(--accent-color)] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                             placeholder="5-250"
-                           />
+                            <input
+                              type="number"
+                              min="1"
+                              value={customWordCount}
+                              onChange={(e) => setCustomWordCount(e.target.value)}
+                              className="w-full bg-white dark:bg-[#2A2A35] border border-[#E5DCDA] dark:border-[#1A1A23] rounded-md px-3 py-1.5 text-[13px] outline-none shadow-sm focus:border-[var(--accent-color)] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                              placeholder="Enter count"
+                            />
                          </div>
                        )}
                      </div>

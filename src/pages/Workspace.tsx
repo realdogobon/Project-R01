@@ -79,7 +79,7 @@ import { useAmbientEngine } from "../hooks/useAmbientEngine";
 import ReactCrop, { Crop } from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
 import * as pdfjsLib from 'pdfjs-dist';
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.mjs`;
+pdfjsLib.GlobalWorkerOptions.workerSrc = `/assets/pdf.worker.mjs`;
 import { ScannerEngine } from "../lib/ScannerEngine";
 import { ExportEngine } from "../lib/ExportEngine";
 import { ingestDocument, searchIntelligence, syncRagIndex, ScanDocument, getAllScans, deleteScan, updateDocument, restoreScan } from "../lib/rag-search";
@@ -973,10 +973,9 @@ export default function Workspace() {
   useEffect(() => {
     const timer = setTimeout(() => {
       const assetsToPreload = [
-        "/stop-exam.png",
-        "/times-up.png",
-        "/sound.ogg",
-        "/fahhhhh.mp3"
+        "/assets/images/stop-exam.png",
+        "/assets/images/times-up.png",
+        "/assets/sounds/keyboard/error5/1.wav"
       ];
       
       assetsToPreload.forEach(url => {
@@ -3579,7 +3578,7 @@ export default function Workspace() {
                 title="Stop Exam"
               >
                 <img
-                  src="/stop-exam.png"
+                  src="/assets/images/stop-exam.png"
                   alt="Stop Exam"
                   className="h-14 w-auto object-contain"
                   style={{
@@ -4704,7 +4703,7 @@ function ExamOverlay({
                  className="relative w-48 h-48 mb-4 pointer-events-none"
                >
                  <div className="absolute inset-6 bg-black opacity-10 dark:opacity-[0.03] blur-[30px] rounded-full" />
-                 <img src="/times-up.png" alt="Time is up" className="w-full h-full object-contain relative z-10 drop-shadow-[0_20px_40px_rgba(0,0,0,0.15)] dark:drop-shadow-[0_20px_40px_rgba(0,0,0,0.5)]" />
+                 <img src="/assets/images/times-up.png" alt="Time is up" className="w-full h-full object-contain relative z-10 drop-shadow-[0_20px_40px_rgba(0,0,0,0.15)] dark:drop-shadow-[0_20px_40px_rgba(0,0,0,0.5)]" />
                </motion.div>
                <h2 className="text-[22px] font-semibold tracking-tight text-[#1E1E1E] dark:text-[#EAEAEA] mb-3">
                  Time is up. Great work!

@@ -218,7 +218,7 @@ function injectAllFonts() {
       const link = document.createElement("link");
       link.id = gfLinkId;
       link.rel = "stylesheet";
-      link.href = `https://fonts.googleapis.com/css2?${familyQuery}&display=swap`;
+      link.href = "/assets/fonts/google_fonts.css";
       document.head.appendChild(link);
     }
   }
@@ -238,7 +238,7 @@ function injectAllFonts() {
       css += `
 @font-face {
   font-family: '${fontName}';
-  src: url('https://raw.githubusercontent.com/monkeytypegame/monkeytype/master/frontend/static/webfonts/${f.mtFileName}') format('woff2');
+  src: url('/assets/fonts/${f.mtFileName}') format('woff2');
   font-weight: normal;
   font-style: normal;
   font-display: swap;
@@ -427,7 +427,11 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
       setFontState(fontToUse);
       applySettingsToDom(themeToUse, fontToUse);
 
-      if (savedKeyboardModel) setKeyboardModelState(savedKeyboardModel);
+      if (savedKeyboardModel && savedKeyboardModel !== "das_keyboard_4") {
+        setKeyboardModelState(savedKeyboardModel);
+      } else {
+        setKeyboardModelState("classic");
+      }
 
       if (savedSound !== null) setSoundEnabledState(savedSound !== "false");
       if (savedVolume !== null) {

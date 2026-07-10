@@ -9,20 +9,37 @@ export default function App() {
   useEffect(() => {
     const t = setTimeout(() => {
       const urls: string[] = [
-        "/sound.ogg",
-        "/fahhhhh.mp3",
+        "/assets/sounds/keyboard/error5/1.wav",
         "/manifest.json",
-        "/times-up.png",
-        "https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap",
-        "https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;700&display=swap",
-        "https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap",
-        "https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;700&display=swap",
-        "https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;700&display=swap",
-        "https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;700&display=swap",
-        "https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap"
+        "/assets/images/times-up.png",
+        "/assets/images/CherryMX2ABlue.png",
+        "/assets/images/CherryMX2ABrown.png",
+        "/assets/images/CherryMX2ARed.png",
+        "/assets/fonts/google_fonts.css",
+        "/assets/languages/en_core.json",
+        "/assets/languages/en_novice.json",
+        "/assets/languages/en_intermediate.json",
+        "/assets/languages/en_pro.json",
+        "/assets/languages/en_elite.json",
+        "/assets/languages/en_max.json",
+        "/assets/languages/en_err.json",
+        "/assets/languages/en_contract.json",
+        "/assets/languages/en_twin.json",
+        "/assets/languages/en_law.json",
+        "/assets/languages/en_med.json",
+        "/assets/languages/en_vintage.json",
+        "/assets/languages/en_bard.json",
+        "/assets/languages/en_passages.json",
+        "/assets/languages/hi_shabda.json",
+        "/assets/languages/hinglish_baat.json",
+        "/assets/languages/sa_mantra.json",
+        "/assets/languages/bn_shobdo.json",
+        "/assets/languages/mr_shabda.json",
+        "/assets/languages/te_pada.json",
+        "/assets/languages/ta_varta.json"
       ];
 
-      const cdnBase = "https://cdn.jsdelivr.net/gh/monkeytypegame/monkeytype@master/frontend/static/sounds";
+      const localSoundBase = "/assets/sounds/keyboard";
       const soundConfigs = [
         { id: "1", samples: 3, type: "click" },
         { id: "2", samples: 3, type: "click" },
@@ -34,12 +51,13 @@ export default function App() {
         { id: "1", samples: 1, type: "error" },
         { id: "2", samples: 1, type: "error" },
         { id: "3", samples: 1, type: "error" },
-        { id: "4", samples: 2, type: "error" }
+        { id: "4", samples: 2, type: "error" },
+        { id: "5", samples: 1, type: "error" }
       ];
 
       soundConfigs.forEach(config => {
         for (let i = 1; i <= config.samples; i++) {
-          urls.push(`${cdnBase}/${config.type}${config.id}/${i}.wav`);
+          urls.push(`${localSoundBase}/${config.type}${config.id}/${i}.wav`);
         }
       });
 
@@ -55,7 +73,6 @@ export default function App() {
         });
       }
     }, 3000);
-
     return () => clearTimeout(t);
   }, []);
 

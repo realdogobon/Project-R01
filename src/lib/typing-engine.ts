@@ -448,7 +448,7 @@ export class TypingEngine {
 
 
 
-        const rowOffset = Math.max(0, row - 1) * lineH;
+        const rowOffset = Math.max(0, row - 2) * lineH;
         this.wordsContainer.style.transform = `translate3d(0, -${rowOffset}px, 0)`;
      }
   }

@@ -17,7 +17,7 @@ const bufferCache: Record<string, AudioBuffer> = {};
 
 const loadBuffer = async (ctx: AudioContext, id: string): Promise<AudioBuffer> => {
   if (bufferCache[id]) return bufferCache[id];
-  const response = await fetch(`https://cdn.jsdelivr.net/gh/amitmerchant1990/notepad@master/sounds/${id}.mp3`);
+  const response = await fetch(`/assets/sounds/ambient/${id}.mp3`);
   const arrayBuffer = await response.arrayBuffer();
   const decodedData = await ctx.decodeAudioData(arrayBuffer);
   bufferCache[id] = decodedData;

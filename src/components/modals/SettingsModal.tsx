@@ -373,23 +373,30 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                         <div className="relative isolate flex h-8 rounded-full border border-neutral-200 dark:border-white/10 bg-neutral-100 dark:bg-white/[0.06] p-1">
                           {[
                             { key: "classic", label: "Classic" },
-                            { key: "das_keyboard_4", label: "Das Keyboard" },
-                          ].map(({ key, label }) => {
+                            { key: "das_keyboard_4", label: "Das Keyboard (Soon)", disabled: true },
+                          ].map(({ key, label, disabled }) => {
                             const isActive = keyboardModel === key;
                             return (
                               <button
                                 key={key}
-                                onClick={() => setKeyboardModel(key as "classic" | "das_keyboard_4")}
+                                onClick={() => {
+                                  if (!disabled) {
+                                    setKeyboardModel(key as "classic" | "das_keyboard_4");
+                                  }
+                                }}
+                                disabled={disabled}
                                 className={cn(
-                                  "relative h-6 px-3 rounded-full flex items-center justify-center text-[10px] font-semibold cursor-pointer select-none transition-colors",
-                                  isActive
-                                    ? "text-neutral-900 dark:text-neutral-50 font-bold"
-                                    : "text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200"
+                                  "relative h-6 px-3 rounded-full flex items-center justify-center text-[10px] font-semibold select-none transition-colors",
+                                  disabled
+                                    ? "opacity-40 cursor-not-allowed text-neutral-400 dark:text-neutral-500"
+                                    : isActive
+                                    ? "text-neutral-900 dark:text-neutral-50 font-bold cursor-pointer"
+                                    : "text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200 cursor-pointer"
                                 )}
                                 type="button"
                                 style={{ transform: "none" }}
                               >
-                                {isActive && (
+                                {isActive && !disabled && (
                                   <motion.div
                                     layoutId="activeKeyboardModel"
                                     className="absolute inset-0 rounded-full bg-neutral-300/40 dark:bg-white/10"
@@ -679,7 +686,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                         <div className="space-y-0.5">
                           {(["blue", "brown", "red"] as const).map((sw) => {
                             const selected = activeSwitch === sw;
-                            const dotColor = sw === "blue" ? "bg-cyan-500" : sw === "brown" ? "bg-amber-700" : "bg-red-500";
+                            const switchImg = sw === "blue" ? "/assets/images/CherryMX2ABlue.png" : sw === "brown" ? "/assets/images/CherryMX2ABrown.png" : "/assets/images/CherryMX2ARed.png";
                             return (
                               <button
                                 key={sw}
@@ -691,8 +698,13 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                                     : "hover:bg-neutral-500/[0.03] dark:hover:bg-white/[0.03]"
                                 )}
                               >
-                                <span className="flex items-center gap-2">
-                                  <span className={cn("w-1.5 h-1.5 rounded-full", dotColor)} />
+                                <span className="flex items-center gap-3">
+                                  <img
+                                    src={switchImg}
+                                    alt={`${sw} switch`}
+                                    className="w-12 h-12 object-contain select-none"
+                                    referrerPolicy="no-referrer"
+                                  />
                                   <span className={cn("text-xs font-medium capitalize", selected ? "text-neutral-900 dark:text-neutral-50 font-bold" : "text-neutral-500 dark:text-neutral-400")}>
                                     {sw} tactile switch
                                   </span>
