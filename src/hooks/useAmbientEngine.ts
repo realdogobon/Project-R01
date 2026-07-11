@@ -21,13 +21,19 @@ const loadBuffer = async (ctx: AudioContext, id: string): Promise<AudioBuffer> =
 let previewSource: AudioBufferSourceNode | null = null;
 let previewGain: GainNode | null = null;
 let previewStopTimeout: ReturnType<typeof setTimeout> | null = null;
+// Generation token: every call to previewAmbientSound/stopAmbientPreview bumps this.
+// An in-flight async load checks its own token before starting playback, so if the
+// mouse has already left (stop called) or moved to a different sound (new preview
+// call) before the fetch/decode resolves, the stale load is a no-op instead of
+// starting an orphaned, unstoppable sound.
+let previewToken = 0;
 
 /**
  * Plays a temporary, non-persistent preview of an ambient/background track —
  * used for hover-to-preview in Settings without touching the user's actual
  * ambient mix or requiring Zen Noise to be enabled. Longer default duration
  * than a keyboard click preview since these are meant to be experienced as
- * background music, not a single hit.
+ * background music, not a single hit. Only one preview plays at a time.
  */
 export async function previewAmbientSound(id: string, volume = 0.5, durationMs = 6000): Promise<void> {
   const ctx = getSharedAudioContext();
@@ -36,10 +42,15 @@ export async function previewAmbientSound(id: string, volume = 0.5, durationMs =
     try { await ctx.resume(); } catch { return; }
   }
 
-  stopAmbientPreview();
+  const token = ++previewToken;
+  stopCurrentPreviewPlayback();
 
   try {
     const buffer = await loadBuffer(ctx, id);
+
+    // If the mouse left, or moved to another sound, or a newer preview started
+    // while this fetch/decode was in flight, abandon this stale load silently.
+    if (token !== previewToken) return;
 
     const gain = ctx.createGain();
     gain.gain.setValueAtTime(0, ctx.currentTime);
@@ -56,14 +67,14 @@ export async function previewAmbientSound(id: string, volume = 0.5, durationMs =
     previewGain = gain;
 
     previewStopTimeout = setTimeout(() => {
-      stopAmbientPreview();
+      if (token === previewToken) stopAmbientPreview();
     }, durationMs);
   } catch (err: any) {
     console.warn(`Ambient preview '${id}' failed to play:`, err?.message || err);
   }
 }
 
-export function stopAmbientPreview(): void {
+function stopCurrentPreviewPlayback(): void {
   if (previewStopTimeout) {
     clearTimeout(previewStopTimeout);
     previewStopTimeout = null;
@@ -76,14 +87,21 @@ export function stopAmbientPreview(): void {
     previewGain = null;
     try {
       if (gain && ctx) {
-        gain.gain.setTargetAtTime(0, ctx.currentTime, 0.2);
+        gain.gain.cancelScheduledValues(ctx.currentTime);
+        gain.gain.setTargetAtTime(0, ctx.currentTime, 0.15);
       }
       setTimeout(() => {
         try { source?.stop(); } catch {}
         try { gain?.disconnect(); } catch {}
-      }, 250);
+      }, 200);
     } catch {}
   }
+}
+
+/** Stops any active/pending ambient preview and invalidates in-flight loads. */
+export function stopAmbientPreview(): void {
+  previewToken++;
+  stopCurrentPreviewPlayback();
 }
 
 export function useAmbientEngine() {
