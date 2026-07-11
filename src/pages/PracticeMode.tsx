@@ -170,6 +170,61 @@ export interface PracticeConfig {
   strictSuddenDeath: boolean;
 }
 
+// Identifies which practice "run" a persisted engine snapshot belongs to.
+// Built from the same config fields that get persisted alongside a snapshot
+// (see persistTypingSnapshot below), so a snapshot saved for one configured
+// session can never be silently applied to a different one — whether that
+// mismatch comes from the user changing the matter/settings in Configure
+// Session, or from a stale in-memory reference surviving a "Start Fresh"
+// that didn't fully clear it. Deliberately excludes step/title/text (the
+// still-being-edited draft) — only the fields that define what a fresh
+// "Start Practice" click is actually about to run.
+function buildSessionFingerprint(cfg: {
+  originalText?: string;
+  advMode?: string;
+  advWordCount?: number | string;
+  customWordCount?: number | string;
+  isCustomWordActive?: boolean;
+  advPunct?: boolean;
+  advNums?: boolean;
+  advDiff?: string;
+  durationLimit?: string;
+  isStrictModeEnabled?: boolean;
+  strictDisableBackspace?: boolean;
+  strictMinAccuracy?: string;
+  strictCustomAccuracy?: string;
+  strictMaxErrors?: string;
+  strictCustomMaxErrors?: string;
+  strictWpmFloor?: string;
+  strictCustomWpmFloor?: string;
+  strictInactivityTimeout?: string;
+  strictCustomInactivity?: string;
+  strictSuddenDeath?: boolean;
+}): string {
+  return JSON.stringify({
+    originalText: cfg.originalText ?? "",
+    advMode: cfg.advMode,
+    advWordCount: cfg.advWordCount,
+    customWordCount: cfg.customWordCount,
+    isCustomWordActive: cfg.isCustomWordActive,
+    advPunct: cfg.advPunct,
+    advNums: cfg.advNums,
+    advDiff: cfg.advDiff,
+    durationLimit: cfg.durationLimit,
+    isStrictModeEnabled: cfg.isStrictModeEnabled,
+    strictDisableBackspace: cfg.strictDisableBackspace,
+    strictMinAccuracy: cfg.strictMinAccuracy,
+    strictCustomAccuracy: cfg.strictCustomAccuracy,
+    strictMaxErrors: cfg.strictMaxErrors,
+    strictCustomMaxErrors: cfg.strictCustomMaxErrors,
+    strictWpmFloor: cfg.strictWpmFloor,
+    strictCustomWpmFloor: cfg.strictCustomWpmFloor,
+    strictInactivityTimeout: cfg.strictInactivityTimeout,
+    strictCustomInactivity: cfg.strictCustomInactivity,
+    strictSuddenDeath: cfg.strictSuddenDeath,
+  });
+}
+
 export function PracticeMode({
   accountUid,
   onReturnToWrite,
@@ -557,6 +612,13 @@ export function PracticeMode({
   // (see loadedSession/cfg above), so this ref only needs to seed
   // TypingScreen's initialSnapshot prop for the exact-resume hydrate() call.
   const pendingSnapshotRef = useRef<any>(canResumeSnapshot ? loadedSession.snapshot : null);
+  // Captured once, alongside the snapshot itself, from the exact config it
+  // was saved under — never recomputed from live state. This is what lets
+  // us detect "this snapshot no longer matches what's about to run" instead
+  // of trusting a non-null ref blindly.
+  const pendingSnapshotFingerprintRef = useRef<string | null>(
+    canResumeSnapshot ? buildSessionFingerprint(loadedSession) : null,
+  );
 
   // The resume snapshot is only valid for the very first typing-screen mount
   // right after an account-switch restore. It must NOT be cleared by a
@@ -568,6 +630,20 @@ export function PracticeMode({
   // so any later "Start Practice" click begins from a clean slate.
   const handleSnapshotConsumed = () => {
     pendingSnapshotRef.current = null;
+    pendingSnapshotFingerprintRef.current = null;
+  };
+
+  // Both "abandon this session" actions — starting a brand new practice run,
+  // or bailing out to Configure Session ("Start Fresh") — must invalidate
+  // any still-pending resume snapshot immediately. Without this, the ref
+  // above survives in memory (clearPracticeSession() only removes the
+  // localStorage copy) and gets handed to the *next* TypingScreen mount as
+  // if it were a genuine crash-recovery for a session it has nothing to do
+  // with — which is what produced the "Start Fresh -> Start Practice ->
+  // recovery overlay again -> corrupted Resume" loop.
+  const invalidatePendingSnapshot = () => {
+    pendingSnapshotRef.current = null;
+    pendingSnapshotFingerprintRef.current = null;
   };
 
   useEffect(() => {
@@ -1086,6 +1162,11 @@ export function PracticeMode({
   }, [timerRunning, updateLiveMetrics]);
 
   const handleStartTest = () => {
+    // Any explicit "begin a run" action starts from a clean slate — a snapshot
+    // resumed from disk is only ever valid for the very first TypingScreen
+    // mount after loading, never for a run the user just kicked off by hand.
+    invalidatePendingSnapshot();
+
     const nextOriginalText = text.trim();
     setOriginalText(nextOriginalText);
     originalTextRef.current = nextOriginalText;
@@ -2622,9 +2703,21 @@ export function PracticeMode({
              setTimerRunning(false);
           }}
           onBack={() => { clearPracticeSession(); onReturnToWrite(); }}
-          onConfigureSession={() => { clearPracticeSession(); changeStep(1); setTimerRunning(false); }}
+          onConfigureSession={() => { invalidatePendingSnapshot(); clearPracticeSession(); changeStep(1); setTimerRunning(false); }}
           onResetCountdowns={() => {}}
-          initialSnapshot={pendingSnapshotRef.current}
+          initialSnapshot={
+            pendingSnapshotRef.current &&
+            pendingSnapshotFingerprintRef.current ===
+              buildSessionFingerprint({
+                originalText, advMode, advWordCount, customWordCount, isCustomWordActive, advPunct, advNums, advDiff,
+                durationLimit,
+                isStrictModeEnabled, strictDisableBackspace, strictMinAccuracy, strictCustomAccuracy,
+                strictMaxErrors, strictCustomMaxErrors, strictWpmFloor, strictCustomWpmFloor,
+                strictInactivityTimeout, strictCustomInactivity, strictSuddenDeath,
+              })
+              ? pendingSnapshotRef.current
+              : null
+          }
           onSnapshot={persistTypingSnapshot}
           onSnapshotConsumed={handleSnapshotConsumed}
        />
