@@ -48,6 +48,7 @@ import {
   previewClickSound,
   previewErrorSound,
 } from "../../hooks/useSoundEngine";
+import { previewAmbientSound, stopAmbientPreview } from "../../hooks/useAmbientEngine";
 import { motion, AnimatePresence } from "motion/react";
 import { SmoothInput } from "../ui/SmoothInputs";
 
@@ -795,8 +796,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                                 key={sw}
                                 onClick={() => setActiveSwitch(sw)}
                                 onMouseEnter={() => {
-                                  if (soundEnabled)
-                                    void previewClickSound(sw, soundVolume);
+                                  void previewClickSound(sw, soundVolume);
                                 }}
                                 className={cn(
                                   "flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left transition-colors cursor-pointer",
@@ -852,8 +852,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                                 key={v.id}
                                 onClick={() => setActiveSwitch(v.id as any)}
                                 onMouseEnter={() => {
-                                  if (soundEnabled)
-                                    void previewClickSound(v.id, soundVolume);
+                                  void previewClickSound(v.id, soundVolume);
                                 }}
                                 className={cn(
                                   "flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left transition-colors cursor-pointer",
@@ -907,8 +906,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                                 key={v.id}
                                 onClick={() => setActiveSwitch(v.id as any)}
                                 onMouseEnter={() => {
-                                  if (soundEnabled)
-                                    void previewClickSound(v.id, soundVolume);
+                                  void previewClickSound(v.id, soundVolume);
                                 }}
                                 className={cn(
                                   "flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left transition-colors cursor-pointer",
@@ -980,8 +978,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                                   )
                                 }
                                 onMouseEnter={() => {
-                                  if (soundEnabled)
-                                    void previewErrorSound(v.id, soundVolume);
+                                  void previewErrorSound(v.id, soundVolume);
                                 }}
                                 className={cn(
                                   "flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left transition-colors cursor-pointer",
@@ -1164,6 +1161,13 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                             >
                               <button
                                 onClick={toggleSound}
+                                onMouseEnter={() => {
+                                  // Don't disturb a track the user already has playing for real.
+                                  if (!selected) void previewAmbientSound(id, 0.5);
+                                }}
+                                onMouseLeave={() => {
+                                  if (!selected) stopAmbientPreview();
+                                }}
                                 className="flex w-full items-center justify-between text-left cursor-pointer outline-none"
                               >
                                 <span

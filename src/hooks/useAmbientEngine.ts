@@ -18,6 +18,74 @@ const loadBuffer = async (ctx: AudioContext, id: string): Promise<AudioBuffer> =
   return decodedData;
 };
 
+let previewSource: AudioBufferSourceNode | null = null;
+let previewGain: GainNode | null = null;
+let previewStopTimeout: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * Plays a temporary, non-persistent preview of an ambient/background track —
+ * used for hover-to-preview in Settings without touching the user's actual
+ * ambient mix or requiring Zen Noise to be enabled. Longer default duration
+ * than a keyboard click preview since these are meant to be experienced as
+ * background music, not a single hit.
+ */
+export async function previewAmbientSound(id: string, volume = 0.5, durationMs = 6000): Promise<void> {
+  const ctx = getSharedAudioContext();
+  if (!ctx) return;
+  if (ctx.state === "suspended") {
+    try { await ctx.resume(); } catch { return; }
+  }
+
+  stopAmbientPreview();
+
+  try {
+    const buffer = await loadBuffer(ctx, id);
+
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0, ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(volume, ctx.currentTime + 0.25);
+    gain.connect(ctx.destination);
+
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    source.loop = true;
+    source.connect(gain);
+    source.start();
+
+    previewSource = source;
+    previewGain = gain;
+
+    previewStopTimeout = setTimeout(() => {
+      stopAmbientPreview();
+    }, durationMs);
+  } catch (err: any) {
+    console.warn(`Ambient preview '${id}' failed to play:`, err?.message || err);
+  }
+}
+
+export function stopAmbientPreview(): void {
+  if (previewStopTimeout) {
+    clearTimeout(previewStopTimeout);
+    previewStopTimeout = null;
+  }
+  if (previewSource || previewGain) {
+    const ctx = getSharedAudioContext();
+    const gain = previewGain;
+    const source = previewSource;
+    previewSource = null;
+    previewGain = null;
+    try {
+      if (gain && ctx) {
+        gain.gain.setTargetAtTime(0, ctx.currentTime, 0.2);
+      }
+      setTimeout(() => {
+        try { source?.stop(); } catch {}
+        try { gain?.disconnect(); } catch {}
+      }, 250);
+    } catch {}
+  }
+}
+
 export function useAmbientEngine() {
   const { ambientMix, zenNoiseEnabled, zenNoiseVolume } = useSettings();
   const activeMixRef = useRef<Record<string, number>>({});

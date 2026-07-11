@@ -28,8 +28,9 @@ const BUILT_IN_FONTS: FontOption[] = [
     id: "geist-mono",
     label: "Geist Mono",
     googleFamily: null,
-    cssFamily: "ui-monospace, 'Cascadia Code', monospace",
+    cssFamily: "'Geist Mono', ui-monospace, 'Cascadia Code', monospace",
     tag: "mono",
+    mtFileName: "GeistMono-Medium.woff2",
   },
   {
     id: "jetbrains-mono",
