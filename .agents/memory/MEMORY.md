@@ -2,3 +2,4 @@
 - [StrictMode effect guards](strictmode-effect-guards.md) — a boolean "first run" ref only skips one of StrictMode's two dev mount firings; compare actual prev vs current dep values instead.
 - [One-time resume refs](one-time-resume-refs.md) — a ref seeded for a single resume-hydrate on child mount must be nulled after first use, or later fresh-start remounts silently reuse stale state.
 - [Crash-recovery architecture](crash-recovery-architecture.md) — Exam Mode is the doc editor+timer, not the typing engine; recovery overlay is presentational-only; fullscreen re-entry needs a user gesture.
+- [Font + theme system](font-theme-system.md) — font loading, theme color architecture, built-in theme fix, and corrupt font handling.

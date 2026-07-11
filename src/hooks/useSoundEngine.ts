@@ -119,6 +119,83 @@ const backgroundPreloadAllSounds = async () => {
   }
 };
 
+export async function previewClickSound(variantId: string, volume: number): Promise<void> {
+  const cdnId = resolveSwitchToCdnId(variantId);
+  if (!cdnId) return;
+  const ctx = getSharedAudioContext();
+  if (!ctx) return;
+  if (ctx.state === "suspended") {
+    try { await ctx.resume(); } catch { return; }
+  }
+  if (!cdnSoundBuffers[cdnId]) {
+    const variant = SOUND_VARIANTS.find(v => v.id === cdnId);
+    if (!variant) return;
+    try {
+      const res = await fetch(getCdnUrl(cdnId, 1, 'click'));
+      if (!res.ok) return;
+      const buf = await ctx.decodeAudioData(await res.arrayBuffer());
+      if (!cdnSoundBuffers[cdnId]) cdnSoundBuffers[cdnId] = [buf];
+    } catch { return; }
+  }
+  const buffers = cdnSoundBuffers[cdnId];
+  if (!buffers?.length) return;
+  const source = ctx.createBufferSource();
+  source.buffer = buffers[Math.floor(Math.random() * buffers.length)];
+  const gain = ctx.createGain();
+  gain.gain.value = volume;
+  source.connect(gain);
+  gain.connect(ctx.destination);
+  source.start(0);
+}
+
+export async function previewErrorSound(variantId: string, volume: number): Promise<void> {
+  if (!variantId || variantId === "off") return;
+  const ctx = getSharedAudioContext();
+  if (!ctx) return;
+  if (ctx.state === "suspended") {
+    try { await ctx.resume(); } catch { return; }
+  }
+  if (variantId === "default") {
+    const oscillator = ctx.createOscillator();
+    const gainNode = ctx.createGain();
+    oscillator.type = "sine";
+    oscillator.frequency.value = 440;
+    gainNode.gain.value = volume * 0.35;
+    gainNode.gain.setTargetAtTime(0, ctx.currentTime + 0.05, 0.04);
+    oscillator.connect(gainNode);
+    gainNode.connect(ctx.destination);
+    oscillator.start(0);
+    oscillator.stop(ctx.currentTime + 0.18);
+    return;
+  }
+  if (!errorSoundBuffers[variantId]) {
+    const variant = ERROR_SOUND_VARIANTS.find(v => v.id === variantId);
+    if (!variant) return;
+    try {
+      const res = await fetch(getCdnUrl(variantId, 1, 'error'));
+      if (!res.ok) return;
+      const buf = await ctx.decodeAudioData(await res.arrayBuffer());
+      if (!errorSoundBuffers[variantId]) errorSoundBuffers[variantId] = [buf];
+    } catch { return; }
+  }
+  const buffers = errorSoundBuffers[variantId];
+  if (!buffers?.length) return;
+  const source = ctx.createBufferSource();
+  source.buffer = buffers[Math.floor(Math.random() * buffers.length)];
+  const gain = ctx.createGain();
+  gain.gain.value = volume;
+  source.connect(gain);
+  gain.connect(ctx.destination);
+  source.start(0);
+}
+
+function resolveSwitchToCdnId(sw: string): string {
+  if (sw === "blue") return "cdn_20";
+  if (sw === "brown") return "cdn_22";
+  if (sw === "red") return "cdn_19";
+  return sw;
+}
+
 export function resolveSwitchToCdn(sw: string): string {
   if (sw === "blue") return "cdn_20";     // CherryMX Blue ABS (clicky)
   if (sw === "brown") return "cdn_22";    // CherryMX Brown PBT (tactile)

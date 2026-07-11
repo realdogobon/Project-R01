@@ -28,7 +28,7 @@ const BUILT_IN_FONTS: FontOption[] = [
     id: "geist-mono",
     label: "Geist Mono",
     googleFamily: null,
-    cssFamily: "var(--font-mono, ui-monospace, sans-serif)",
+    cssFamily: "ui-monospace, 'Cascadia Code', monospace",
     tag: "mono",
   },
   {
@@ -55,9 +55,10 @@ const BUILT_IN_FONTS: FontOption[] = [
   {
     id: "source-code-pro",
     label: "Source Code Pro",
-    googleFamily: "Source+Code+Pro:wght@400;500;700",
+    googleFamily: null,
     cssFamily: "'Source Code Pro', monospace",
     tag: "mono",
+    mtFileName: "SourceCodePro-Regular.woff2",
   },
   {
     id: "inter-tight",
@@ -250,7 +251,14 @@ function injectAllFonts() {
   document.head.appendChild(style);
 }
 
-function applyDynamicThemeColors(themeId: string) {
+function hexLuminance(hex: string): number {
+  const r = parseInt(hex.slice(1, 3), 16) / 255;
+  const g = parseInt(hex.slice(3, 5), 16) / 255;
+  const b = parseInt(hex.slice(5, 7), 16) / 255;
+  return 0.299 * r + 0.587 * g + 0.114 * b;
+}
+
+export function applyDynamicThemeColors(themeId: string) {
   if (typeof document === "undefined") return;
 
   const root = document.documentElement;
@@ -274,13 +282,12 @@ function applyDynamicThemeColors(themeId: string) {
 
   if (themeId in builtInThemes) {
     const colors = builtInThemes[themeId];
+    bg = colors[0];
+    sub = colors[1];
     main = colors[2];
-    const isDark = document.documentElement.classList.contains("dark");
-    bg = isDark ? "#111213" : "#f8f9fa";
-    sub = isDark ? "#a3a3a3" : "#525252";
-    subAlt = isDark ? "#18181b" : "#f4f4f5";
-    text = isDark ? "#f5f5f5" : "#171717";
     caret = colors[2];
+    subAlt = bg;
+    text = hexLuminance(bg) > 0.5 ? "#2c2e31" : "#d1d0c4";
   } else {
     const mtTheme = MONKEYTYPE_THEMES[themeId];
     if (mtTheme) {
@@ -293,7 +300,6 @@ function applyDynamicThemeColors(themeId: string) {
       error = mtTheme.error || "#ef4444";
     }
   }
-
 
   root.style.setProperty("--theme-bg", bg);
   root.style.setProperty("--theme-main", main);

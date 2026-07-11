@@ -40,10 +40,13 @@ import {
   TypingFont,
   KeyboardThemeName,
   SwitchType,
+  applyDynamicThemeColors,
 } from "../../contexts/SettingsContext";
 import {
   SOUND_VARIANTS,
   ERROR_SOUND_VARIANTS,
+  previewClickSound,
+  previewErrorSound,
 } from "../../hooks/useSoundEngine";
 import { motion, AnimatePresence } from "motion/react";
 import { SmoothInput } from "../ui/SmoothInputs";
@@ -648,6 +651,8 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                           <button
                             key={t.id}
                             onClick={() => setAccent(t.id)}
+                            onMouseEnter={() => applyDynamicThemeColors(t.id)}
+                            onMouseLeave={() => applyDynamicThemeColors(accent)}
                             className={cn(
                               "group relative flex flex-col gap-2 rounded-xl px-3 py-3 text-left transition-all duration-150 cursor-pointer border",
                               selected
@@ -715,6 +720,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                       label="Mono Layouts"
                       onSelect={setFont}
                       themeAccent={accentColor}
+                      activeCssFamily={selectedFont.cssFamily}
                     />
                     <FontGroup
                       active={font}
@@ -722,6 +728,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                       label="Proportional Layouts"
                       onSelect={setFont}
                       themeAccent={accentColor}
+                      activeCssFamily={selectedFont.cssFamily}
                     />
                   </motion.div>
                 ) : view === "soundCentre" ? (
@@ -787,6 +794,10 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                               <button
                                 key={sw}
                                 onClick={() => setActiveSwitch(sw)}
+                                onMouseEnter={() => {
+                                  if (soundEnabled)
+                                    void previewClickSound(sw, soundVolume);
+                                }}
                                 className={cn(
                                   "flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left transition-colors cursor-pointer",
                                   selected
@@ -840,6 +851,10 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                               <button
                                 key={v.id}
                                 onClick={() => setActiveSwitch(v.id as any)}
+                                onMouseEnter={() => {
+                                  if (soundEnabled)
+                                    void previewClickSound(v.id, soundVolume);
+                                }}
                                 className={cn(
                                   "flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left transition-colors cursor-pointer",
                                   selected
@@ -891,6 +906,10 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                               <button
                                 key={v.id}
                                 onClick={() => setActiveSwitch(v.id as any)}
+                                onMouseEnter={() => {
+                                  if (soundEnabled)
+                                    void previewClickSound(v.id, soundVolume);
+                                }}
                                 className={cn(
                                   "flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left transition-colors cursor-pointer",
                                   selected
@@ -960,6 +979,10 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                                     v.id as import("@/contexts/SettingsContext").ErrorSoundType,
                                   )
                                 }
+                                onMouseEnter={() => {
+                                  if (soundEnabled)
+                                    void previewErrorSound(v.id, soundVolume);
+                                }}
                                 className={cn(
                                   "flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left transition-colors cursor-pointer",
                                   selected
@@ -1272,6 +1295,7 @@ interface FontGroupProps {
   active: TypingFont;
   onSelect: (id: TypingFont) => void;
   themeAccent: string;
+  activeCssFamily: string;
 }
 
 function FontGroup({
@@ -1280,6 +1304,7 @@ function FontGroup({
   active,
   onSelect,
   themeAccent,
+  activeCssFamily,
 }: FontGroupProps) {
   return (
     <div className="space-y-1 block text-left">
@@ -1299,6 +1324,18 @@ function FontGroup({
                   : "bg-transparent hover:bg-neutral-500/[0.03] dark:hover:bg-white/[0.03]",
               )}
               onClick={() => onSelect(f.id)}
+              onMouseEnter={() =>
+                document.documentElement.style.setProperty(
+                  "--app-font-family",
+                  f.cssFamily,
+                )
+              }
+              onMouseLeave={() =>
+                document.documentElement.style.setProperty(
+                  "--app-font-family",
+                  activeCssFamily,
+                )
+              }
               style={{ transform: "none" }}
             >
               <span
