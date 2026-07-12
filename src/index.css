@@ -518,7 +518,7 @@
   fill: none;
   stroke-dasharray: 1 0;
   opacity: 1;
-  animation: neonCloseTrailPath 0.38s ease-in forwards;
+  animation: neonCloseTrailPath 2s ease-in forwards;
   pointer-events: none;
 }
 
@@ -529,7 +529,7 @@
   stroke-linecap: round;
   opacity: 1;
   filter: drop-shadow(0 0 2px rgba(255, 255, 255, 0.9));
-  animation: neonClosePulsePath 0.38s ease-in forwards;
+  animation: neonClosePulsePath 2s ease-in forwards;
   pointer-events: none;
 }
 
