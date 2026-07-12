@@ -101,10 +101,33 @@ const KeyboardSection = memo(function KeyboardSection({
   virtualCapsLockActive
 }: KeyboardSectionProps) {
   const { keyboardModel } = useSettings();
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // The keyboard's rendered width can exceed the viewport on narrower
+  // screens (or the Das board specifically, which is intentionally sized
+  // ~1.5x the Classic board's real-world width). `max-w-5xl` here matches
+  // the width the rest of this screen already uses (see the header/text
+  // sections above), so on any viewport wide enough for those, the
+  // keyboard fits too and never scrolls. When it genuinely doesn't fit
+  // (e.g. small screens), `overflow-x-auto` lets it scroll instead of
+  // clipping — and this effect centers the scroll position on mount/resize
+  // so the excess is split evenly left/right instead of all getting cut
+  // off the right edge (which is what a fixed scrollLeft of 0 does by
+  // default when content is wider than its container).
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const center = () => {
+      el.scrollLeft = (el.scrollWidth - el.clientWidth) / 2;
+    };
+    center();
+    window.addEventListener("resize", center);
+    return () => window.removeEventListener("resize", center);
+  }, [keyboardModel]);
 
   return (
-    <div className="w-full max-w-4xl mx-auto pt-6 shrink-0 overflow-x-auto">
-      <div className="min-w-fit mx-auto" style={{ width: "max-content" }}>
+    <div ref={scrollRef} className="w-full max-w-5xl mx-auto pt-6 shrink-0 overflow-x-auto">
+      <div className="flex justify-center min-w-fit" style={{ width: "max-content", minWidth: "100%" }}>
       {keyboardModel === "das_keyboard_4" ? (
         <DasKeyboard
           onKeyVirtualDown={onKeyVirtualDown}
