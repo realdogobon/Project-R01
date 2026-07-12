@@ -134,6 +134,12 @@ function ThemeToggle({ disabled }: { disabled?: boolean }) {
   );
 }
 
+// Traces a tab's visible outer border (up the left edge, through the top-left curve,
+// across the top, through the top-right curve, down the right edge) in a normalized
+// 0-100 coordinate space. Used to run the neon accent-glow animation around the whole
+// outline instead of just the flat top strip. No bottom segment — tabs have no bottom border.
+const TAB_ACCENT_OUTLINE_PATH = "M 0 100 L 0 16 A 16 16 0 0 1 16 0 L 84 0 A 16 16 0 0 1 100 16 L 100 100";
+
 const ScannerLiveIcon = ({ className = "w-4 h-4" }: { className?: string }) => {
   let themeAccentColor = "#3b82f6"; // default blue
   try {
@@ -3713,33 +3719,63 @@ export default function Workspace() {
                           : "bg-neutral-50/50 dark:bg-[#1c1c1c] border-transparent text-neutral-400 dark:text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300 hover:bg-neutral-200/50 dark:hover:bg-white/[0.02]"
                       }`}
                     >
-                      {/* Accent bar: neon tube 4-phase cycle, idle dim, close drain */}
-                      {(isActive || closingTabId === tab.id) && (
-                        <div
-                          className="absolute top-0 inset-x-0 h-[2px] overflow-hidden pointer-events-none"
+                      {/* Accent glow: neon tube traced around the tab's full outer outline
+                          (up the left edge, through the top-left curve, across the top,
+                          through the top-right curve, down the right edge) instead of a
+                          flat top strip. Same 4-phase timeline as before. */}
+                      {isActive && closingTabId !== tab.id && (
+                        <svg
+                          className="absolute inset-0 w-full h-full overflow-visible pointer-events-none"
+                          viewBox="0 0 100 100"
+                          preserveAspectRatio="none"
                           style={{
-                            background: (closingTabId === tab.id || glowingTabId === tab.id)
-                              ? 'transparent'
-                              // "off" state: a fresh tab that has never played its first-keystroke
-                              // cycle stays dark until then, matching the neon-tube spec.
-                              : isActive && tab.hasGlowedOnce ? themeAccentColor : 'transparent',
-                            opacity: (isActive && glowingTabId !== tab.id && closingTabId !== tab.id && isAccentBarIdle) ? 0 : 1,
-                            transition: 'background 0.38s ease, opacity 0.6s ease',
+                            opacity: (glowingTabId !== tab.id && isAccentBarIdle) ? 0 : 1,
+                            transition: 'opacity 0.6s ease',
                           }}
                         >
-                          {isActive && glowingTabId === tab.id && (
-                            <>
-                              <div className="tab-neon-trail" style={{ background: themeAccentColor }} />
-                              <div className="tab-neon-pulse-v2" onAnimationEnd={() => setGlowingTabId(null)} />
-                            </>
-                          )}
-                          {closingTabId === tab.id && (
-                            <div
-                              className="tab-close-drain"
-                              style={{ background: themeAccentColor }}
-                              onAnimationEnd={handleCloseAnimationEnd}
+                          {/* "off" state: a fresh tab that has never played its first-keystroke
+                              cycle stays dark until then, matching the neon-tube spec. */}
+                          {tab.hasGlowedOnce && glowingTabId !== tab.id && (
+                            <path
+                              d={TAB_ACCENT_OUTLINE_PATH}
+                              fill="none"
+                              stroke={themeAccentColor}
+                              strokeWidth={2}
+                              vectorEffect="non-scaling-stroke"
                             />
                           )}
+                          {glowingTabId === tab.id && (
+                            <>
+                              <path
+                                d={TAB_ACCENT_OUTLINE_PATH}
+                                fill="none"
+                                stroke={themeAccentColor}
+                                strokeWidth={2}
+                                vectorEffect="non-scaling-stroke"
+                                pathLength={1}
+                                className="tab-neon-trail-path"
+                              />
+                              <path
+                                d={TAB_ACCENT_OUTLINE_PATH}
+                                fill="none"
+                                strokeWidth={2.5}
+                                vectorEffect="non-scaling-stroke"
+                                pathLength={1}
+                                className="tab-neon-pulse-path"
+                                onAnimationEnd={() => setGlowingTabId(null)}
+                              />
+                            </>
+                          )}
+                        </svg>
+                      )}
+                      {/* Close drain: unrelated to the accent glow, stays a simple top strip */}
+                      {closingTabId === tab.id && (
+                        <div className="absolute top-0 inset-x-0 h-[2px] overflow-hidden pointer-events-none">
+                          <div
+                            className="tab-close-drain"
+                            style={{ background: themeAccentColor }}
+                            onAnimationEnd={handleCloseAnimationEnd}
+                          />
                         </div>
                       )}
 

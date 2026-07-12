@@ -441,34 +441,35 @@
   }
 }
 
-/* Neon tube — lit trail: reveals left→right (phase 1), holds full + breathes at the
-   turnaround (phase 2), then hides left→right on the way back (phase 3), breathes
-   dark, and finally fades in uniformly to steady-on (phase 4) with no more motion. */
-@keyframes neonTrailCycle {
-  0%   { clip-path: inset(0 100% 0 0); opacity: 1; }  /* dark, nothing lit yet */
-  25%  { clip-path: inset(0 0% 0 0);   opacity: 1; }  /* phase 1 end: fully lit */
-  35%  { clip-path: inset(0 0% 0 0);   opacity: 0; }  /* turnaround: fades out */
-  39%  { clip-path: inset(0 0% 0 0);   opacity: 0; }  /* turnaround: brief beat */
-  49%  { clip-path: inset(0 0% 0 0);   opacity: 1; }  /* turnaround: fades back in, full bar lit */
-  74%  { clip-path: inset(0 100% 0 0); opacity: 1; }  /* phase 3 end: dimmed back to dark */
-  82%  { clip-path: inset(0 100% 0 0); opacity: 0; }  /* final: fades out */
-  86%  { clip-path: inset(0 0% 0 0);   opacity: 0; }  /* final: brief beat (clip reset while invisible) */
-  100% { clip-path: inset(0 0% 0 0);   opacity: 1; }  /* final: fades to steady on, no motion */
+/* Neon tube — lit trail traced along the tab's outline path (pathLength normalized to 1,
+   so 0 = start corner, 1 = end corner). Reveals start→end (phase 1), holds full + breathes
+   at the turnaround (phase 2), hides start→end on the way back (phase 3), breathes dark,
+   then fades in uniformly to steady-on (phase 4) with no more motion. */
+@keyframes neonTrailPathCycle {
+  0%   { stroke-dasharray: 0 1; opacity: 1; }  /* dark, nothing lit yet */
+  25%  { stroke-dasharray: 1 0; opacity: 1; }  /* phase 1 end: fully lit */
+  35%  { stroke-dasharray: 1 0; opacity: 0; }  /* turnaround: fades out */
+  39%  { stroke-dasharray: 1 0; opacity: 0; }  /* turnaround: brief beat */
+  49%  { stroke-dasharray: 1 0; opacity: 1; }  /* turnaround: fades back in, fully lit */
+  74%  { stroke-dasharray: 0 1; opacity: 1; }  /* phase 3 end: dimmed back to dark */
+  82%  { stroke-dasharray: 0 1; opacity: 0; }  /* final: fades out */
+  86%  { stroke-dasharray: 1 0; opacity: 0; }  /* final: brief beat (reset while invisible) */
+  100% { stroke-dasharray: 1 0; opacity: 1; }  /* final: fades to steady on, no motion */
 }
 
-/* Neon pulse — bright shimmer riding the lit edge: L→R on the forward trip,
-   vanishes through the turnaround breath, reappears at the far right for the
-   return trip R→L, then vanishes for good once the tube locks in steady-on. */
-@keyframes neonPulseCycle {
-  0%   { transform: translateX(-166%); opacity: 0; }
+/* Neon pulse — bright shimmer riding the lit edge along the same path: start→end on the
+   forward trip, vanishes through the turnaround breath, reappears at the end for the
+   return trip end→start, then vanishes for good once the tube locks in steady-on. */
+@keyframes neonPulsePathCycle {
+  0%   { stroke-dashoffset: 0;  opacity: 0; }
   3%   { opacity: 1; }
-  25%  { transform: translateX(266%);  opacity: 1; }  /* phase 1 end: at far right */
-  27%  { transform: translateX(266%);  opacity: 0; }  /* fades out for the breath */
-  49%  { transform: translateX(266%);  opacity: 0; }  /* still parked, invisible */
-  50%  { transform: translateX(266%);  opacity: 1; }  /* reappears to start the return trip */
-  74%  { transform: translateX(-166%); opacity: 1; }  /* phase 3 end: at far left */
-  76%  { transform: translateX(-166%); opacity: 0; }  /* fades out at the final moment */
-  100% { transform: translateX(-166%); opacity: 0; }  /* stays hidden through steady-on */
+  25%  { stroke-dashoffset: -1; opacity: 1; }  /* phase 1 end: at the far corner */
+  27%  { stroke-dashoffset: -1; opacity: 0; }  /* fades out for the breath */
+  49%  { stroke-dashoffset: -1; opacity: 0; }  /* still parked, invisible */
+  50%  { stroke-dashoffset: -1; opacity: 1; }  /* reappears to start the return trip */
+  74%  { stroke-dashoffset: 0;  opacity: 1; }  /* phase 3 end: back at the start corner */
+  76%  { stroke-dashoffset: 0;  opacity: 0; }  /* fades out at the final moment */
+  100% { stroke-dashoffset: 0;  opacity: 0; }  /* stays hidden through steady-on */
 }
 
 /* Neon tube close — bar drains right-to-left (scaleX from right anchor) */
@@ -482,34 +483,22 @@
    Trail layer drives the lit region via clip-path (grows from left, then shrinks from left,
    mirroring the pulse's leading edge). Pulse layer is the bright shimmer riding that edge.
    Both share the same 3.6s timeline so they never fall out of sync. */
-.tab-neon-trail {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  clip-path: inset(0 100% 0 0);
+.tab-neon-trail-path {
+  fill: none;
+  stroke-dasharray: 0 1;
   opacity: 1;
-  animation: neonTrailCycle 3.6s ease-in-out forwards;
+  animation: neonTrailPathCycle 3.6s ease-in-out forwards;
   pointer-events: none;
 }
 
-.tab-neon-pulse-v2 {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 30%;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    rgba(255, 255, 255, 0.22) 25%,
-    rgba(255, 255, 255, 0.65) 50%,
-    rgba(255, 255, 255, 0.22) 75%,
-    transparent 100%
-  );
-  transform: translateX(-166%);
+.tab-neon-pulse-path {
+  fill: none;
+  stroke: #ffffff;
+  stroke-dasharray: 0.05 0.95;
+  stroke-linecap: round;
   opacity: 0;
-  animation: neonPulseCycle 3.6s ease-in-out forwards;
+  filter: drop-shadow(0 0 2px rgba(255, 255, 255, 0.9));
+  animation: neonPulsePathCycle 3.6s ease-in-out forwards;
   pointer-events: none;
 }
 
