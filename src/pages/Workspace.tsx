@@ -134,11 +134,18 @@ function ThemeToggle({ disabled }: { disabled?: boolean }) {
   );
 }
 
-// Traces a tab's visible outer border in a normalized 0-100 coordinate space: starts
-// flush at the left wall (no corner/curve there, since the tab sits directly against
-// the app's left edge like a native OS tab), runs across the top, through the top-right
-// curve, then down the right edge to where the tab's border meets the toolbar below.
-const TAB_ACCENT_OUTLINE_PATH = "M 0 0 L 84 0 A 16 16 0 0 1 100 16 L 100 100";
+// Builds the neon-glow outline path in the tab's own real pixel box (not a distorted
+// 0-100 square) so the curve radius matches the tab's actual CSS rounded-lg corner
+// exactly — no stretching, no jagged arcs. `flushLeft` drops the top-left corner/curve
+// entirely for the first tab, which sits directly against the app's left wall like a
+// native OS tab (no separate border/curve there); other tabs get both corners rounded.
+function buildTabAccentPath(width: number, height: number, flushLeft: boolean): string {
+  const r = 8; // matches Tailwind's rounded-lg radius used on the tab itself
+  if (flushLeft) {
+    return `M 0 0 L ${width - r} 0 A ${r} ${r} 0 0 1 ${width} ${r} L ${width} ${height}`;
+  }
+  return `M 0 ${height} L 0 ${r} A ${r} ${r} 0 0 1 ${r} 0 L ${width - r} 0 A ${r} ${r} 0 0 1 ${width} ${r} L ${width} ${height}`;
+}
 
 const ScannerLiveIcon = ({ className = "w-4 h-4" }: { className?: string }) => {
   let themeAccentColor = "#3b82f6"; // default blue
@@ -468,6 +475,28 @@ export default function Workspace() {
   const [closingTabId, setClosingTabId] = useState<string | null>(null);
   const [isAccentBarIdle, setIsAccentBarIdle] = useState(false);
   const lastActivityAtRef = useRef<number>(Date.now());
+  // Real pixel box of the currently-active tab, measured directly from the DOM so the
+  // neon-glow outline's curve radius matches the tab's actual rendered corner exactly
+  // (no distorted viewBox stretching a square arc onto a rectangular tab).
+  const activeTabElRef = useRef<HTMLDivElement | null>(null);
+  const [activeTabBox, setActiveTabBox] = useState({ width: 176, height: 40 });
+
+  // Measures the active tab's real rendered box so the neon-glow outline can be built
+  // in exact pixel units instead of a distorted 0-100 viewBox stretched to fit.
+  useEffect(() => {
+    const measure = () => {
+      const el = activeTabElRef.current;
+      if (el) {
+        const rect = el.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) {
+          setActiveTabBox({ width: rect.width, height: rect.height });
+        }
+      }
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [activeTabId]);
   const pendingCloseTabIdRef = useRef<string | null>(null);
   const activeTab = tabs.find(t => t.id === activeTabId);
   const isExamSealed = !!activeTab?.examSealed;
@@ -3679,12 +3708,14 @@ export default function Workspace() {
             {mode === "Write" && (
               <div className="h-10 bg-neutral-100 dark:bg-[#161616] flex items-center justify-between pr-3 shrink-0 select-none">
                 <div className="flex items-center gap-1 overflow-x-auto no-scrollbar scroll-smooth flex-1 h-full pt-1.5">
-                {tabs.map((tab) => {
+                {tabs.map((tab, tabIndex) => {
                   const isActive = tab.id === activeTabId;
                   const examLockedUI = (examStatus === "running" || examStatus === "countdown") && !isActive;
+                  const isFirstTab = tabIndex === 0;
                   return (
                     <div
                       key={tab.id}
+                      ref={isActive ? activeTabElRef : undefined}
                       onClick={() => !examLockedUI && switchTab(tab.id)}
                       onDoubleClick={(e) => {
                          e.preventDefault();
@@ -3711,7 +3742,9 @@ export default function Workspace() {
                         }
                       }}
                       title={examLockedUI ? "Locked while an exam is in progress" : undefined}
-                      className={`group relative h-full w-44 rounded-t-lg border-x border-b-0 px-3 flex items-center justify-between gap-2.5 transition-all text-[12.5px] font-sans ${
+                      className={`group relative h-full w-44 ${
+                        isFirstTab ? "rounded-tr-lg border-r" : "rounded-t-lg border-x"
+                      } border-b-0 px-3 flex items-center justify-between gap-2.5 transition-all text-[12.5px] font-sans ${
                         examLockedUI ? "opacity-40 grayscale-[40%] cursor-not-allowed pointer-events-none" : "cursor-pointer"
                       } ${
                         isActive
@@ -3723,12 +3756,13 @@ export default function Workspace() {
                           (up the left edge, through the top-left curve, across the top,
                           through the top-right curve, down the right edge) instead of a
                           flat top strip. Same 4-phase timeline as before. */}
-                      {isActive && closingTabId !== tab.id && (
+                      {isActive && closingTabId !== tab.id && (() => {
+                        const accentPath = buildTabAccentPath(activeTabBox.width, activeTabBox.height, isFirstTab);
+                        return (
                         <svg
                           className="absolute inset-0 w-full h-full overflow-visible pointer-events-none"
-                          viewBox="0 0 100 100"
-                          preserveAspectRatio="none"
-                          style={{
+                          viewBox={`0 0 ${activeTabBox.width} ${activeTabBox.height}`}
+                        style={{
                             opacity: (glowingTabId !== tab.id && isAccentBarIdle) ? 0 : 1,
                             transition: 'opacity 0.6s ease',
                           }}
@@ -3737,28 +3771,34 @@ export default function Workspace() {
                               cycle stays dark until then, matching the neon-tube spec. */}
                           {tab.hasGlowedOnce && glowingTabId !== tab.id && (
                             <path
-                              d={TAB_ACCENT_OUTLINE_PATH}
+                              d={accentPath}
                               fill="none"
                               stroke={themeAccentColor}
                               strokeWidth={2}
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
                               vectorEffect="non-scaling-stroke"
                             />
                           )}
                           {glowingTabId === tab.id && (
                             <>
                               <path
-                                d={TAB_ACCENT_OUTLINE_PATH}
+                                d={accentPath}
                                 fill="none"
                                 stroke={themeAccentColor}
                                 strokeWidth={2}
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
                                 vectorEffect="non-scaling-stroke"
                                 pathLength={1}
                                 className="tab-neon-trail-path"
                               />
                               <path
-                                d={TAB_ACCENT_OUTLINE_PATH}
+                                d={accentPath}
                                 fill="none"
                                 strokeWidth={2.5}
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
                                 vectorEffect="non-scaling-stroke"
                                 pathLength={1}
                                 className="tab-neon-pulse-path"
@@ -3767,7 +3807,8 @@ export default function Workspace() {
                             </>
                           )}
                         </svg>
-                      )}
+                        );
+                      })()}
                       {/* Close drain: unrelated to the accent glow, stays a simple top strip */}
                       {closingTabId === tab.id && (
                         <div className="absolute top-0 inset-x-0 h-[2px] overflow-hidden pointer-events-none">
