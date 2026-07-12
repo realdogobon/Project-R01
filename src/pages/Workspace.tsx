@@ -433,6 +433,8 @@ export default function Workspace() {
   ]);
   const [activeTabId, setActiveTabId] = useState<string>("1");
   const [glowingTabId, setGlowingTabId] = useState<string | null>(null);
+  const [closingTabId, setClosingTabId] = useState<string | null>(null);
+  const pendingCloseTabIdRef = useRef<string | null>(null);
   const activeTab = tabs.find(t => t.id === activeTabId);
   const isExamSealed = !!activeTab?.examSealed;
   const sealActiveTab = (sealed: boolean) => {
@@ -484,13 +486,12 @@ export default function Workspace() {
     setTabs(prev => prev.map(t => t.id === activeTabId ? { ...t, content } : t));
   };
 
-  // --- Tab glow helpers ---
+  // --- Tab glow & close helpers ---
   const GLOW_LONG_ABSENCE_MS  = 5 * 60 * 1000;  // 5 min  → always glow
   const GLOW_SHORT_ABSENCE_MS = 45 * 1000;       // 45 sec → glow if tab has content
 
   const fireTabGlow = (tabId: string) => {
     setGlowingTabId(null);
-    // Flush to next frame so re-triggering on same tab resets the animation
     requestAnimationFrame(() => setGlowingTabId(tabId));
   };
 
@@ -501,7 +502,28 @@ export default function Workspace() {
     if (gap >= GLOW_SHORT_ABSENCE_MS && (tab.isDirty || (tab.content && tab.content.trim().length > 0))) return true;
     return false;
   };
-  // -------------------------
+
+  const handleCloseAnimationEnd = () => {
+    const tid = pendingCloseTabIdRef.current;
+    pendingCloseTabIdRef.current = null;
+    setClosingTabId(null);
+    if (tid) doCloseTab(tid);
+  };
+
+  const initiateTabClose = (tabId: string, e?: React.MouseEvent) => {
+    if (e) { e.stopPropagation(); e.preventDefault(); }
+    const tabToClose = tabs.find(t => t.id === tabId);
+    if (!tabToClose) return;
+    if (tabToClose.isDirty && (tabToClose.content || "").trim() !== "") {
+      // Show unsaved prompt first; animation fires after user confirms
+      setPendingAction(`animatedCloseTab:${tabId}`);
+      setIsUnsavedPopupOpen(true);
+      return;
+    }
+    pendingCloseTabIdRef.current = tabId;
+    setClosingTabId(tabId);
+  };
+  // --------------------------------
 
   const createNewTab = (name = "New Document", content = "", fileHandle = null) => {
     if (saveTimeoutRef.current) {
@@ -724,6 +746,11 @@ export default function Workspace() {
     else if (action.startsWith("closeTab:")) {
       const tabId = action.replace("closeTab:", "");
       doCloseTab(tabId);
+    }
+    else if (action.startsWith("animatedCloseTab:")) {
+      const tabId = action.replace("animatedCloseTab:", "");
+      pendingCloseTabIdRef.current = tabId;
+      setClosingTabId(tabId);
     }
   };
 
@@ -3646,7 +3673,7 @@ export default function Workspace() {
                             alert("Cannot close tabs during an active exam.");
                             return;
                           }
-                          closeTab(tab.id, e as any);
+                          initiateTabClose(tab.id, e as any);
                         }
                       }}
                       title={examLockedUI ? "Locked while an exam is in progress" : undefined}
@@ -3657,15 +3684,31 @@ export default function Workspace() {
                           ? "bg-white dark:bg-[#1a1a1a] border-neutral-200 dark:border-white/10 text-neutral-800 dark:text-neutral-100 font-semibold"
                           : "bg-neutral-50/50 dark:bg-[#1c1c1c] border-transparent text-neutral-400 dark:text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300 hover:bg-neutral-200/50 dark:hover:bg-white/[0.02]"
                       }`}
-                      style={isActive ? { boxShadow: `inset 0 2px 0 ${themeAccentColor}` } : {}}
                     >
-                      {/* Sweep-light overlay — sits over the inset box-shadow accent bar */}
-                      {isActive && glowingTabId === tab.id && (
-                        <div className="absolute top-0 inset-x-0 h-[2px] overflow-hidden pointer-events-none">
-                          <div
-                            className="tab-sweep-light"
-                            onAnimationEnd={() => setGlowingTabId(null)}
-                          />
+                      {/* Accent bar + neon tube open + close drain */}
+                      {(isActive || closingTabId === tab.id) && (
+                        <div
+                          className="absolute top-0 inset-x-0 h-[2px] overflow-hidden pointer-events-none"
+                          style={{
+                            background: (closingTabId === tab.id || glowingTabId === tab.id)
+                              ? 'transparent'
+                              : isActive ? themeAccentColor : 'transparent',
+                            transition: 'background 0.38s ease',
+                          }}
+                        >
+                          {isActive && glowingTabId === tab.id && (
+                            <>
+                              <div className="tab-neon-lit" style={{ background: themeAccentColor }} />
+                              <div className="tab-neon-pulse" onAnimationEnd={() => setGlowingTabId(null)} />
+                            </>
+                          )}
+                          {closingTabId === tab.id && (
+                            <div
+                              className="tab-close-drain"
+                              style={{ background: themeAccentColor }}
+                              onAnimationEnd={handleCloseAnimationEnd}
+                            />
+                          )}
                         </div>
                       )}
 
@@ -3691,7 +3734,7 @@ export default function Workspace() {
                             alert("Cannot close tabs during an active exam.");
                             return;
                           }
-                          closeTab(tab.id, e);
+                          initiateTabClose(tab.id, e);
                         }}
                         className="p-0.5 rounded-full hover:bg-neutral-200 dark:hover:bg-white/10 text-neutral-400 dark:text-neutral-600 group-hover:text-neutral-600 dark:group-hover:text-neutral-400 transition-colors cursor-pointer"
                       >
@@ -3711,7 +3754,7 @@ export default function Workspace() {
                     createNewTab(`New Document ${tabs.length + 1}`, "");
                   }}
                   disabled={examStatus === "running" || examStatus === "countdown"}
-                  className={`p-1 rounded-md hover:bg-neutral-200 dark:hover:bg-white/10 text-neutral-500 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-white transition-all self-center mb-1 flex items-center justify-center border border-dashed border-neutral-300 dark:border-white/10 ml-1.5 h-6 w-6 shrink-0 active:scale-95 ${(examStatus === "running" || examStatus === "countdown") ? "opacity-30 cursor-not-allowed" : "cursor-pointer"}`}
+                  className={`p-1.5 ml-2 text-neutral-400 dark:text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300 transition-colors self-center shrink-0 active:scale-95 ${(examStatus === "running" || examStatus === "countdown") ? "opacity-30 cursor-not-allowed" : "cursor-pointer"}`}
                   title={(examStatus === "running" || examStatus === "countdown") ? "Locked while an exam is in progress" : "New Tab: Alt+T | Close: Alt+W | Switch: Alt+Left/Right"}
                 >
                   <Plus className="w-3.5 h-3.5" />
@@ -3754,11 +3797,14 @@ export default function Workspace() {
                     }
                   }}
                   onChange={() => {
-                    // First-keystroke glow: fire once per tab's lifetime
+                    // First-keystroke glow: fire once per tab lifetime, only when real content exists
                     const activeTab = tabs.find(t => t.id === activeTabId);
                     if (activeTab && !activeTab.hasGlowedOnce) {
-                      setTabs(prev => prev.map(t => t.id === activeTabId ? { ...t, hasGlowedOnce: true } : t));
-                      fireTabGlow(activeTabId);
+                      const text = editorRef.current?.getMarkdown?.() ?? "";
+                      if (text.trim().length > 0) {
+                        setTabs(prev => prev.map(t => t.id === activeTabId ? { ...t, hasGlowedOnce: true } : t));
+                        fireTabGlow(activeTabId);
+                      }
                     }
 
                     // Update main unsaved dirty state instantly for snappy UI feedback
@@ -4004,7 +4050,7 @@ export default function Workspace() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <h2 className="text-[15px] font-medium text-neutral-900 dark:text-neutral-100 leading-snug tracking-[-0.008em] mb-1.5">
-                      Do you want to save changes to &ldquo;{pendingAction?.startsWith("closeTab:") ? (tabs.find(t => t.id === pendingAction?.replace("closeTab:", ""))?.name ?? fileName) : fileName}&rdquo;?
+                      Do you want to save changes to &ldquo;{(pendingAction?.startsWith("closeTab:") || pendingAction?.startsWith("animatedCloseTab:")) ? (tabs.find(t => t.id === pendingAction?.replace(/^(closeTab:|animatedCloseTab:)/, ""))?.name ?? fileName) : fileName}&rdquo;?
                     </h2>
                     <p className="text-[13px] text-neutral-500 dark:text-neutral-400 leading-[1.5]">
                       Your changes will be lost if you don&apos;t save them.
