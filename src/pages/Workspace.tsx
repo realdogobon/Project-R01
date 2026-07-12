@@ -951,21 +951,6 @@ export default function Workspace() {
   const [isRagIndexing, setIsRagIndexing] = useState(false);
   const isRagIndexingRef = useRef(false);
 
-  const [toastNotification, setToastNotification] = useState<{ message: React.ReactNode; type: "success" | "error" | "info"; action?: { label: string; onClick: () => void; } } | null>(null);
-
-  const showToast = (message: React.ReactNode, type: "success" | "error" | "info" = "success", action?: { label: string; onClick: () => void; }) => {
-    setToastNotification({ message, type, action });
-    setTimeout(() => {
-      setToastNotification(p => p?.message === message ? null : p);
-    }, action ? 8000 : 4000);
-  };
-
-  const toast = {
-    success: (msg: string) => showToast(msg, "success"),
-    error: (msg: string) => showToast(msg, "error"),
-    info: (msg: string) => showToast(msg, "info")
-  };
-
   useEffect(() => {
     syncRagIndex().then(() => setRagResults(getAllScans()));
   }, [user]);
@@ -1975,11 +1960,8 @@ export default function Workspace() {
            navigator.vibrate(40);
          }
        } catch {}
-
-       showToast(`✓ "${docTitle}" successfully saved to your Study Library!`);
     } catch(err: any) {
        console.error("RAG Error:", err);
-       showToast(err?.message || "Failed to save scanned document.", "error");
     } finally {
        isRagIndexingRef.current = false;
        setIsRagIndexing(false);
@@ -2018,7 +2000,6 @@ export default function Workspace() {
         editorRef.current.injectMarkdown(cur + text);
         setEditorContent(cur + text);
         setIsDirty(true);
-        showToast("Inserted current Time/Date", "success");
       }
     } catch (e) {
       console.error(e);
@@ -2079,11 +2060,8 @@ export default function Workspace() {
       if (user && saveFileToCloud) {
         await saveFileToCloud(fullName, content);
       }
-
-      showToast(`Saved as "${fullName}" successfully!`, "success");
     } catch (err) {
       console.error(err);
-      showToast("Failed to save as custom name", "error");
     }
   };
 
@@ -2814,14 +2792,10 @@ export default function Workspace() {
           content,
           JSON.stringify(examReplayLogRef.current)
         );
-        toast.success("Exam completed and saved successfully");
       } catch (e) {
         console.error("Manual exam finish sync failed:", e);
-        toast.error("Failed to save exam results. Please try again.");
         isSavingExamRef.current = false;
       }
-    } else {
-      toast.success("Exam finished! Sign in to save your results.");
     }
   };
 
@@ -3039,9 +3013,6 @@ export default function Workspace() {
                 </button>
                 <button onClick={() => closeMenusAndExecute(() => {
                   const num = prompt("Enter line number to jump to:");
-                  if (num) {
-                    showToast(`Jumping to line ${num} is a WPF native feature. Focus set to top!`, "info");
-                  }
                 })} className="w-full text-left px-4 py-1.5 hover:bg-black/5 hover:text-neutral-900 dark:hover:bg-white/10 dark:hover:text-white text-[14px] font-medium text-neutral-700 dark:text-neutral-300 transition-colors flex items-center justify-between">
                   <span>Go To...</span> <span className="text-[10px] opacity-40">Ctrl+G</span>
                 </button>
@@ -4240,16 +4211,14 @@ export default function Workspace() {
                   <button
                     onClick={async () => {
                       if (!editingDoc.title.trim()) {
-                        showToast("Document title cannot be empty.", "error");
                         return;
                       }
                       try {
                         await updateDocument(editingDoc.id, editingDoc.title, editingDoc.content);
                         setRagResults(getAllScans());
                         setEditingDoc(null);
-                        showToast("✓ Successfully updated document!");
                       } catch (err: any) {
-                        showToast(err?.message || "Failed to edit document.", "error");
+                        console.error("Failed to edit document:", err);
                       }
                     }}
                     className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-[11px] font-bold transition-all cursor-pointer"
@@ -4420,45 +4389,6 @@ export default function Workspace() {
             </div>
           )}
 
-
-          <AnimatePresence>
-            {toastNotification && (
-              <motion.div
-                initial={{ opacity: 0, y: 50, scale: 0.95 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: 20, scale: 0.95 }}
-                className="fixed bottom-6 right-6 z-50 flex items-center gap-3 px-4 py-3 rounded-xl shadow-xl border backdrop-blur-md transition-all font-sans"
-                style={{
-                  backgroundColor: toastNotification.type === 'error' ? 'rgba(239, 68, 68, 0.95)' : toastNotification.type === 'info' ? 'rgba(59, 130, 246, 0.95)' : 'rgba(16, 185, 129, 0.95)',
-                  borderColor: toastNotification.type === 'error' ? '#f87171' : toastNotification.type === 'info' ? '#60a5fa' : '#34d399',
-                  color: '#ffffff'
-                }}
-              >
-                <span className="text-[13px] font-semibold tracking-wide flex-1 mr-2">
-                  {toastNotification.message}
-                </span>
-
-                {toastNotification.action && (
-                  <button
-                    onClick={() => {
-                      toastNotification.action?.onClick();
-                      setToastNotification(null);
-                    }}
-                    className="text-[12px] font-bold px-3 py-1.5 rounded-lg bg-black/10 hover:bg-black/20 dark:bg-white/10 dark:hover:bg-white/20 transition-all uppercase tracking-wider"
-                  >
-                    {toastNotification.action.label}
-                  </button>
-                )}
-
-                <button
-                  onClick={() => setToastNotification(null)}
-                  className="p-1 rounded hover:bg-white/20 transition-colors text-white cursor-pointer ml-1"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </motion.div>
-            )}
-          </AnimatePresence>
 
         </div>
       </div>
