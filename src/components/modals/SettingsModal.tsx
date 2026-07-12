@@ -434,8 +434,8 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                             { key: "classic", label: "Classic" },
                             {
                               key: "das_keyboard_4",
-                              label: "Das Keyboard (Soon)",
-                              disabled: true,
+                              label: "Das Keyboard",
+                              disabled: false,
                             },
                           ].map(({ key, label, disabled }) => {
                             const isActive = keyboardModel === key;

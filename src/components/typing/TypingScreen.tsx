@@ -8,6 +8,7 @@ import React, {
 } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { ClassicKeyboard, cn } from "../keyboard/ClassicKeyboard";
+import { DasKeyboard } from "../keyboard/das/DasKeyboard";
 import { useSettings } from "../../contexts/SettingsContext";
 import { useSoundEngine } from "../../hooks/useSoundEngine";
 import { ArrowLeft, RotateCcw, ShieldAlert, X, ArrowRight } from "lucide-react";
@@ -104,14 +105,10 @@ const KeyboardSection = memo(function KeyboardSection({
   return (
     <div className="w-full max-w-4xl mx-auto pt-6 shrink-0">
       {keyboardModel === "das_keyboard_4" ? (
-        <div className="text-center p-6 bg-neutral-100 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-lg">
-          <p className="text-sm font-medium text-neutral-500 dark:text-neutral-400">
-            Das Keyboard is temporarily disabled for maintenance and optimization.
-          </p>
-          <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-1">
-            Please switch back to the Classic Keyboard in Settings.
-          </p>
-        </div>
+        <DasKeyboard
+          onKeyVirtualDown={onKeyVirtualDown}
+          onKeyVirtualUp={onKeyVirtualUp}
+        />
       ) : (
         <ClassicKeyboard
           themeName={themeName}

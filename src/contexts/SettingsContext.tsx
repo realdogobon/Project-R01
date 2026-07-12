@@ -434,7 +434,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
       setFontState(fontToUse);
       applySettingsToDom(themeToUse, fontToUse);
 
-      if (savedKeyboardModel && savedKeyboardModel !== "das_keyboard_4") {
+      if (savedKeyboardModel === "classic" || savedKeyboardModel === "das_keyboard_4") {
         setKeyboardModelState(savedKeyboardModel);
       } else {
         setKeyboardModelState("classic");
