@@ -134,11 +134,19 @@ const KeyboardSection = memo(function KeyboardSection({
           onKeyVirtualUp={onKeyVirtualUp}
         />
       ) : (
-        <ClassicKeyboard
-          themeName={themeName}
-          onKeyVirtualDown={onKeyVirtualDown}
-          onKeyVirtualUp={onKeyVirtualUp}
-        />
+        // Both keyboards share the same box top offset from this parent,
+        // but Das has an extra top strip (logo/media keys/knob) before its
+        // first key row, while Classic's first key row sits right at its
+        // box's top edge. That makes Classic's visible keys start lower
+        // relative to Das's visible keys despite equal box tops, so nudge
+        // Classic's box up slightly to line up the two boards' key rows.
+        <div className="-mt-5">
+          <ClassicKeyboard
+            themeName={themeName}
+            onKeyVirtualDown={onKeyVirtualDown}
+            onKeyVirtualUp={onKeyVirtualUp}
+          />
+        </div>
       )}
       </div>
     </div>
