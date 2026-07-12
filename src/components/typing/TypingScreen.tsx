@@ -103,7 +103,8 @@ const KeyboardSection = memo(function KeyboardSection({
   const { keyboardModel } = useSettings();
 
   return (
-    <div className="w-full max-w-4xl mx-auto pt-6 shrink-0">
+    <div className="w-full max-w-4xl mx-auto pt-6 shrink-0 overflow-x-auto">
+      <div className="min-w-fit mx-auto" style={{ width: "max-content" }}>
       {keyboardModel === "das_keyboard_4" ? (
         <DasKeyboard
           onKeyVirtualDown={onKeyVirtualDown}
@@ -116,6 +117,7 @@ const KeyboardSection = memo(function KeyboardSection({
           onKeyVirtualUp={onKeyVirtualUp}
         />
       )}
+      </div>
     </div>
   );
 });

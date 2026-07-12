@@ -27,7 +27,7 @@ export function DasKeyboard({ onKeyVirtualDown, onKeyVirtualUp }: DasKeyboardPro
   return (
     <div
       data-keyboard-root
-      className="flex justify-center select-none scale-[0.78] sm:scale-[0.82] md:scale-[0.86] lg:scale-[0.91] xl:scale-[0.95] origin-center transition-transform duration-300"
+      className="flex justify-center select-none scale-[1.14] sm:scale-[1.20] md:scale-[1.26] lg:scale-[1.33] xl:scale-[1.39] origin-center transition-transform duration-300"
     >
       <DasKeyboardApp onKeyVirtualDown={onKeyVirtualDown} onKeyVirtualUp={onKeyVirtualUp} />
     </div>
