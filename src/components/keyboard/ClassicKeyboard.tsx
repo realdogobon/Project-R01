@@ -567,7 +567,11 @@ export const ClassicKeyboard = React.memo(({
   return (
     <div
       data-keyboard-root
-      className="flex flex-col select-none scale-[0.72] sm:scale-[0.76] md:scale-[0.8] lg:scale-[0.84] xl:scale-[0.88] origin-center transition-transform duration-300"
+      // `zoom` (not `transform: scale`) on purpose: zoom actually resizes the
+      // element's layout box, so the parent wrapper's `width:max-content`
+      // sizing matches what's visually painted. See DasKeyboard.tsx for the
+      // matching Das-keyboard scale, computed off these same numbers.
+      className="flex flex-col select-none [zoom:0.72] sm:[zoom:0.76] md:[zoom:0.8] lg:[zoom:0.84] xl:[zoom:0.88]"
       style={{
         fontFamily: '"Inter", ui-sans-serif, system-ui, -apple-system, sans-serif',
         "--font-sans": '"Inter", ui-sans-serif, system-ui, -apple-system, sans-serif'

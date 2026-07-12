@@ -14,6 +14,34 @@
  * independent of which keyboard is on screen. `onKeyVirtualDown`/
  * `onKeyVirtualUp` are forwarded here so mouse clicks on this keyboard's
  * keys also trigger the same click sound as the Classic Keyboard.
+ *
+ * Sizing: a real Das Keyboard 4 (full size, with numpad) is about 22% wider
+ * than the Classic Keyboard's TKL layout (no numpad), at roughly the same
+ * height. Both keyboards' *unscaled* layout footprints were measured
+ * directly (getBoundingClientRect at zoom:1): Das's SVG chassis (CW/CH from
+ * engine.ts, plus this component's own top/bottom padding) is natively
+ * 1066px wide; Classic's widest row + padding/border is natively ~828.5px
+ * wide. Note: DasKeyboardApp.tsx has its own baked-in *internal*
+ * `transform: scale(0.72)` (line ~299) that only shrinks what's painted
+ * inside that 1066px box — `transform` never changes an element's layout
+ * size — so it does NOT change the 1066px figure above and must not be
+ * divided out here (an earlier version of this file incorrectly did that,
+ * which is what made Das render far too large).
+ *
+ * So at every breakpoint: dasZoom = classicZoom × 1.22 (real-world width
+ * ratio) × (828.5 / 1066) (Classic's native width ÷ Das's native width, to
+ * convert "same zoom" into "same real-world ratio"). That is a single
+ * derived multiplier (≈0.948), not five independent guesses, so Das stays
+ * proportionate to Classic if either one's numbers ever change. Height ends
+ * up somewhat taller than Classic's at the same zoom — expected, since a
+ * real Das Keyboard 4 has an extra top strip (logo/media keys/volume knob)
+ * a TKL board doesn't have.
+ *
+ * Uses `zoom`, not `transform: scale`, so the element's layout box matches
+ * what's actually painted — with `transform`, the parent's
+ * `width: max-content` wrapper (see TypingScreen.tsx) sizes itself off the
+ * un-scaled box while the visible keyboard paints at a different size,
+ * which is what caused the clipping/scrollbar bug.
  */
 import React from "react";
 import { DasKeyboardApp } from "./DasKeyboardApp";
@@ -27,7 +55,7 @@ export function DasKeyboard({ onKeyVirtualDown, onKeyVirtualUp }: DasKeyboardPro
   return (
     <div
       data-keyboard-root
-      className="flex justify-center select-none scale-[1.14] sm:scale-[1.20] md:scale-[1.26] lg:scale-[1.33] xl:scale-[1.39] origin-center transition-transform duration-300"
+      className="flex justify-center select-none [zoom:0.68] sm:[zoom:0.72] md:[zoom:0.76] lg:[zoom:0.80] xl:[zoom:0.83]"
     >
       <DasKeyboardApp onKeyVirtualDown={onKeyVirtualDown} onKeyVirtualUp={onKeyVirtualUp} />
     </div>
