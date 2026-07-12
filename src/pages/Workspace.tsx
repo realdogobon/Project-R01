@@ -3304,14 +3304,14 @@ export default function Workspace() {
     <ThemeProviderCast attribute="class" defaultTheme="system" enableSystem>
       <div className="flex flex-col h-screen w-full bg-[#f3f3f3] dark:bg-[#202020] font-sans overflow-hidden text-neutral-900 dark:text-neutral-100">
         {/* Title Bar (Mimicking native OS title bar with WinUI 3 style) */}
-        <div className="h-14 bg-white/70 dark:bg-black/50 backdrop-blur-2xl flex items-center justify-between px-4 border-b border-black/5 dark:border-white/5 select-none relative z-10 transition-colors">
+        <div className="h-14 bg-white/70 dark:bg-black/50 backdrop-blur-2xl flex items-center justify-between pl-2 pr-4 border-b border-black/5 dark:border-white/5 select-none relative z-10 transition-colors">
           <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2 pl-1 pr-2">
-              <div className="flex items-baseline gap-2 ml-8">
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2">
                 <img
                   src={logoImage}
                   alt="RoyScript logo"
-                  className="h-[22px] md:h-[26px] w-auto select-none"
+                  className="h-[30px] md:h-[36px] w-auto select-none"
                   draggable={false}
                 />
                 <span className="font-bold text-xl md:text-[26px] tracking-[-0.04em] text-neutral-900 dark:text-neutral-50 font-sans antialiased select-none leading-none">
