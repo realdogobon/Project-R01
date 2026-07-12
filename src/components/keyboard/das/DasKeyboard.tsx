@@ -28,10 +28,12 @@
  * divided out here (an earlier version of this file incorrectly did that,
  * which is what made Das render far too large).
  *
- * So at every breakpoint: dasZoom = classicZoom × 1.22 (real-world width
- * ratio) × (828.5 / 1066) (Classic's native width ÷ Das's native width, to
- * convert "same zoom" into "same real-world ratio"). That is a single
- * derived multiplier (≈0.948), not five independent guesses, so Das stays
+ * So at every breakpoint: dasZoom = classicZoom × targetRatio ×
+ * (828.5 / 1066) (Classic's native width ÷ Das's native width, to convert
+ * "same zoom" into "same target ratio"). targetRatio is 1.5 rather than the
+ * literal real-world 1.22 — at 1.22 Das rendered correctly proportioned but
+ * visibly too small/toy-like on screen, so it's deliberately sized up while
+ * keeping the same single-multiplier approach (≈1.166 today), so Das stays
  * proportionate to Classic if either one's numbers ever change. Height ends
  * up somewhat taller than Classic's at the same zoom — expected, since a
  * real Das Keyboard 4 has an extra top strip (logo/media keys/volume knob)
@@ -55,7 +57,7 @@ export function DasKeyboard({ onKeyVirtualDown, onKeyVirtualUp }: DasKeyboardPro
   return (
     <div
       data-keyboard-root
-      className="flex justify-center select-none [zoom:0.68] sm:[zoom:0.72] md:[zoom:0.76] lg:[zoom:0.80] xl:[zoom:0.83]"
+      className="flex justify-center select-none [zoom:0.84] sm:[zoom:0.89] md:[zoom:0.93] lg:[zoom:0.98] xl:[zoom:1.03]"
     >
       <DasKeyboardApp onKeyVirtualDown={onKeyVirtualDown} onKeyVirtualUp={onKeyVirtualUp} />
     </div>
