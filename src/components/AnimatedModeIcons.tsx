@@ -62,6 +62,15 @@ export function AnimatedPracticeIcon({
           strokeWidth="3.5"
           strokeLinecap="round"
           fill="none"
+          // Motion has no DOM fallback for reading a starting value for a
+          // raw SVG attribute like `d` (unlike opacity/transform, which it
+          // can read from computed style). Without an explicit `initial`
+          // that matches the raw `d` above, its very first animation frame
+          // resolves the "from" value to undefined, and the browser's SVG
+          // parser then rejects the resulting "d: undefined" with the
+          // "Expected moveto path command" console error. Stating it here
+          // removes the guess entirely — purely additive, no visual change.
+          initial={{ d: "M 50 25 C 50 15, 35 15, 45 8 C 55 1, 55 12, 50 15 C 45 18, 55 30, 50 25" }}
           animate={shouldAnimate ? {
             d: [
                "M 50 25 C 45 10, 35 10, 45 5 C 55 -5, 60 10, 50 12 C 40 14, 55 30, 50 25",
@@ -71,7 +80,13 @@ export function AnimatedPracticeIcon({
           } : {
             d: "M 50 25 C 45 10, 35 10, 45 5 C 55 -5, 60 10, 50 12 C 40 14, 55 30, 50 25"
           }}
-          transition={shouldAnimate ? { duration: 1.5, repeat: Infinity, ease: "easeInOut" } : { type: "spring", stiffness: 70, damping: 18 }}
+          // Motion can only morph an SVG `d` path with a duration-based
+          // tween, never a spring — springs interpolate numbers, and
+          // feeding one a path string makes it briefly compute "undefined"
+          // for `d` too. Every other prop here (x/y/rotate on the hands
+          // below) is a plain number, so those keep their spring settle;
+          // only this path tween changed.
+          transition={shouldAnimate ? { duration: 1.5, repeat: Infinity, ease: "easeInOut" } : { duration: 0.4, ease: "easeOut" }}
         />
 
         {/* Keyboard Base */}
