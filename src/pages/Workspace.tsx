@@ -3809,16 +3809,41 @@ export default function Workspace() {
                         </svg>
                         );
                       })()}
-                      {/* Close drain: unrelated to the accent glow, stays a simple top strip */}
-                      {closingTabId === tab.id && (
-                        <div className="absolute top-0 inset-x-0 h-[2px] overflow-hidden pointer-events-none">
-                          <div
-                            className="tab-close-drain"
-                            style={{ background: themeAccentColor }}
-                            onAnimationEnd={handleCloseAnimationEnd}
-                          />
-                        </div>
-                      )}
+                      {/* Close: same outline path and pixel-accurate geometry as the accent
+                          glow, played in reverse — the lit trail retreats back to the wall
+                          and vanishes, at the same duration the old flat close-drain used. */}
+                      {closingTabId === tab.id && (() => {
+                        const closePath = buildTabAccentPath(activeTabBox.width, activeTabBox.height, isFirstTab);
+                        return (
+                          <svg
+                            className="absolute inset-0 w-full h-full overflow-visible pointer-events-none"
+                            viewBox={`0 0 ${activeTabBox.width} ${activeTabBox.height}`}
+                          >
+                            <path
+                              d={closePath}
+                              fill="none"
+                              stroke={themeAccentColor}
+                              strokeWidth={2}
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              vectorEffect="non-scaling-stroke"
+                              pathLength={1}
+                              className="tab-neon-close-trail-path"
+                              onAnimationEnd={handleCloseAnimationEnd}
+                            />
+                            <path
+                              d={closePath}
+                              fill="none"
+                              strokeWidth={2.5}
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              vectorEffect="non-scaling-stroke"
+                              pathLength={1}
+                              className="tab-neon-close-pulse-path"
+                            />
+                          </svg>
+                        );
+                      })()}
 
                       {/* Clean FileIcon */}
                       <div className="flex items-center gap-1.5 min-w-0 flex-1">

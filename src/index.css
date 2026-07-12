@@ -472,11 +472,23 @@
   100% { stroke-dashoffset: 0;  opacity: 0; }  /* stays hidden through steady-on */
 }
 
-/* Neon tube close — bar drains right-to-left (scaleX from right anchor) */
-@keyframes neonCloseDrain {
-  0%   { transform: scaleX(1); opacity: 1; }
-  70%  { opacity: 1; }
-  100% { transform: scaleX(0); opacity: 0; }
+/* Neon tube close — the same outline path as the accent glow, played in reverse: the lit
+   trail retreats from the far end (bottom-right, where it meets the toolbar) back toward
+   the start (the left wall), vanishing as it goes. Same geometry, same visual language,
+   just time-reversed, and kept at the close animation's original duration. */
+@keyframes neonCloseTrailPath {
+  0%   { stroke-dasharray: 1 0; opacity: 1; }  /* fully lit, tube steady-on */
+  70%  { stroke-dasharray: 0.08 0.92; opacity: 1; }  /* nearly retreated back to the wall */
+  100% { stroke-dasharray: 0 1; opacity: 0; }  /* fully retreated and gone */
+}
+
+/* Bright shimmer riding the retreating edge: starts at the far end, travels back to the
+   start (the wall), fading out as it arrives — the mirror image of the pulse that leads
+   the lit edge when the tube first turns on. */
+@keyframes neonClosePulsePath {
+  0%   { stroke-dashoffset: -1; opacity: 1; }
+  70%  { stroke-dashoffset: -0.08; opacity: 1; }
+  100% { stroke-dashoffset: 0;  opacity: 0; }
 }
 
 /* Neon tube — one full cycle: forward sweep, turnaround breath, return sweep, final lock-in.
@@ -502,14 +514,22 @@
   pointer-events: none;
 }
 
-.tab-close-drain {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  transform-origin: right center;
-  animation: neonCloseDrain 0.38s ease-in forwards;
+.tab-neon-close-trail-path {
+  fill: none;
+  stroke-dasharray: 1 0;
+  opacity: 1;
+  animation: neonCloseTrailPath 0.38s ease-in forwards;
+  pointer-events: none;
+}
+
+.tab-neon-close-pulse-path {
+  fill: none;
+  stroke: #ffffff;
+  stroke-dasharray: 0.05 0.95;
+  stroke-linecap: round;
+  opacity: 1;
+  filter: drop-shadow(0 0 2px rgba(255, 255, 255, 0.9));
+  animation: neonClosePulsePath 0.38s ease-in forwards;
   pointer-events: none;
 }
 
