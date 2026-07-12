@@ -3616,7 +3616,7 @@ export default function Workspace() {
           {/* Main Area */}
           <div className="flex-1 flex flex-col bg-white dark:bg-[#1a1a1a] relative overflow-hidden transition-colors shadow-[-10px_0_15px_-10px_rgba(0,0,0,0.05)] z-0">
             {mode === "Write" && (
-              <div className="h-10 bg-neutral-100 dark:bg-[#161616] border-b border-neutral-200 dark:border-white/[0.08] flex items-center justify-between pr-3 shrink-0 select-none">
+              <div className="h-10 bg-neutral-100 dark:bg-[#161616] flex items-center justify-between pr-3 shrink-0 select-none">
                 <div className="flex items-center gap-1 overflow-x-auto no-scrollbar scroll-smooth flex-1 h-full pt-1.5">
                 {tabs.map((tab) => {
                   const isActive = tab.id === activeTabId;
@@ -3654,22 +3654,18 @@ export default function Workspace() {
                         examLockedUI ? "opacity-40 grayscale-[40%] cursor-not-allowed pointer-events-none" : "cursor-pointer"
                       } ${
                         isActive
-                          ? "bg-white dark:bg-[#1a1a1a] border-neutral-200 dark:border-white/10 text-neutral-800 dark:text-neutral-100 font-semibold shadow-[0_-1px_3px_rgba(0,0,0,0.02)]"
+                          ? "bg-white dark:bg-[#1a1a1a] border-neutral-200 dark:border-white/10 text-neutral-800 dark:text-neutral-100 font-semibold"
                           : "bg-neutral-50/50 dark:bg-[#1c1c1c] border-transparent text-neutral-400 dark:text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300 hover:bg-neutral-200/50 dark:hover:bg-white/[0.02]"
                       }`}
+                      style={isActive ? { boxShadow: `inset 0 2px 0 ${themeAccentColor}` } : {}}
                     >
-                      {/* Accent top-border overlay — clean continuous curve, no border-width mismatch */}
-                      {isActive && (
-                        <div
-                          className="absolute top-0 inset-x-0 h-[2px] rounded-t-lg overflow-hidden pointer-events-none"
-                          style={{ background: themeAccentColor }}
-                        >
-                          {glowingTabId === tab.id && (
-                            <div
-                              className="tab-sweep-light"
-                              onAnimationEnd={() => setGlowingTabId(null)}
-                            />
-                          )}
+                      {/* Sweep-light overlay — sits over the inset box-shadow accent bar */}
+                      {isActive && glowingTabId === tab.id && (
+                        <div className="absolute top-0 inset-x-0 h-[2px] overflow-hidden pointer-events-none">
+                          <div
+                            className="tab-sweep-light"
+                            onAnimationEnd={() => setGlowingTabId(null)}
+                          />
                         </div>
                       )}
 
