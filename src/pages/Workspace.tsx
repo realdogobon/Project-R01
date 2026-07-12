@@ -134,11 +134,11 @@ function ThemeToggle({ disabled }: { disabled?: boolean }) {
   );
 }
 
-// Traces a tab's visible outer border (up the left edge, through the top-left curve,
-// across the top, through the top-right curve, down the right edge) in a normalized
-// 0-100 coordinate space. Used to run the neon accent-glow animation around the whole
-// outline instead of just the flat top strip. No bottom segment — tabs have no bottom border.
-const TAB_ACCENT_OUTLINE_PATH = "M 0 100 L 0 16 A 16 16 0 0 1 16 0 L 84 0 A 16 16 0 0 1 100 16 L 100 100";
+// Traces a tab's visible outer border in a normalized 0-100 coordinate space: starts
+// flush at the left wall (no corner/curve there, since the tab sits directly against
+// the app's left edge like a native OS tab), runs across the top, through the top-right
+// curve, then down the right edge to where the tab's border meets the toolbar below.
+const TAB_ACCENT_OUTLINE_PATH = "M 0 0 L 84 0 A 16 16 0 0 1 100 16 L 100 100";
 
 const ScannerLiveIcon = ({ className = "w-4 h-4" }: { className?: string }) => {
   let themeAccentColor = "#3b82f6"; // default blue
