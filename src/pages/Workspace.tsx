@@ -419,6 +419,32 @@ export default function Workspace() {
     window.addEventListener("keydown", handleGlobalKeyDown, true);
     return () => window.removeEventListener("keydown", handleGlobalKeyDown, true);
   }, [examStatus, mode]);
+
+  // --- Accent bar idle tracking: dims the tab accent bar after inactivity, ---
+  // --- restores it quietly on the next input. Does not touch tab-glow logic. ---
+  useEffect(() => {
+    const ACCENT_IDLE_THRESHOLD_MS = 30 * 1000; // 30s
+    const markActive = () => {
+      lastActivityAtRef.current = Date.now();
+      setIsAccentBarIdle(false);
+    };
+    window.addEventListener("mousemove", markActive);
+    window.addEventListener("mousedown", markActive);
+    window.addEventListener("keydown", markActive);
+    const intervalId = window.setInterval(() => {
+      const gap = Date.now() - lastActivityAtRef.current;
+      if (gap >= ACCENT_IDLE_THRESHOLD_MS) {
+        setIsAccentBarIdle(true);
+      }
+    }, 2000);
+    return () => {
+      window.removeEventListener("mousemove", markActive);
+      window.removeEventListener("mousedown", markActive);
+      window.removeEventListener("keydown", markActive);
+      window.clearInterval(intervalId);
+    };
+  }, []);
+
   const [examRemainingSeconds, setExamRemainingSeconds] = useState(0);
   const [examTotalSeconds, setExamTotalSeconds] = useState(0);
   const [currentFileHandle, setCurrentFileHandle] = useState<any>(null);
@@ -434,6 +460,8 @@ export default function Workspace() {
   const [activeTabId, setActiveTabId] = useState<string>("1");
   const [glowingTabId, setGlowingTabId] = useState<string | null>(null);
   const [closingTabId, setClosingTabId] = useState<string | null>(null);
+  const [isAccentBarIdle, setIsAccentBarIdle] = useState(false);
+  const lastActivityAtRef = useRef<number>(Date.now());
   const pendingCloseTabIdRef = useRef<string | null>(null);
   const activeTab = tabs.find(t => t.id === activeTabId);
   const isExamSealed = !!activeTab?.examSealed;
@@ -3685,21 +3713,24 @@ export default function Workspace() {
                           : "bg-neutral-50/50 dark:bg-[#1c1c1c] border-transparent text-neutral-400 dark:text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300 hover:bg-neutral-200/50 dark:hover:bg-white/[0.02]"
                       }`}
                     >
-                      {/* Accent bar + neon tube open + close drain */}
+                      {/* Accent bar: neon tube 4-phase cycle, idle dim, close drain */}
                       {(isActive || closingTabId === tab.id) && (
                         <div
                           className="absolute top-0 inset-x-0 h-[2px] overflow-hidden pointer-events-none"
                           style={{
                             background: (closingTabId === tab.id || glowingTabId === tab.id)
                               ? 'transparent'
-                              : isActive ? themeAccentColor : 'transparent',
-                            transition: 'background 0.38s ease',
+                              // "off" state: a fresh tab that has never played its first-keystroke
+                              // cycle stays dark until then, matching the neon-tube spec.
+                              : isActive && tab.hasGlowedOnce ? themeAccentColor : 'transparent',
+                            opacity: (isActive && glowingTabId !== tab.id && closingTabId !== tab.id && isAccentBarIdle) ? 0 : 1,
+                            transition: 'background 0.38s ease, opacity 0.6s ease',
                           }}
                         >
                           {isActive && glowingTabId === tab.id && (
                             <>
-                              <div className="tab-neon-lit" style={{ background: themeAccentColor }} />
-                              <div className="tab-neon-pulse" onAnimationEnd={() => setGlowingTabId(null)} />
+                              <div className="tab-neon-trail" style={{ background: themeAccentColor }} />
+                              <div className="tab-neon-pulse-v2" onAnimationEnd={() => setGlowingTabId(null)} />
                             </>
                           )}
                           {closingTabId === tab.id && (
