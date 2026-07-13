@@ -54,12 +54,22 @@
  */
 import React, { useMemo } from "react";
 import { DasKeyboardApp } from "./DasKeyboardApp";
-import { CW } from "./engine";
+import { CW, CH } from "./engine";
 
 // DasKeyboardApp's own hardcoded internal shrink (see file header above) —
 // read here only as a known constant; DasKeyboardApp.tsx itself is never touched.
 const DAS_INTERNAL_SCALE = 0.72;
 const DAS_PAINTED_NATIVE_W = CW * DAS_INTERNAL_SCALE;
+
+// DasKeyboardApp's outer div has paddingTop:32 and paddingBottom:48, and its
+// chassis div (height:CH) uses transform:scale(0.72) — which does NOT reduce
+// layout height. This leaves CH*(1-0.72) ≈ 108px of invisible phantom space
+// below the visible keyboard. Multiplied by zoom on large screens, that ghost
+// eats the text area above. We cap the wrapper to the true visual height so
+// the flex column only sees the space the keyboard actually occupies.
+const DAS_PAD_TOP = 32;
+const DAS_PAD_BOT = 48;
+const DAS_VISUAL_H = DAS_PAD_TOP + CH * DAS_INTERNAL_SCALE + DAS_PAD_BOT;
 
 // The biggest zoom Das is allowed to reach even when there's abundant room,
 // so it reads as "clearly the bigger, full-size board" without becoming
@@ -95,7 +105,7 @@ export function DasKeyboard({ onKeyVirtualDown, onKeyVirtualUp, availableWidth }
     <div
       data-keyboard-root
       className="flex justify-center select-none"
-      style={{ zoom }}
+      style={{ zoom, height: DAS_VISUAL_H, overflow: "hidden" }}
     >
       <DasKeyboardApp onKeyVirtualDown={onKeyVirtualDown} onKeyVirtualUp={onKeyVirtualUp} />
     </div>
