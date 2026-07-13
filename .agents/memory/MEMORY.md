@@ -4,3 +4,4 @@
 - [Crash-recovery architecture](crash-recovery-architecture.md) — Exam Mode is the doc editor+timer, not the typing engine; recovery overlay is presentational-only; fullscreen re-entry needs a user gesture.
 - [Font + theme system](font-theme-system.md) — font loading, theme color architecture, built-in theme fix, and corrupt font handling.
 - [Framer Motion SVG path morph](framer-motion-svg-path-morph.md) — a motion.path animating `d` needs an explicit `initial.d` or it briefly sets d=undefined on mount.
+- [Dual-purpose control repurposing](dual-purpose-control-repurposing.md) — pattern for making one physical control set mean two things (RGB vs. Ambient Focus) based on a mode flag, with continuous rather than fixed-ladder stepping.
