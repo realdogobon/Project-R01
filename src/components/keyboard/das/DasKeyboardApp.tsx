@@ -418,6 +418,21 @@ export function DasKeyboardApp({ onKeyVirtualDown, onKeyVirtualUp }: DasKeyboard
     ? `0 0 12px rgba(${rgbColor[0]},${rgbColor[1]},${rgbColor[2]},1),inset 0 1.2px 2px rgba(255,255,255,0.4)`
     : `0 0 12px ${SWITCH_INDICATOR[activeSwitch]?.shadow ?? "rgba(255,0,0,1)"},inset 0 1.2px 2px rgba(255,255,255,0.4)`;
 
+  // ── Media bar backlight — whether the whole media bar (Prev/Play/Next)
+  //    should read as "lit" right now, and in which color. While Ambient
+  //    Focus is on, the bar is browsing/controlling real audio, so it lights
+  //    up whenever Ambient Focus itself is on (independent of RGB); the rest
+  //    of the time it mirrors RGB's own on/off, same as Play/Pause always
+  //    did. Previously Prev/Next were hardcoded to #737373 and never lit at
+  //    all, and Play/Pause only ever reflected rgbEnabled — neither ever
+  //    reflected Ambient Focus, which is the "ambient on, media controls
+  //    don't backlight" bug.
+  const mediaLit = ambientOn ? ambientOn : rgbEnabled;
+  const mediaLitColor = ambientOn ? "rgba(125,195,255,0.95)" : "rgba(255,100,100,0.9)";
+  const mediaLitGlow = ambientOn
+    ? "drop-shadow(0 0 1px rgba(150,210,255,0.95)) drop-shadow(0 0 2px rgba(125,195,255,0.6))"
+    : "drop-shadow(0 0 1px rgba(255,60,60,0.95)) drop-shadow(0 0 2px rgba(255,40,40,0.6))";
+
   return (
     <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center",
                   userSelect:"none", width:"100%", overflow:"visible", paddingBottom:48, paddingTop:32,
@@ -534,12 +549,13 @@ export function DasKeyboardApp({ onKeyVirtualDown, onKeyVirtualUp }: DasKeyboard
                           onMouseUp={()=>setMediaPressedBtn(null)}
                           onMouseLeave={()=>setMediaPressedBtn(null)}
                           style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center",
-                                   color:"#737373", cursor:"pointer", border:"0", padding:0,
+                                   color: mediaLit ? mediaLitColor : "#737373", cursor:"pointer", border:"0", padding:0,
                                    background: mediaPressedBtn==="prev" ? "linear-gradient(to bottom,#18181a,#111113)" : "linear-gradient(to bottom,#222225,#18181a)",
                                    borderRight:"1px solid #0d0d0d",
                                    transform: mediaPressedBtn==="prev" ? "translateY(0.8px)" : "translateY(0)",
-                                   transition:"transform 0.05s ease,background 0.05s ease" }}>
-                    <svg width="10" height="7" viewBox="0 0 12 8" style={{ fill:"currentColor" }}>
+                                   transition:"color 0.2s,transform 0.05s ease,background 0.05s ease" }}>
+                    <svg width="10" height="7" viewBox="0 0 12 8" style={{ fill:"currentColor", transition:"filter 0.2s",
+                                   filter: mediaLit ? mediaLitGlow : "none" }}>
                       <rect x="1.5" y="1" width="1.2" height="6" rx="0.2" />
                       <path d="M6.5,1 L6.5,7 L3,4 Z" />
                       <path d="M10.5,1 L10.5,7 L7,4 Z" />
@@ -558,11 +574,11 @@ export function DasKeyboardApp({ onKeyVirtualDown, onKeyVirtualUp }: DasKeyboard
                              cursor:"pointer", padding:0, border:"0",
                              background: mediaPressedBtn==="play" ? "linear-gradient(to bottom,#18181a,#111113)" : "linear-gradient(to bottom,#222225,#18181a)",
                              borderRight:"1px solid #0d0d0d",
-                             color: rgbEnabled ? "rgba(255,100,100,0.9)" : "#737373",
+                             color: mediaLit ? mediaLitColor : "#737373",
                              transform: mediaPressedBtn==="play" ? "translateY(0.8px)" : "translateY(0)",
                              transition:"color 0.2s,transform 0.05s ease,background 0.05s ease" }}>
                     <svg width="10" height="7" viewBox="0 0 12 8" style={{ fill:"currentColor", transition:"color 0.2s, filter 0.2s",
-                                   filter: rgbEnabled ? "drop-shadow(0 0 1px rgba(255,60,60,0.95)) drop-shadow(0 0 2px rgba(255,40,40,0.6))" : "none" }}>
+                                   filter: mediaLit ? mediaLitGlow : "none" }}>
                       <path d="M1.5,1 L1.5,7 L5.5,4 Z" />
                       <rect x="7.5" y="1" width="1.2" height="6" rx="0.2" />
                       <rect x="9.5" y="1" width="1.2" height="6" rx="0.2" />
@@ -574,11 +590,12 @@ export function DasKeyboardApp({ onKeyVirtualDown, onKeyVirtualUp }: DasKeyboard
                           onMouseUp={()=>setMediaPressedBtn(null)}
                           onMouseLeave={()=>setMediaPressedBtn(null)}
                           style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center",
-                                   color:"#737373", cursor:"pointer", border:"0", padding:0,
+                                   color: mediaLit ? mediaLitColor : "#737373", cursor:"pointer", border:"0", padding:0,
                                    background: mediaPressedBtn==="next" ? "linear-gradient(to bottom,#18181a,#111113)" : "linear-gradient(to bottom,#222225,#18181a)",
                                    transform: mediaPressedBtn==="next" ? "translateY(0.8px)" : "translateY(0)",
-                                   transition:"transform 0.05s ease,background 0.05s ease" }}>
-                    <svg width="10" height="7" viewBox="0 0 12 8" style={{ fill:"currentColor" }}>
+                                   transition:"color 0.2s,transform 0.05s ease,background 0.05s ease" }}>
+                    <svg width="10" height="7" viewBox="0 0 12 8" style={{ fill:"currentColor", transition:"filter 0.2s",
+                                   filter: mediaLit ? mediaLitGlow : "none" }}>
                       <rect x="9.3" y="1" width="1.2" height="6" rx="0.2" />
                       <path d="M1.5,1 L1.5,7 L5,4 Z" />
                       <path d="M5.5,1 L5.5,7 L9,4 Z" />
