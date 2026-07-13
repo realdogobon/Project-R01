@@ -68,7 +68,10 @@ const DAS_PAINTED_NATIVE_W = CW * DAS_INTERNAL_SCALE;
 // eats the text area above. We cap the wrapper to the true visual height so
 // the flex column only sees the space the keyboard actually occupies.
 const DAS_PAD_TOP = 32;
-const DAS_PAD_BOT = 48;
+// DasKeyboardApp has 48px of empty bottom padding. We clip most of it so the
+// keyboard section height is close to Classic's, giving the text area above
+// the same number of visible lines whichever board is active.
+const DAS_PAD_BOT = 4;
 const DAS_VISUAL_H = DAS_PAD_TOP + CH * DAS_INTERNAL_SCALE + DAS_PAD_BOT;
 
 // The biggest zoom Das is allowed to reach even when there's abundant room,

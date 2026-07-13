@@ -156,7 +156,11 @@ const KeyboardSection = memo(function KeyboardSection({
       // flush against the viewport's bottom edge while Das (taller) ended
       // up floating noticeably higher — the fixed offset here keeps both
       // boards' bottom edge lined up, whichever one is active.
-      className={cn("w-full mx-auto pt-6 mb-4 sm:mb-6 shrink-0 overflow-x-auto", isDas ? "max-w-[1600px]" : "max-w-5xl")}
+      // Das has 32px of internal top padding in DasKeyboardApp (logo/media bar
+      // space) so its visual top edge already has breathing room — using pt-6
+      // here would add another 24px gap between the TAB+ENTER hint and the
+      // board. Classic uses pt-6 because it has no such internal top offset.
+      className={cn("w-full mx-auto mb-4 sm:mb-6 shrink-0 overflow-x-auto", isDas ? "pt-2 max-w-[1600px]" : "pt-6 max-w-5xl")}
     >
       <div className="flex justify-center min-w-fit" style={{ width: "max-content", minWidth: "100%" }}>
       {isDas ? (
