@@ -4,4 +4,6 @@
 - [Crash-recovery architecture](crash-recovery-architecture.md) — Exam Mode is the doc editor+timer, not the typing engine; recovery overlay is presentational-only; fullscreen re-entry needs a user gesture.
 - [Font + theme system](font-theme-system.md) — font loading, theme color architecture, built-in theme fix, and corrupt font handling.
 - [Framer Motion SVG path morph](framer-motion-svg-path-morph.md) — a motion.path animating `d` needs an explicit `initial.d` or it briefly sets d=undefined on mount.
-- [Dual-purpose control repurposing](dual-purpose-control-repurposing.md) — pattern for making one physical control set mean two things (RGB vs. Ambient Focus) based on a mode flag, with continuous rather than fixed-ladder stepping.
+- [Dual-purpose control repurposing](dual-purpose-control-repurposing.md) — an explicit focus flag (not "is the other subsystem on") lets two subsystems share one control cluster while both stay reachable at once.
+- [Click-count over long-press](click-count-vs-long-press.md) — sustained-hold gestures are unreliable in-browser; prefer a settle-window click counter for tiered click gestures.
+- [Module-scope settings snapshot bug](module-scope-settings-snapshot.md) — reading localStorage into a module-level constant reseeds stale state on every remount instead of on page load; lift persisted state into a context that outlives the component.

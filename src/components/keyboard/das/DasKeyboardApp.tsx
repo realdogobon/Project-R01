@@ -25,41 +25,34 @@ import { useSettings } from "../../../contexts/SettingsContext";
 import { AMBIENT_SOUND_IDS } from "../../../constants/ambientSounds";
 
 // ── Ambient dual-purpose mode ────────────────────────────────────────────
-// Every control below is documented and wired for RGB first (that's the
-// board's native, always-available behavior — untouched, single-click never
-// changes meaning). When Ambient Focus (the app's background-sound feature)
-// is switched on, the *double-click* layer of Sleep/Mute/Knob and the whole
-// media bar temporarily repoint at Ambient Focus instead of RGB, since at
-// that moment there's real audio for a "volume knob" and a "media bar" to
-// control. The moment Ambient Focus turns off again, everything below falls
-// straight back through to the RGB-only paths — see the `ambientOn` checks
-// threaded through each handler. Full behavior is documented for end users
-// in `keyboard-controls.md` at the project root.
+// RGB and Ambient Focus (the app's background-sound feature) are two
+// independent subsystems that share one physical control cluster (knob,
+// Sleep/Mute double-click, media bar). Sleep and Mute's *single*-click
+// layer always controls RGB directly, untouched. Everything else — the
+// knob, Sleep/Mute's double-click, and the whole media bar — acts on
+// whichever subsystem currently has "control focus" (see the focus
+// comment below), not on whichever one happens to be switched on, so one
+// system never has to be off for the other to be reachable. Full behavior
+// is documented for end users in `keyboard-controls.md` at the project root.
 const AMBIENT_VOLUME_STEP = 0.20; // fixed nudge size for Mute's ambient-volume double-click
 
-// ── Persisted settings (RGB + switch type survive page reloads) ────────────
-const SETTINGS_KEY = "das-keyboard-settings";
-
-type PersistedSettings = {
-  activeSwitch: "blue" | "brown" | "red";
-  rgbEnabled: boolean;
-  rgbEffect: RgbEffect;
-  rgbPaletteIndex: number;
-  rgbColor: [number, number, number];
-  rgbCustomHue: number;
-  rgbBrightness: number;
-};
-
-function loadSettings(): Partial<PersistedSettings> {
-  try {
-    const raw = localStorage.getItem(SETTINGS_KEY);
-    if (!raw) return {};
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === "object" ? parsed : {};
-  } catch {
-    return {};
-  }
-}
+// ── Control focus ───────────────────────────────────────────────────────
+// The shared control cluster (knob, Sleep/Mute double-click, media bar) now
+// acts on whichever subsystem is "focused" — RGB or Ambient Focus — rather
+// than inferring it from whether Ambient Focus happens to be on. Focus is
+// switched explicitly (double-click Play/Pause) and persists in
+// SettingsContext, independent of either subsystem's own on/off state. This
+// is what makes both systems usable side-by-side: Ambient can keep playing
+// while focus sits on RGB to tweak color/effect, then flip back.
+//
+// Settle-window click counting (used here for the knob's triple-click and
+// Play/Pause's double-click) replaces the old 3-second knob long-press for
+// switch-type cycling — a sustained hold with zero mouse movement over 3
+// full seconds turned out to be unreliable in a browser (focus loss, drag
+// threshold interference, timer clearing edge cases). Discrete click counts
+// use the same short debounce window already proven reliable for Sleep and
+// Mute's double-click handling elsewhere in this file.
+const CLICK_SETTLE_MS = 350;
 
 function Chassis() {
   return (
@@ -100,43 +93,48 @@ function Chassis() {
   );
 }
 
-const initialSettings = loadSettings();
-
 export interface DasKeyboardAppProps {
   onKeyVirtualDown?: (code: string) => void;
   onKeyVirtualUp?: (code: string) => void;
 }
 
 export function DasKeyboardApp({ onKeyVirtualDown, onKeyVirtualUp }: DasKeyboardAppProps) {
-  const [activeSwitch, setActiveSwitch] = useState<"blue" | "brown" | "red">(initialSettings.activeSwitch ?? "blue");
   const [locks, setLocks] = useState({ NumLock: false, ScrollLock: false, CapsLock: false });
-
-  const [rgbEnabled, setRgbEnabled] = useState(initialSettings.rgbEnabled ?? false);
-  const [rgbEffect, setRgbEffect] = useState<RgbEffect>(initialSettings.rgbEffect ?? "static");
-  const [rgbPaletteIndex, setRgbPaletteIndex] = useState(initialSettings.rgbPaletteIndex ?? 0);
-  const [rgbColor, setRgbColor] = useState<[number,number,number]>(initialSettings.rgbColor ?? RGB_PRESETS[0]);
-  const [rgbCustomHue, setRgbCustomHue] = useState(initialSettings.rgbCustomHue ?? 0);
-  const [rgbBrightness, setRgbBrightness] = useState(initialSettings.rgbBrightness ?? 1);
   const [mediaPressedBtn, setMediaPressedBtn] = useState<"prev"|"play"|"next"|null>(null);
   const [rotation, setRotation] = useState(() => 1 * 360);
-  const [isKnobHolding, setIsKnobHolding] = useState(false);
 
-  // ── Ambient Focus (background sound) — read from the app's global
-  // settings so the same on/off + volume state the Settings modal shows is
-  // what the keyboard reflects and edits. See the header comment above for
-  // the overall dual-purpose design.
+  // ── Persisted Das Keyboard state — switch type, every RGB setting, and
+  // Ambient Focus's own on/off + volume + control focus all live in
+  // SettingsContext (mounted once at the app root) rather than local
+  // component state, so none of it resets when this component unmounts —
+  // switching to Classic and back, an exam remount, a crash/reload. See
+  // the header comment above and keyboard-controls.md section 6.
   const {
+    dasSwitchType: activeSwitch, setDasSwitchType: setActiveSwitch,
+    dasRgbEnabled: rgbEnabled, setDasRgbEnabled: setRgbEnabled,
+    dasRgbEffect, setDasRgbEffect,
+    dasRgbPaletteIndex: rgbPaletteIndex, setDasRgbPaletteIndex: setRgbPaletteIndex,
+    dasRgbColor: rgbColor, setDasRgbColor: setRgbColor,
+    dasRgbCustomHue: rgbCustomHue, setDasRgbCustomHue: setRgbCustomHue,
+    dasRgbBrightness: rgbBrightness, setDasRgbBrightness: setRgbBrightness,
+    dasControlFocus: focus, setDasControlFocus: setFocus,
     zenNoiseEnabled: ambientOn, setZenNoiseEnabled: setAmbientOn,
     zenNoiseVolume: ambientVolume, setZenNoiseVolume: setAmbientVolume,
     ambientMix, setAmbientMix, savedAmbientMixes,
   } = useSettings();
+  const rgbEffect = dasRgbEffect as RgbEffect;
+  const setRgbEffect = (updater: RgbEffect | ((prev: RgbEffect) => RgbEffect)) => {
+    setDasRgbEffect(typeof updater === "function" ? (updater as (prev: RgbEffect) => RgbEffect)(rgbEffect) : updater);
+  };
   const [ambientFlash, setAmbientFlash] = useState({ knob: false, sleep: false, mute: false, media: false });
 
   const swRef = useRef(activeSwitch); swRef.current = activeSwitch;
   const rgbEnabledRef = useRef(rgbEnabled); rgbEnabledRef.current = rgbEnabled;
+  const rgbEffectRef = useRef(rgbEffect); rgbEffectRef.current = rgbEffect;
   const rgbBrightnessRef = useRef(rgbBrightness); rgbBrightnessRef.current = rgbBrightness;
   const rgbCustomHueRef = useRef(rgbCustomHue); rgbCustomHueRef.current = rgbCustomHue;
   const isCustomSlotRef = useRef(rgbPaletteIndex === RGB_PRESETS.length); isCustomSlotRef.current = rgbPaletteIndex === RGB_PRESETS.length;
+  const focusRef = useRef(focus); focusRef.current = focus;
   const ambientOnRef = useRef(ambientOn); ambientOnRef.current = ambientOn;
   const ambientVolumeRef = useRef(ambientVolume); ambientVolumeRef.current = ambientVolume;
   const savedAmbientMixesRef = useRef(savedAmbientMixes); savedAmbientMixesRef.current = savedAmbientMixes;
@@ -145,9 +143,11 @@ export function DasKeyboardApp({ onKeyVirtualDown, onKeyVirtualUp }: DasKeyboard
   const dragStartVolume = useRef(0);
   const knobMoveHandlerRef = useRef<((e: MouseEvent) => void) | null>(null);
   const knobUpHandlerRef = useRef<(() => void) | null>(null);
-  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const longPressFiredRef = useRef(false);
   const isDraggingRef = useRef(false);
+  // Settle-window click counter: resolves to a double-click (toggle) or a
+  // triple-click (cycle switch type) once no further click arrives within
+  // CLICK_SETTLE_MS — see the header comment on CLICK_SETTLE_MS for why
+  // this replaced the old 3-second hold-to-cycle-switch-type gesture.
   const knobClickCountRef = useRef(0);
   const knobClickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const knobModeRef = useRef<"brightness" | "hue">("brightness");
@@ -155,6 +155,11 @@ export function DasKeyboardApp({ onKeyVirtualDown, onKeyVirtualUp }: DasKeyboard
   const sleepClickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const muteClickCountRef = useRef(0);
   const muteClickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Same settle-window pattern for the media bar's Play/Pause button:
+  // single click toggles the focused subsystem on/off, double-click swaps
+  // which subsystem (RGB vs Ambient) the shared controls are focused on.
+  const playClickCountRef = useRef(0);
+  const playClickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Remembers the volume you were at before a knob-double-click mute, so the
   // matching double-click un-mute restores it instead of guessing a value.
   const ambientPreMuteVolumeRef = useRef<number | null>(null);
@@ -175,10 +180,10 @@ export function DasKeyboardApp({ onKeyVirtualDown, onKeyVirtualUp }: DasKeyboard
   }, []);
 
   useEffect(() => () => {
-    if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
     if (knobClickTimerRef.current) clearTimeout(knobClickTimerRef.current);
     if (sleepClickTimerRef.current) clearTimeout(sleepClickTimerRef.current);
     if (muteClickTimerRef.current) clearTimeout(muteClickTimerRef.current);
+    if (playClickTimerRef.current) clearTimeout(playClickTimerRef.current);
     (Object.values(ambientFlashTimers.current) as Array<ReturnType<typeof setTimeout> | undefined>).forEach(t => t && clearTimeout(t));
     // Guard against unmounting mid-drag: the knob's mousemove/mouseup
     // listeners live on `document` (added imperatively in handleKnobMouseDown,
@@ -188,13 +193,13 @@ export function DasKeyboardApp({ onKeyVirtualDown, onKeyVirtualUp }: DasKeyboard
   }, []);
 
   // Keeps the knob's visual rotation matched to whichever value it's
-  // currently dialing — ambient volume while Ambient Focus is on, RGB
+  // currently dialing — ambient volume while focus is on Ambient, RGB
   // brightness otherwise — so it never shows a stale angle left over from
-  // the other mode when you switch between them.
+  // the other mode when you switch focus.
   useEffect(() => {
-    setRotation((ambientOn ? ambientVolume : rgbBrightnessRef.current) * 360);
+    setRotation((focus === "ambient" ? ambientVolume : rgbBrightnessRef.current) * 360);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ambientOn]);
+  }, [focus]);
 
   useEffect(() => {
     const clear = () => setMediaPressedBtn(null);
@@ -203,38 +208,15 @@ export function DasKeyboardApp({ onKeyVirtualDown, onKeyVirtualUp }: DasKeyboard
     return () => { window.removeEventListener("mouseup", clear); window.removeEventListener("blur", clear); };
   }, []);
 
-  // Persist RGB settings + switch type so they survive a page reload.
-  useEffect(() => {
-    const settings: PersistedSettings = {
-      activeSwitch, rgbEnabled, rgbEffect, rgbPaletteIndex, rgbColor, rgbCustomHue, rgbBrightness,
-    };
-    try {
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
-    } catch {
-      // localStorage unavailable (private mode, quota, etc.) — settings just won't persist.
-    }
-  }, [activeSwitch, rgbEnabled, rgbEffect, rgbPaletteIndex, rgbColor, rgbCustomHue, rgbBrightness]);
-
-  // ── Knob handlers — drag = RGB brightness (or hue on the custom RGB slot),
-  //    scroll = brightness step, long-press (3s) = cycle switch type,
-  //    double-click = toggle RGB on/off. While Ambient Focus is on, drag/
-  //    scroll instead control ambient volume and double-click mutes/unmutes
-  //    it — long-press still always cycles switch type either way. ────────
+  // ── Knob handlers — drag = RGB brightness (or hue on the custom RGB
+  //    slot) / Ambient volume depending on focus, scroll = the same in
+  //    small steps, double-click = toggle the focused subsystem on/off,
+  //    triple-click = cycle switch type (unconditional, either focus). ──
   const handleKnobMouseDown = useCallback((e: React.MouseEvent) => {
     dragStartBrightness.current = rgbBrightnessRef.current;
     dragStartVolume.current = ambientVolumeRef.current;
     isDraggingRef.current = false;
-    longPressFiredRef.current = false;
     knobModeRef.current = (isCustomSlotRef.current && rgbEnabledRef.current) ? "hue" : "brightness";
-    setIsKnobHolding(true);
-
-    longPressTimerRef.current = setTimeout(() => {
-      longPressFiredRef.current = true;
-      setIsKnobHolding(false);
-      const order: Array<"blue"|"brown"|"red"> = ["blue","brown","red"];
-      const next = order[(order.indexOf(swRef.current)+1) % order.length];
-      setActiveSwitch(next);
-    }, 3000);
 
     const startHue = rgbCustomHueRef.current;
     const startY = e.clientY;
@@ -243,11 +225,9 @@ export function DasKeyboardApp({ onKeyVirtualDown, onKeyVirtualUp }: DasKeyboard
       const deltaY = mv.clientY - startY;
       if (Math.abs(deltaY) > 4 && !isDraggingRef.current) {
         isDraggingRef.current = true;
-        if (longPressTimerRef.current) { clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null; }
-        setIsKnobHolding(false);
       }
       if (isDraggingRef.current) {
-        if (ambientOnRef.current) {
+        if (focusRef.current === "ambient") {
           const nv = Math.min(1, Math.max(0, dragStartVolume.current + (-deltaY/150)));
           setRotation(nv*360);
           setAmbientVolume(nv);
@@ -268,42 +248,49 @@ export function DasKeyboardApp({ onKeyVirtualDown, onKeyVirtualUp }: DasKeyboard
       document.removeEventListener("mouseup", up);
       knobMoveHandlerRef.current = null;
       knobUpHandlerRef.current = null;
-      if (longPressTimerRef.current) { clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null; }
-      setIsKnobHolding(false);
-      if (!isDraggingRef.current && !longPressFiredRef.current) {
+      if (!isDraggingRef.current) {
         knobClickCountRef.current++;
-        if (knobClickCountRef.current >= 2) {
+        if (knobClickTimerRef.current) clearTimeout(knobClickTimerRef.current);
+        // Wait out the settle window before acting, so a 3rd click landing
+        // just after the 2nd can still upgrade this into a triple-click
+        // instead of the double-click action having already fired.
+        knobClickTimerRef.current = setTimeout(() => {
+          const count = knobClickCountRef.current;
           knobClickCountRef.current = 0;
-          if (knobClickTimerRef.current) { clearTimeout(knobClickTimerRef.current); knobClickTimerRef.current = null; }
-          if (ambientOnRef.current) {
-            if (ambientVolumeRef.current > 0.001) {
-              ambientPreMuteVolumeRef.current = ambientVolumeRef.current;
-              setRotation(0);
-              setAmbientVolume(0);
-            } else {
-              const restore = ambientPreMuteVolumeRef.current ?? 0.5;
-              ambientPreMuteVolumeRef.current = null;
-              setRotation(restore*360);
-              setAmbientVolume(restore);
-            }
+          if (count >= 3) {
+            const order: Array<"blue"|"brown"|"red"> = ["blue","brown","red"];
+            const next = order[(order.indexOf(swRef.current)+1) % order.length];
+            setActiveSwitch(next);
             flashAmbient("knob");
-          } else {
-            setRgbEnabled(prev => !prev);
+          } else if (count === 2) {
+            if (focusRef.current === "ambient") {
+              if (ambientVolumeRef.current > 0.001) {
+                ambientPreMuteVolumeRef.current = ambientVolumeRef.current;
+                setRotation(0);
+                setAmbientVolume(0);
+              } else {
+                const restore = ambientPreMuteVolumeRef.current ?? 0.5;
+                ambientPreMuteVolumeRef.current = null;
+                setRotation(restore*360);
+                setAmbientVolume(restore);
+              }
+              flashAmbient("knob");
+            } else {
+              setRgbEnabled(!rgbEnabledRef.current);
+            }
           }
-        } else {
-          knobClickTimerRef.current = setTimeout(() => { knobClickCountRef.current = 0; }, 380);
-        }
+        }, CLICK_SETTLE_MS);
       }
     };
     knobMoveHandlerRef.current = move;
     knobUpHandlerRef.current = up;
     document.addEventListener("mousemove", move);
     document.addEventListener("mouseup", up);
-  }, [flashAmbient, setAmbientVolume]);
+  }, [flashAmbient, setActiveSwitch, setAmbientVolume, setRgbEnabled]);
 
   const handleKnobWheel = useCallback((e: React.WheelEvent) => {
     e.stopPropagation();
-    if (ambientOnRef.current) {
+    if (focusRef.current === "ambient") {
       const nv = Math.min(1, Math.max(0, ambientVolumeRef.current + (e.deltaY>0?-0.02:0.02)));
       setRotation(nv*360);
       setAmbientVolume(nv);
@@ -312,17 +299,19 @@ export function DasKeyboardApp({ onKeyVirtualDown, onKeyVirtualUp }: DasKeyboard
     const nv = Math.min(1, Math.max(0, rgbBrightnessRef.current + (e.deltaY>0?-0.02:0.02)));
     setRotation(nv*360);
     setRgbBrightness(nv);
-  }, [setAmbientVolume]);
+  }, [setAmbientVolume, setRgbBrightness]);
 
-  // ── Sleep: click = toggle RGB on/off (always). Double-click cycles RGB
-  //    effect normally, but turns Ambient Focus off entirely while it's on ─
+  // ── Sleep: click = toggle RGB on/off (always, regardless of focus).
+  //    Double-click cycles RGB effect when focus is on RGB, or toggles
+  //    Ambient Focus on/off (a real two-way toggle, not one-way-off) when
+  //    focus is on Ambient ──────────────────────────────────────────────
   const handleSleepClick = useCallback(() => {
     sleepClickCountRef.current++;
     if (sleepClickTimerRef.current) clearTimeout(sleepClickTimerRef.current);
     if (sleepClickCountRef.current >= 2) {
       sleepClickCountRef.current = 0;
-      if (ambientOnRef.current) {
-        setAmbientOn(false);
+      if (focusRef.current === "ambient") {
+        setAmbientOn(!ambientOnRef.current);
         flashAmbient("sleep");
       } else if (rgbEnabledRef.current) {
         setRgbEffect(prev => RGB_EFFECTS[(RGB_EFFECTS.indexOf(prev)+1) % RGB_EFFECTS.length]);
@@ -330,23 +319,24 @@ export function DasKeyboardApp({ onKeyVirtualDown, onKeyVirtualUp }: DasKeyboard
     } else {
       sleepClickTimerRef.current = setTimeout(() => {
         sleepClickCountRef.current = 0;
-        setRgbEnabled(v => !v);
+        setRgbEnabled(!rgbEnabledRef.current);
       }, 300);
     }
-  }, [flashAmbient, setAmbientOn]);
+  }, [flashAmbient, setAmbientOn, setRgbEnabled]);
 
   // ── Mute: click = cycle RGB brightness in steps (always). Double-click
-  //    cycles RGB palette normally, but nudges ambient volume by a fixed
-  //    amount from wherever it currently sits while Ambient Focus is on —
-  //    deliberately not a fixed 25/50/75/100 ladder, so dragging the knob to
-  //    an arbitrary level (22%, 11%, whatever) and then double-clicking Mute
-  //    steps from that exact value instead of snapping to a canned one ────
+  //    cycles RGB palette when focus is on RGB, or nudges ambient volume by
+  //    a fixed amount from wherever it currently sits when focus is on
+  //    Ambient — deliberately not a fixed 25/50/75/100 ladder, so dragging
+  //    the knob to an arbitrary level (22%, 11%, whatever) and then
+  //    double-clicking Mute steps from that exact value instead of
+  //    snapping to a canned one ─────────────────────────────────────────
   const handleMuteClick = useCallback(() => {
     muteClickCountRef.current++;
     if (muteClickTimerRef.current) clearTimeout(muteClickTimerRef.current);
     if (muteClickCountRef.current >= 2) {
       muteClickCountRef.current = 0;
-      if (ambientOnRef.current) {
+      if (focusRef.current === "ambient") {
         let next = ambientVolumeRef.current + AMBIENT_VOLUME_STEP;
         if (next > 1 + 1e-6) next -= 1;
         next = Math.max(0, Math.min(1, next));
@@ -354,44 +344,40 @@ export function DasKeyboardApp({ onKeyVirtualDown, onKeyVirtualUp }: DasKeyboard
         setAmbientVolume(next);
         flashAmbient("mute");
       } else if (rgbEnabledRef.current) {
-        setRgbPaletteIndex(prev => {
-          const next = (prev+1) % (RGB_PRESETS.length + 1);
-          if (next < RGB_PRESETS.length) setRgbColor(RGB_PRESETS[next]);
-          return next;
-        });
+        const next = (rgbPaletteIndex+1) % (RGB_PRESETS.length + 1);
+        if (next < RGB_PRESETS.length) setRgbColor(RGB_PRESETS[next]);
+        setRgbPaletteIndex(next);
       }
     } else {
       muteClickTimerRef.current = setTimeout(() => {
         muteClickCountRef.current = 0;
-        setRgbBrightness(prev => {
-          const steps = [0.25, 0.5, 0.75, 1];
-          const idx = steps.findIndex(s => Math.abs(s - prev) < 0.01);
-          const next = steps[(idx === -1 ? 3 : idx + 1) % steps.length];
-          setRotation(next*360);
-          return next;
-        });
+        const steps = [0.25, 0.5, 0.75, 1];
+        const idx = steps.findIndex(s => Math.abs(s - rgbBrightnessRef.current) < 0.01);
+        const next = steps[(idx === -1 ? 3 : idx + 1) % steps.length];
+        setRotation(next*360);
+        setRgbBrightness(next);
       }, 300);
     }
-  }, [flashAmbient, setAmbientVolume]);
+  }, [flashAmbient, setAmbientVolume, setRgbBrightness, setRgbColor, setRgbPaletteIndex, rgbPaletteIndex]);
 
-  // ── Media bar — a direct RGB effect browser: prev/next step through
-  //    RGB_EFFECTS, play/pause toggles RGB on/off ─────────────────────────
+  // ── RGB media browser — prev/next step through RGB_EFFECTS, turning RGB
+  //    on automatically if it was off (pressing what looks like a track
+  //    button is expected to produce a visible result immediately) ───────
   const stepRgbEffect = useCallback((dir: "prev"|"next") => {
-    setRgbEffect(prev => {
-      const idx = RGB_EFFECTS.indexOf(prev);
-      const n = dir === "next" ? (idx+1) % RGB_EFFECTS.length : (idx-1+RGB_EFFECTS.length) % RGB_EFFECTS.length;
-      return RGB_EFFECTS[n];
-    });
+    const idx = RGB_EFFECTS.indexOf(rgbEffectRef.current);
+    const n = dir === "next" ? (idx+1) % RGB_EFFECTS.length : (idx-1+RGB_EFFECTS.length) % RGB_EFFECTS.length;
+    setRgbEffect(RGB_EFFECTS[n]);
     if (!rgbEnabledRef.current) setRgbEnabled(true);
-  }, []);
+  }, [setRgbEnabled]);
 
-  // ── Ambient media bar — prev/next browse [saved presets, newest first]
-  //    then [individual ambient tracks] as one continuous list, wrapping
-  //    back to the start; each step replaces the active mix outright (like
-  //    switching tracks, not layering more sound on top). Play/Pause turns
-  //    Ambient Focus off (there's no separate "paused but still armed" state
-  //    to resume into — turning it back on happens from Settings, or the
-  //    board falls back to pure RGB control the instant it's off). ────────
+  // ── Ambient media browser — prev/next browse [saved presets, newest
+  //    first] then [individual ambient tracks] as one continuous list,
+  //    wrapping back to the start; each step replaces the active mix
+  //    outright (like switching tracks, not layering more sound on top),
+  //    and — mirroring the RGB browser above — turns Ambient Focus on
+  //    automatically if it was off, since pressing a track button should
+  //    produce audible sound immediately rather than silently queuing one
+  //    up behind a separate on/off toggle. ────────────────────────────────
   const stepAmbient = useCallback((dir: "prev"|"next") => {
     const presetNames = Object.keys(savedAmbientMixesRef.current || {}).slice().reverse();
     const list: string[] = presetNames.length > 0
@@ -408,8 +394,9 @@ export function DasKeyboardApp({ onKeyVirtualDown, onKeyVirtualUp }: DasKeyboard
     } else {
       setAmbientMix({ [key]: 0.5 });
     }
+    if (!ambientOnRef.current) setAmbientOn(true);
     flashAmbient("media");
-  }, [flashAmbient, setAmbientMix]);
+  }, [flashAmbient, setAmbientMix, setAmbientOn]);
 
   const indicatorColor = rgbEnabled
     ? `rgb(${rgbColor[0]},${rgbColor[1]},${rgbColor[2]})`
@@ -418,18 +405,14 @@ export function DasKeyboardApp({ onKeyVirtualDown, onKeyVirtualUp }: DasKeyboard
     ? `0 0 12px rgba(${rgbColor[0]},${rgbColor[1]},${rgbColor[2]},1),inset 0 1.2px 2px rgba(255,255,255,0.4)`
     : `0 0 12px ${SWITCH_INDICATOR[activeSwitch]?.shadow ?? "rgba(255,0,0,1)"},inset 0 1.2px 2px rgba(255,255,255,0.4)`;
 
-  // ── Media bar backlight — whether the whole media bar (Prev/Play/Next)
-  //    should read as "lit" right now, and in which color. While Ambient
-  //    Focus is on, the bar is browsing/controlling real audio, so it lights
-  //    up whenever Ambient Focus itself is on (independent of RGB); the rest
-  //    of the time it mirrors RGB's own on/off, same as Play/Pause always
-  //    did. Previously Prev/Next were hardcoded to #737373 and never lit at
-  //    all, and Play/Pause only ever reflected rgbEnabled — neither ever
-  //    reflected Ambient Focus, which is the "ambient on, media controls
-  //    don't backlight" bug.
-  const mediaLit = ambientOn ? ambientOn : rgbEnabled;
-  const mediaLitColor = ambientOn ? "rgba(125,195,255,0.95)" : "rgba(255,100,100,0.9)";
-  const mediaLitGlow = ambientOn
+  // ── Media bar backlight — reads as "lit" whenever the currently *focused*
+  //    subsystem is on, colored blue for Ambient / red for RGB. Because this
+  //    is applied continuously (not just as a transient flash), the media
+  //    bar itself doubles as the persistent, glanceable "which system am I
+  //    steering right now" indicator — no separate UI needed for that.
+  const mediaLit = focus === "ambient" ? ambientOn : rgbEnabled;
+  const mediaLitColor = focus === "ambient" ? "rgba(125,195,255,0.95)" : "rgba(255,100,100,0.9)";
+  const mediaLitGlow = focus === "ambient"
     ? "drop-shadow(0 0 1px rgba(150,210,255,0.95)) drop-shadow(0 0 2px rgba(125,195,255,0.6))"
     : "drop-shadow(0 0 1px rgba(255,60,60,0.95)) drop-shadow(0 0 2px rgba(255,40,40,0.6))";
 
@@ -478,7 +461,7 @@ export function DasKeyboardApp({ onKeyVirtualDown, onKeyVirtualUp }: DasKeyboard
                     style={{ width:"100%", height:"100%", borderRadius:4, border:"1px solid #1a1a1c",
                              display:"flex", alignItems:"center", justifyContent:"center",
                              background:"linear-gradient(to bottom,#222225,#18181a)", cursor:"pointer", padding:0 }}
-                    title={ambientOn ? "RGB On/Off (double-click: turn Ambient Focus off)" : "RGB On/Off (double-click to cycle RGB effect)"}
+                    title={focus === "ambient" ? "RGB On/Off (double-click: toggle Ambient Focus)" : "RGB On/Off (double-click to cycle RGB effect)"}
                   >
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"
                          style={{ color: rgbEnabled ? "#d4d4d4" : "#737373", transform:"rotate(-15deg)", transition:"color 0.2s, filter 0.2s",
@@ -524,7 +507,7 @@ export function DasKeyboardApp({ onKeyVirtualDown, onKeyVirtualUp }: DasKeyboard
                     style={{ width:"100%", height:"100%", borderRadius:"50%", border:"1px solid #1a1a1c",
                              display:"flex", alignItems:"center", justifyContent:"center",
                              background:"linear-gradient(to bottom,#222225,#18181a)", cursor:"pointer", padding:0 }}
-                    title={ambientOn ? "RGB Brightness Step (double-click: nudge Ambient volume)" : "RGB Brightness Step (double-click to cycle RGB color)"}
+                    title={focus === "ambient" ? "RGB Brightness Step (double-click: nudge Ambient volume)" : "RGB Brightness Step (double-click to cycle RGB color)"}
                   >
                     <svg width="10" height="10" viewBox="0 0 24 24" style={{ fill:"currentColor", color: rgbEnabled ? "#d4d4d4" : "#737373", stroke:"currentColor", strokeWidth:1.5, strokeLinecap:"round", strokeLinejoin:"round", transition:"color 0.2s, filter 0.2s",
                                    filter: rgbEnabled ? "drop-shadow(0 0 1px rgba(255,255,255,0.95)) drop-shadow(0 0 2px rgba(255,255,255,0.55))" : "none" }}>
@@ -543,8 +526,8 @@ export function DasKeyboardApp({ onKeyVirtualDown, onKeyVirtualUp }: DasKeyboard
                             outline: ambientFlash.media ? "1.5px solid rgba(125,195,255,0.55)" : "1.5px solid transparent",
                             outlineOffset:"1.5px", transition:"outline-color 0.25s ease" }}>
                 <div style={{ display:"flex", width:"100%", height:"100%", borderRadius:4, overflow:"hidden", background:"#1a1a1c" }}>
-                  <button onClick={()=> ambientOn ? stepAmbient("prev") : stepRgbEffect("prev")}
-                          title={ambientOn ? "Previous Ambient Preset / Sound" : "Previous RGB Effect"}
+                  <button onClick={()=> focus === "ambient" ? stepAmbient("prev") : stepRgbEffect("prev")}
+                          title={focus === "ambient" ? "Previous Ambient Preset / Sound" : "Previous RGB Effect"}
                           onMouseDown={()=>setMediaPressedBtn("prev")}
                           onMouseUp={()=>setMediaPressedBtn(null)}
                           onMouseLeave={()=>setMediaPressedBtn(null)}
@@ -563,10 +546,27 @@ export function DasKeyboardApp({ onKeyVirtualDown, onKeyVirtualUp }: DasKeyboard
                   </button>
                   <button
                     onClick={()=> {
-                      if (ambientOn) { setAmbientOn(false); flashAmbient("media"); }
-                      else setRgbEnabled(v => !v);
+                      // Settle-window click count: single click toggles the
+                      // focused subsystem on/off, double-click swaps focus
+                      // between RGB and Ambient instead — same pattern as
+                      // the knob's double/triple-click split above.
+                      playClickCountRef.current++;
+                      if (playClickTimerRef.current) clearTimeout(playClickTimerRef.current);
+                      playClickTimerRef.current = setTimeout(() => {
+                        const count = playClickCountRef.current;
+                        playClickCountRef.current = 0;
+                        if (count >= 2) {
+                          setFocus(focusRef.current === "ambient" ? "rgb" : "ambient");
+                          flashAmbient("media");
+                        } else if (focusRef.current === "ambient") {
+                          setAmbientOn(!ambientOnRef.current);
+                          flashAmbient("media");
+                        } else {
+                          setRgbEnabled(!rgbEnabledRef.current);
+                        }
+                      }, CLICK_SETTLE_MS);
                     }}
-                    title={ambientOn ? "Turn Ambient Focus Off" : "Toggle RGB On/Off"}
+                    title={focus === "ambient" ? "Toggle Ambient Focus On/Off (double-click: switch to RGB control)" : "Toggle RGB On/Off (double-click: switch to Ambient control)"}
                     onMouseDown={()=>setMediaPressedBtn("play")}
                     onMouseUp={()=>setMediaPressedBtn(null)}
                     onMouseLeave={()=>setMediaPressedBtn(null)}
@@ -584,8 +584,8 @@ export function DasKeyboardApp({ onKeyVirtualDown, onKeyVirtualUp }: DasKeyboard
                       <rect x="9.5" y="1" width="1.2" height="6" rx="0.2" />
                     </svg>
                   </button>
-                  <button onClick={()=> ambientOn ? stepAmbient("next") : stepRgbEffect("next")}
-                          title={ambientOn ? "Next Ambient Preset / Sound" : "Next RGB Effect"}
+                  <button onClick={()=> focus === "ambient" ? stepAmbient("next") : stepRgbEffect("next")}
+                          title={focus === "ambient" ? "Next Ambient Preset / Sound" : "Next RGB Effect"}
                           onMouseDown={()=>setMediaPressedBtn("next")}
                           onMouseUp={()=>setMediaPressedBtn(null)}
                           onMouseLeave={()=>setMediaPressedBtn(null)}
@@ -612,13 +612,10 @@ export function DasKeyboardApp({ onKeyVirtualDown, onKeyVirtualUp }: DasKeyboard
                           outlineOffset:"2px", borderRadius:"50%", transition:"outline-color 0.25s ease" }}
                  onMouseDown={handleKnobMouseDown}
                  onWheel={handleKnobWheel}
-                 title={ambientOn ? "Drag or scroll: Ambient volume · Double-click: mute/unmute · Hold 3s: switch type" : "Drag or scroll: RGB brightness/hue · Double-click: RGB on/off · Hold 3s: switch type"}>
+                 title={focus === "ambient" ? "Drag or scroll: Ambient volume · Double-click: mute/unmute · Triple-click: switch type" : "Drag or scroll: RGB brightness/hue · Double-click: RGB on/off · Triple-click: switch type"}>
               <div style={{ position:"absolute", inset:0, pointerEvents:"none",
                             transform:`rotate(${rotation}deg)`,
-                            filter: isKnobHolding ? "brightness(1.65)" : "brightness(1)",
-                            transition: isKnobHolding
-                              ? "transform 0.1s cubic-bezier(0.15,0.45,0.3,1), filter 3s linear"
-                              : "transform 0.1s cubic-bezier(0.15,0.45,0.3,1), filter 0.15s ease-out" }}>
+                            transition:"transform 0.1s cubic-bezier(0.15,0.45,0.3,1)" }}>
                 <div style={{ position:"absolute", inset:-3, borderRadius:"50%", background:"#08080a", boxShadow:"inset 0 4px 8px rgba(0,0,0,0.9)", opacity:0.95 }} />
                 <div style={{ position:"absolute", inset:-2.5, borderRadius:"50%",
                               background:"conic-gradient(from 0deg, #b30000 0%, #ff0000 12%, #ff4444 25%, #ff8888 35%, #ff0000 48%, #800000 60%, #b30000 72%, #ff0000 85%, #ff4444 92%, #b30000 100%)",

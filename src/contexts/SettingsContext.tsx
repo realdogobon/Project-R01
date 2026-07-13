@@ -185,6 +185,32 @@ export interface SettingsContextType {
   savedAmbientMixes: Record<string, Record<string, number>>;
   setSavedAmbientMixes: (v: Record<string, Record<string, number>>) => void;
 
+  // ── Das Keyboard persisted state ──────────────────────────────────────
+  // Lives here (not as local component state inside DasKeyboardApp) so it
+  // survives the Das component unmounting for any reason — switching to
+  // Classic and back, an exam remount, a crash/reload — instead of
+  // resetting to whatever a one-time localStorage read captured back when
+  // the page first loaded. This context is mounted once at the app root
+  // and never unmounts alongside the keyboard.
+  dasSwitchType: "blue" | "brown" | "red";
+  setDasSwitchType: (v: "blue" | "brown" | "red") => void;
+  dasRgbEnabled: boolean;
+  setDasRgbEnabled: (v: boolean) => void;
+  dasRgbEffect: string;
+  setDasRgbEffect: (v: string) => void;
+  dasRgbPaletteIndex: number;
+  setDasRgbPaletteIndex: (v: number) => void;
+  dasRgbColor: [number, number, number];
+  setDasRgbColor: (v: [number, number, number]) => void;
+  dasRgbCustomHue: number;
+  setDasRgbCustomHue: (v: number) => void;
+  dasRgbBrightness: number;
+  setDasRgbBrightness: (v: number) => void;
+  // Which subsystem the shared control cluster (knob, Mute/Sleep
+  // double-click, media bar) currently acts on — see keyboard-controls.md.
+  dasControlFocus: "rgb" | "ambient";
+  setDasControlFocus: (v: "rgb" | "ambient") => void;
+
   setAccent: (c: KeyboardThemeName) => void;
   setFont: (f: TypingFont) => void;
   setSoundEnabled: (v: boolean) => void;
@@ -386,6 +412,15 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const [savedAmbientMixes, setSavedAmbientMixesState] = useState<Record<string, Record<string, number>>>({});
   const [keyboardModel, setKeyboardModelState] = useState<"classic" | "das_keyboard_4">("classic");
 
+  const [dasSwitchType, setDasSwitchTypeState] = useState<"blue" | "brown" | "red">("blue");
+  const [dasRgbEnabled, setDasRgbEnabledState] = useState(false);
+  const [dasRgbEffect, setDasRgbEffectState] = useState("static");
+  const [dasRgbPaletteIndex, setDasRgbPaletteIndexState] = useState(0);
+  const [dasRgbColor, setDasRgbColorState] = useState<[number, number, number]>([220, 40, 40]);
+  const [dasRgbCustomHue, setDasRgbCustomHueState] = useState(0);
+  const [dasRgbBrightness, setDasRgbBrightnessState] = useState(1);
+  const [dasControlFocus, setDasControlFocusState] = useState<"rgb" | "ambient">("rgb");
+
   const [userHasManuallyChangedSwitch, setUserHasManuallyChangedSwitchState] = useState(() => {
     if (typeof window !== "undefined") {
       return sessionStorage.getItem("ais_user_manually_changed_switch") === "true";
@@ -427,6 +462,15 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
       const savedSavedAmbientMixes = localStorage.getItem("ais_saved_ambient_mixes");
       const savedKeyboardModel = localStorage.getItem("ais_keyboard_model") as "classic" | "das_keyboard_4" | null;
 
+      const savedDasSwitchType = localStorage.getItem("ais_das_switch_type") as "blue" | "brown" | "red" | null;
+      const savedDasRgbEnabled = localStorage.getItem("ais_das_rgb_enabled");
+      const savedDasRgbEffect = localStorage.getItem("ais_das_rgb_effect");
+      const savedDasRgbPaletteIndex = localStorage.getItem("ais_das_rgb_palette_index");
+      const savedDasRgbColor = localStorage.getItem("ais_das_rgb_color");
+      const savedDasRgbCustomHue = localStorage.getItem("ais_das_rgb_custom_hue");
+      const savedDasRgbBrightness = localStorage.getItem("ais_das_rgb_brightness");
+      const savedDasControlFocus = localStorage.getItem("ais_das_control_focus") as "rgb" | "ambient" | null;
+
       const themeToUse = savedTheme || "classic";
       const fontToUse = savedFont || "geist-mono";
 
@@ -438,6 +482,33 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
         setKeyboardModelState(savedKeyboardModel);
       } else {
         setKeyboardModelState("classic");
+      }
+
+      if (savedDasSwitchType === "blue" || savedDasSwitchType === "brown" || savedDasSwitchType === "red") {
+        setDasSwitchTypeState(savedDasSwitchType);
+      }
+      if (savedDasRgbEnabled !== null) setDasRgbEnabledState(savedDasRgbEnabled === "true");
+      if (savedDasRgbEffect) setDasRgbEffectState(savedDasRgbEffect);
+      if (savedDasRgbPaletteIndex !== null) {
+        const v = Number(savedDasRgbPaletteIndex);
+        if (!isNaN(v)) setDasRgbPaletteIndexState(v);
+      }
+      if (savedDasRgbColor) {
+        try {
+          const parsed = JSON.parse(savedDasRgbColor);
+          if (Array.isArray(parsed) && parsed.length === 3) setDasRgbColorState(parsed as [number, number, number]);
+        } catch {}
+      }
+      if (savedDasRgbCustomHue !== null) {
+        const v = Number(savedDasRgbCustomHue);
+        if (!isNaN(v)) setDasRgbCustomHueState(v);
+      }
+      if (savedDasRgbBrightness !== null) {
+        const v = Number(savedDasRgbBrightness);
+        if (!isNaN(v)) setDasRgbBrightnessState(v);
+      }
+      if (savedDasControlFocus === "rgb" || savedDasControlFocus === "ambient") {
+        setDasControlFocusState(savedDasControlFocus);
       }
 
       if (savedSound !== null) setSoundEnabledState(savedSound !== "false");
@@ -615,6 +686,62 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     } catch {}
   };
 
+  const setDasSwitchType = (v: "blue" | "brown" | "red") => {
+    setDasSwitchTypeState(v);
+    try {
+      localStorage.setItem("ais_das_switch_type", v);
+    } catch {}
+  };
+
+  const setDasRgbEnabled = (v: boolean) => {
+    setDasRgbEnabledState(v);
+    try {
+      localStorage.setItem("ais_das_rgb_enabled", String(v));
+    } catch {}
+  };
+
+  const setDasRgbEffect = (v: string) => {
+    setDasRgbEffectState(v);
+    try {
+      localStorage.setItem("ais_das_rgb_effect", v);
+    } catch {}
+  };
+
+  const setDasRgbPaletteIndex = (v: number) => {
+    setDasRgbPaletteIndexState(v);
+    try {
+      localStorage.setItem("ais_das_rgb_palette_index", String(v));
+    } catch {}
+  };
+
+  const setDasRgbColor = (v: [number, number, number]) => {
+    setDasRgbColorState(v);
+    try {
+      localStorage.setItem("ais_das_rgb_color", JSON.stringify(v));
+    } catch {}
+  };
+
+  const setDasRgbCustomHue = (v: number) => {
+    setDasRgbCustomHueState(v);
+    try {
+      localStorage.setItem("ais_das_rgb_custom_hue", String(v));
+    } catch {}
+  };
+
+  const setDasRgbBrightness = (v: number) => {
+    setDasRgbBrightnessState(v);
+    try {
+      localStorage.setItem("ais_das_rgb_brightness", String(v));
+    } catch {}
+  };
+
+  const setDasControlFocus = (v: "rgb" | "ambient") => {
+    setDasControlFocusState(v);
+    try {
+      localStorage.setItem("ais_das_control_focus", v);
+    } catch {}
+  };
+
   const setSavedAmbientMixes = (mixes: Record<string, Record<string, number>>) => {
     setSavedAmbientMixesState(mixes);
     try {
@@ -645,6 +772,15 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     setAmbientMixState({});
     setKeyboardModelState("classic");
 
+    setDasSwitchTypeState("blue");
+    setDasRgbEnabledState(false);
+    setDasRgbEffectState("static");
+    setDasRgbPaletteIndexState(0);
+    setDasRgbColorState([220, 40, 40]);
+    setDasRgbCustomHueState(0);
+    setDasRgbBrightnessState(1);
+    setDasControlFocusState("rgb");
+
     applySettingsToDom("classic", "geist-mono");
 
     try {
@@ -667,6 +803,15 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
       localStorage.removeItem("ais_zen_noise_volume");
       localStorage.removeItem("ais_ambient_mix");
       localStorage.removeItem("ais_keyboard_model");
+
+      localStorage.removeItem("ais_das_switch_type");
+      localStorage.removeItem("ais_das_rgb_enabled");
+      localStorage.removeItem("ais_das_rgb_effect");
+      localStorage.removeItem("ais_das_rgb_palette_index");
+      localStorage.removeItem("ais_das_rgb_color");
+      localStorage.removeItem("ais_das_rgb_custom_hue");
+      localStorage.removeItem("ais_das_rgb_brightness");
+      localStorage.removeItem("ais_das_control_focus");
     } catch {}
   };
 
@@ -697,6 +842,24 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
         keyboardModel,
         ambientMix,
         savedAmbientMixes,
+
+        dasSwitchType,
+        dasRgbEnabled,
+        dasRgbEffect,
+        dasRgbPaletteIndex,
+        dasRgbColor,
+        dasRgbCustomHue,
+        dasRgbBrightness,
+        dasControlFocus,
+
+        setDasSwitchType,
+        setDasRgbEnabled,
+        setDasRgbEffect,
+        setDasRgbPaletteIndex,
+        setDasRgbColor,
+        setDasRgbCustomHue,
+        setDasRgbBrightness,
+        setDasControlFocus,
 
         setAccent,
         setFont,

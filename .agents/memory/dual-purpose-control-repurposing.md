@@ -1,13 +1,25 @@
 ---
 name: Dual-purpose control repurposing
-description: Pattern used to make the Das Keyboard's physical controls (knob, Sleep, Mute, media bar) mean two different things (RGB vs. Ambient Focus) depending on a mode flag.
+description: Pattern used to make the Das Keyboard's physical controls (knob, Sleep, Mute, media bar) mean two different things (RGB vs. Ambient Focus), superseding a single on/off flag with an explicit focus concept.
 ---
 
-When a physical control cluster needs to serve two different subsystems
-(here: RGB lighting vs. Ambient Focus background sound), gate each branch
-on a single boolean read via a ref (not just state) so imperative
-mousemove/mouseup listeners added outside React's render cycle still see
-the live mode value.
+When a physical control cluster needs to serve two independent subsystems
+that can each be on or off at the same time (here: RGB lighting vs. Ambient
+Focus background sound), don't gate shared-control behavior on "is the
+secondary subsystem currently on" — that makes the two subsystems mutually
+exclusive by construction (whichever is on locks out the other's controls,
+and there's no way to reach the "off" one's controls to turn it back on).
+Instead, introduce an explicit **focus** flag (which subsystem the shared
+controls currently target), independent of either subsystem's own on/off
+state. Switch focus with its own dedicated gesture (here: double-clicking
+the existing Play/Pause button — reusing a control's own click-count layer
+rather than adding a new control). This lets both subsystems run
+simultaneously and remain reachable: one can keep operating in the
+background while focus sits on the other.
+
+Read the focus flag (and every other value a handler depends on) via a ref,
+not just state, so imperative mousemove/mouseup listeners added outside
+React's render cycle still see the live value.
 
 **Why:** the knob's drag handlers are attached imperatively to `document`
 inside a `useCallback` with an empty dep array; without a ref, they'd close
