@@ -84,7 +84,7 @@ const DAS_VISUAL_H = DAS_PAD_TOP + CH * DAS_INTERNAL_SCALE + DAS_PAD_BOT;
 // so it reads as "clearly the bigger, full-size board" without becoming
 // cartoonish on ultra-wide monitors. At MAX_ZOOM, Das's painted width is
 // DAS_PAINTED_NATIVE_W * MAX_ZOOM ≈ 1.4-1.5x Classic's own max painted width.
-const MAX_ZOOM = 1.35;
+const MAX_ZOOM = 1.15;
 // Never shrink smaller than this even on very narrow viewports, so the
 // board stays legible; a truly tiny window may still need a touch of
 // horizontal scroll at this floor, same as Classic does at its own floor.
@@ -94,7 +94,7 @@ const MIN_ZOOM = 0.42;
 const FIT_SAFETY = 0.96;
 // Used only before the first real measurement arrives (initial paint),
 // so there's no flash of an oversized keyboard.
-const DEFAULT_ZOOM = 0.9;
+const DEFAULT_ZOOM = 0.78;
 
 export interface DasKeyboardProps {
   onKeyVirtualDown?: (code: string) => void;

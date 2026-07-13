@@ -163,7 +163,7 @@ const KeyboardSection = memo(function KeyboardSection({
       // space) so its visual top edge already has breathing room — using pt-6
       // here would add another 24px gap between the TAB+ENTER hint and the
       // board. Classic uses pt-6 because it has no such internal top offset.
-      className={cn("w-full mx-auto mb-4 sm:mb-6 shrink-0 overflow-x-auto", isDas ? "pt-2 max-w-[1600px]" : "pt-6 max-w-5xl")}
+      className={cn("w-full mx-auto mb-1 sm:mb-2 shrink-0 overflow-x-auto", isDas ? "pt-2 max-w-[1600px]" : "pt-6 max-w-5xl")}
     >
       <div className="flex justify-center min-w-fit" style={{ width: "max-content", minWidth: "100%" }}>
       {isDas ? (
@@ -776,7 +776,7 @@ export function TypingScreen({
   return (
     <div
       className={cn(
-        "flex-1 flex flex-col w-full bg-[#f8f9fa] dark:bg-[#111213] min-h-[calc(100vh-100px)] text-neutral-800 dark:text-neutral-200 select-none px-6 py-6 sm:px-12 sm:py-8 relative justify-between animate-in fade-in duration-350 transition-all",
+        "flex-1 flex flex-col w-full bg-[#f8f9fa] dark:bg-[#111213] min-h-[calc(100vh-100px)] text-neutral-800 dark:text-neutral-200 select-none px-6 pt-6 pb-2 sm:px-12 sm:pt-8 sm:pb-3 relative justify-between animate-in fade-in duration-350 transition-all",
         refocusPulse && "brightness-[1.03] dark:brightness-[1.07] scale-[1.002] duration-150"
       )}
       style={{
