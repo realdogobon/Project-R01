@@ -90,6 +90,8 @@ interface KeyboardSectionProps {
   onKeyVirtualUp: (code: string) => void;
   virtualShiftActive: boolean;
   virtualCapsLockActive: boolean;
+  /** When true, render the TAB+ENTER hint inside this section (Das only). */
+  showRestartHint?: boolean;
 }
 
 const KeyboardSection = memo(function KeyboardSection({
@@ -98,7 +100,8 @@ const KeyboardSection = memo(function KeyboardSection({
   onKeyVirtualDown,
   onKeyVirtualUp,
   virtualShiftActive,
-  virtualCapsLockActive
+  virtualCapsLockActive,
+  showRestartHint,
 }: KeyboardSectionProps) {
   const { keyboardModel } = useSettings();
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -162,6 +165,16 @@ const KeyboardSection = memo(function KeyboardSection({
       // board. Classic uses pt-6 because it has no such internal top offset.
       className={cn("w-full mx-auto mb-4 sm:mb-6 shrink-0 overflow-x-auto", isDas ? "pt-2 max-w-[1600px]" : "pt-6 max-w-5xl")}
     >
+      {showRestartHint && (
+        <div className="flex justify-center items-center mb-1 select-none opacity-40 hover:opacity-85 transition-opacity duration-200">
+          <span className="text-[10px] font-mono tracking-widest text-neutral-400 dark:text-neutral-500 flex items-center gap-1.5 uppercase">
+            <span className="px-1.5 py-0.5 rounded border border-neutral-300 dark:border-neutral-800 bg-neutral-100 dark:bg-neutral-900 font-extrabold shadow-sm">Tab</span>
+            <span>+</span>
+            <span className="px-1.5 py-0.5 rounded border border-neutral-300 dark:border-neutral-800 bg-neutral-100 dark:bg-neutral-900 font-extrabold shadow-sm">Enter</span>
+            <span className="ml-1 text-neutral-450 dark:text-neutral-500">to restart test</span>
+          </span>
+        </div>
+      )}
       <div className="flex justify-center min-w-fit" style={{ width: "max-content", minWidth: "100%" }}>
       {isDas ? (
         <DasKeyboard
@@ -282,7 +295,7 @@ export function TypingScreen({
   onSnapshot,
   onSnapshotConsumed,
 }: TypingScreenProps) {
-  const { accent: currentTheme, liveStats, showKeyboard, errorSoundProfile } = useSettings();
+  const { accent: currentTheme, liveStats, showKeyboard, errorSoundProfile, keyboardModel } = useSettings();
   const { playSound, playErrorSound } = useSoundEngine();
 
   // Parse constraints
@@ -921,14 +934,19 @@ export function TypingScreen({
         </div>
       </div>
 
-      <div className="flex justify-center items-center mt-2 mb-1 select-none opacity-40 hover:opacity-85 transition-opacity duration-200">
-        <span className="text-[10px] font-mono tracking-widest text-neutral-400 dark:text-neutral-500 flex items-center gap-1.5 uppercase">
-          <span className="px-1.5 py-0.5 rounded border border-neutral-300 dark:border-neutral-800 bg-neutral-100 dark:bg-neutral-900 font-extrabold shadow-sm">Tab</span>
-          <span>+</span>
-          <span className="px-1.5 py-0.5 rounded border border-neutral-300 dark:border-neutral-800 bg-neutral-100 dark:bg-neutral-900 font-extrabold shadow-sm">Enter</span>
-          <span className="ml-1 text-neutral-450 dark:text-neutral-500">to restart test</span>
-        </span>
-      </div>
+      {/* Hint renders here for Classic (or when keyboard is hidden).
+          For Das it moves inside KeyboardSection so it sits right at the
+          keyboard's top border and the text area reclaims the freed space. */}
+      {!(showKeyboard && keyboardModel === "das_keyboard_4") && (
+        <div className="flex justify-center items-center mt-2 mb-1 select-none opacity-40 hover:opacity-85 transition-opacity duration-200">
+          <span className="text-[10px] font-mono tracking-widest text-neutral-400 dark:text-neutral-500 flex items-center gap-1.5 uppercase">
+            <span className="px-1.5 py-0.5 rounded border border-neutral-300 dark:border-neutral-800 bg-neutral-100 dark:bg-neutral-900 font-extrabold shadow-sm">Tab</span>
+            <span>+</span>
+            <span className="px-1.5 py-0.5 rounded border border-neutral-300 dark:border-neutral-800 bg-neutral-100 dark:bg-neutral-900 font-extrabold shadow-sm">Enter</span>
+            <span className="ml-1 text-neutral-450 dark:text-neutral-500">to restart test</span>
+          </span>
+        </div>
+      )}
 
       {showKeyboard && (
         <KeyboardSection
@@ -938,6 +956,7 @@ export function TypingScreen({
           onKeyVirtualUp={handleKeyVirtualUp}
           virtualShiftActive={virtualShiftActive}
           virtualCapsLockActive={virtualCapsLockActive}
+          showRestartHint={keyboardModel === "das_keyboard_4"}
         />
       )}
 
