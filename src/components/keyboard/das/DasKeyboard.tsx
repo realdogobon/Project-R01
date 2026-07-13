@@ -67,11 +67,17 @@ const DAS_PAINTED_NATIVE_W = CW * DAS_INTERNAL_SCALE;
 // below the visible keyboard. Multiplied by zoom on large screens, that ghost
 // eats the text area above. We cap the wrapper to the true visual height so
 // the flex column only sees the space the keyboard actually occupies.
-const DAS_PAD_TOP = 32;
+//
+// Additionally, the 32px top padding is blank dark space above the chassis.
+// By shifting the inner content up by that amount (translateY) and setting
+// DAS_PAD_TOP = 0 in the height formula, we reclaim 32 × MAX_ZOOM ≈ 43px of
+// layout height — enough for a full extra line of text — without visually
+// shrinking the keyboard or clipping any key rows.
+const DAS_INTERNAL_TOP_PAD = 32; // hardcoded in DasKeyboardApp, never touch that file
+const DAS_PAD_TOP = 0;           // we shift content up to hide it, so wrapper sees 0
 // DasKeyboardApp has 48px of empty bottom padding. We clip most of it so the
-// keyboard section height is close to Classic's, giving the text area above
-// the same number of visible lines whichever board is active.
-const DAS_PAD_BOT = 4;
+// keyboard section height is close to Classic's.
+const DAS_PAD_BOT = 3;
 const DAS_VISUAL_H = DAS_PAD_TOP + CH * DAS_INTERNAL_SCALE + DAS_PAD_BOT;
 
 // The biggest zoom Das is allowed to reach even when there's abundant room,
@@ -110,7 +116,12 @@ export function DasKeyboard({ onKeyVirtualDown, onKeyVirtualUp, availableWidth }
       className="flex justify-center select-none"
       style={{ zoom, height: DAS_VISUAL_H, overflow: "hidden" }}
     >
-      <DasKeyboardApp onKeyVirtualDown={onKeyVirtualDown} onKeyVirtualUp={onKeyVirtualUp} />
+      {/* Shift content up by the internal top padding so the chassis starts
+          flush at the wrapper's top edge. overflow:hidden above clips the
+          blank space; key rows remain fully visible. */}
+      <div style={{ transform: `translateY(-${DAS_INTERNAL_TOP_PAD}px)` }}>
+        <DasKeyboardApp onKeyVirtualDown={onKeyVirtualDown} onKeyVirtualUp={onKeyVirtualUp} />
+      </div>
     </div>
   );
 }
