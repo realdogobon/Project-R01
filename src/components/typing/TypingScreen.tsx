@@ -150,7 +150,13 @@ const KeyboardSection = memo(function KeyboardSection({
   return (
     <div
       ref={scrollRef}
-      className={cn("w-full mx-auto pt-6 shrink-0 overflow-x-auto", isDas ? "max-w-[1600px]" : "max-w-5xl")}
+      // mb-4/mb-6 anchors both keyboards the same fixed distance from the
+      // bottom edge instead of letting each one's own height passively
+      // decide where it lands. Previously Classic (the shorter board) sat
+      // flush against the viewport's bottom edge while Das (taller) ended
+      // up floating noticeably higher — the fixed offset here keeps both
+      // boards' bottom edge lined up, whichever one is active.
+      className={cn("w-full mx-auto pt-6 mb-4 sm:mb-6 shrink-0 overflow-x-auto", isDas ? "max-w-[1600px]" : "max-w-5xl")}
     >
       <div className="flex justify-center min-w-fit" style={{ width: "max-content", minWidth: "100%" }}>
       {isDas ? (
@@ -316,6 +322,27 @@ export function TypingScreen({
   const wordsContainerRef = useRef<HTMLDivElement>(null);
   const cursorRef = useRef<HTMLDivElement>(null);
   const engineRef = useRef<TypingEngine | null>(null);
+
+  // Text preview box: how many whole lines it shows, and the pixel height
+  // of one line — both computed from real measurements instead of a fixed
+  // hardcoded box height. The old fixed 280px box wasn't a clean multiple
+  // of the actual rendered line height, so a partial last line always
+  // peeked through and got clipped by overflow-hidden (looked like it was
+  // struck through the middle). Worse, that fixed box lived inside a flex
+  // column shared with the keyboard below it — a taller keyboard (Das)
+  // left the box less room, so the same "fixed" box didn't actually render
+  // at a consistent size across keyboards. Measuring the real available
+  // space and always sizing the box to an exact whole-line multiple (with
+  // a preferred max of 6, but adapting down on short screens) fixes both:
+  // no line is ever half-shown, and the result no longer silently depends
+  // on which keyboard happens to be selected.
+  const textAreaOuterRef = useRef<HTMLDivElement>(null);
+  const statsRowRef = useRef<HTMLDivElement>(null);
+  const lineProbeRef = useRef<HTMLSpanElement>(null);
+  const PREFERRED_MAX_LINES = 6;
+  const MIN_LINES = 3;
+  const [lineHeightPx, setLineHeightPx] = useState(44);
+  const [visibleLines, setVisibleLines] = useState(PREFERRED_MAX_LINES);
 
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -714,6 +741,30 @@ export function TypingScreen({
     };
   }, []);
 
+  // Recomputes how many whole text-preview lines fit in the real available
+  // space (see refs above). Re-runs whenever the outer wrapper's height
+  // changes for any reason — window resize, fullscreen toggle, or the
+  // keyboard below it changing size (Das vs Classic) — so the box always
+  // shows a clean, non-cut set of lines instead of a fixed guess.
+  useEffect(() => {
+    const outer = textAreaOuterRef.current;
+    if (!outer) return;
+    const recompute = () => {
+      const probeH = lineProbeRef.current?.offsetHeight || 0;
+      const lineH = probeH > 0 ? probeH + 4 : 44;
+      const statsH = statsRowRef.current?.offsetHeight || 0;
+      const available = outer.clientHeight - statsH;
+      const fitLines = Math.floor(available / lineH);
+      const clamped = Math.max(MIN_LINES, Math.min(PREFERRED_MAX_LINES, fitLines || MIN_LINES));
+      setLineHeightPx(lineH);
+      setVisibleLines(clamped);
+    };
+    recompute();
+    const observer = new ResizeObserver(recompute);
+    observer.observe(outer);
+    return () => observer.disconnect();
+  }, []);
+
 
   return (
     <div
@@ -791,9 +842,22 @@ export function TypingScreen({
         </div>
       </div>
 
-      <div className="w-full max-w-5xl mx-auto flex-1 flex flex-col justify-center relative my-2 min-h-[220px]">
+      <div ref={textAreaOuterRef} className="w-full max-w-5xl mx-auto flex-1 flex flex-col justify-center relative my-2 min-h-0">
 
-        <div className="mb-4 flex min-h-8 items-center justify-between opacity-100 transition-opacity duration-200">
+        {/* Hidden single-line probe: same font/size/line-height as the real
+            preview text, used only to measure the true rendered line
+            height so the box below can be sized to an exact whole-line
+            multiple (see the ResizeObserver effect above). */}
+        <span
+          ref={lineProbeRef}
+          aria-hidden="true"
+          className="absolute -z-10 opacity-0 pointer-events-none text-2xl leading-relaxed"
+          style={{ fontFamily: "var(--app-font-family, monospace)" }}
+        >
+          Mg
+        </span>
+
+        <div ref={statsRowRef} className="mb-4 flex min-h-8 items-center justify-between opacity-100 transition-opacity duration-200">
           <div className="flex-1" />
           <div className="flex items-baseline gap-6 font-mono">
             <span className="tabular-nums flex items-baseline">
@@ -819,7 +883,7 @@ export function TypingScreen({
           </div>
         </div>
 
-        <div className="relative w-full overflow-hidden h-[17.5rem]" onClick={() => inputRef.current?.focus()}>
+        <div className="relative w-full overflow-hidden transition-[height] duration-150 ease-out" style={{ height: lineHeightPx * visibleLines }} onClick={() => inputRef.current?.focus()}>
           <div ref={wordsContainerRef} className="relative w-full text-2xl leading-relaxed flex flex-wrap gap-x-2.5 gap-y-1 transition-transform duration-100 ease-out will-change-transform" style={{ fontFamily: "var(--app-font-family, monospace)" }}>
 
 
