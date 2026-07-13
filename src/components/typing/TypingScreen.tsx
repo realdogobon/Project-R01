@@ -102,6 +102,14 @@ const KeyboardSection = memo(function KeyboardSection({
 }: KeyboardSectionProps) {
   const { keyboardModel } = useSettings();
   const scrollRef = useRef<HTMLDivElement>(null);
+  const isDas = keyboardModel === "das_keyboard_4";
+  // Measured actual pixel width of the scroll container, handed down to
+  // DasKeyboard so it can size itself to fit — see DasKeyboard.tsx for why
+  // this replaced fixed per-breakpoint zoom values (they couldn't adapt to
+  // the real available space and either clipped on small screens or
+  // under-sized Das on large ones). Classic doesn't need this: its own
+  // Tailwind zoom breakpoints already fit max-w-5xl comfortably.
+  const [availableWidth, setAvailableWidth] = useState<number | null>(null);
 
   // The keyboard's rendered width can exceed the viewport on narrower
   // screens (or the Das board specifically, which is intentionally sized
@@ -125,13 +133,31 @@ const KeyboardSection = memo(function KeyboardSection({
     return () => window.removeEventListener("resize", center);
   }, [keyboardModel]);
 
+  // Tracks the scroll container's real width so Das can compute a zoom
+  // that's guaranteed to fit it (see DasKeyboard.tsx). Runs regardless of
+  // which keyboard is active so the value is already fresh if the user
+  // switches to Das.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const update = () => setAvailableWidth(el.clientWidth);
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
   return (
-    <div ref={scrollRef} className="w-full max-w-5xl mx-auto pt-6 shrink-0 overflow-x-auto">
+    <div
+      ref={scrollRef}
+      className={cn("w-full mx-auto pt-6 shrink-0 overflow-x-auto", isDas ? "max-w-[1600px]" : "max-w-5xl")}
+    >
       <div className="flex justify-center min-w-fit" style={{ width: "max-content", minWidth: "100%" }}>
-      {keyboardModel === "das_keyboard_4" ? (
+      {isDas ? (
         <DasKeyboard
           onKeyVirtualDown={onKeyVirtualDown}
           onKeyVirtualUp={onKeyVirtualUp}
+          availableWidth={availableWidth}
         />
       ) : (
         // Both keyboards share the same box top offset from this parent,
