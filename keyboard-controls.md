@@ -32,17 +32,20 @@ staying mounted (see section 7, Persistence).
 |---|---|---|
 | Sleep button | Single click | Toggle RGB on/off (always, regardless of focus) |
 | Sleep button | Double click | RGB focus: cycle RGB effect · Ambient focus: toggle Ambient Focus on/off |
-| Mute button | Single click | Step RGB brightness (25% → 50% → 75% → 100% → repeat), always |
 | Mute button | Double click | RGB focus: cycle RGB color palette · Ambient focus: nudge ambient volume up |
 | Knob | Drag up/down | RGB focus: adjust brightness (or hue, on the custom color slot) · Ambient focus: adjust ambient volume |
-| Knob | Scroll | Same as drag, in small steps |
+| Knob | Scroll up/down | Same as drag, in small steps (vertical scroll only) |
+| Knob | Scroll left/right | RGB focus: cycle RGB color palette (trackpad swipe or tilt wheel) |
+| Knob | Single click (no drag) | RGB focus: advance to next color in palette |
 | Knob | Double click (no drag) | RGB focus: toggle RGB on/off · Ambient focus: mute/unmute ambient volume |
-| Knob | Triple click (no drag) | Cycle switch type (blue → brown → red) — always, regardless of focus |
+| Knob dot | — | Always shows current switch type (blue / brown / red) — read-only indicator |
 | Media bar — Prev/Next | Click | RGB focus: step RGB effect · Ambient focus: step saved preset / ambient sound |
 | Media bar — Play/Pause | Single click | Toggle the focused subsystem on/off (RGB or Ambient Focus) |
 | Media bar — Play/Pause | Double click | Switch control focus between RGB and Ambient Focus |
+| **ScrollLock key** | **Short press** | **Cycle switch type (blue → brown → red) — Das keyboard only** |
+| **ScrollLock key** | **Long press (≥ 500 ms)** | **Toggle RGB on/off** |
 
-Single clicks on Sleep and Mute always control RGB, with no exceptions.
+Single clicks on Sleep always control RGB, with no exceptions.
 Everything else in the table acts on whichever subsystem is currently
 focused — see section 5.
 
@@ -60,37 +63,53 @@ document.
 ### Lock indicators
 
 Three small LEDs sit above the switch-type selector: **Num Lock**, **Caps
-Lock**, and **Scroll Lock**. Each lights up (a small white glowing dot)
-when its corresponding lock is active, and goes dark when it isn't. These
-are read-only indicators — they reflect lock state, they don't trigger
-anything themselves.
+Lock**, and **Scroll Lock**. Num Lock and Caps Lock light up (a small white
+glowing dot) when their corresponding lock is active. The Scroll Lock LED
+stays off permanently — the ScrollLock key has been repurposed as the
+switch-type cycling control (see section 3) and no longer acts as a lock
+toggle.
 
 ---
 
 ## 3. Switch Type
 
-The knob's **triple-click** gesture (three quick clicks in place, with no
-drag in between) cycles the keyboard's switch type in a fixed rotation:
+The **ScrollLock key** on your physical keyboard is the dedicated switch-type
+control on the Das Keyboard. It is Das-exclusive: it only activates when
+the Das keyboard is mounted. Pressing it on the Classic keyboard does
+nothing because the handler never registers.
+
+**Short press** (release before 500 ms): advances the switch type in a
+fixed rotation:
 
 1. **Blue** — clicky tactile switch, the default.
 2. **Brown** — tactile, quieter than blue, no audible click bar.
 3. **Red** — linear, smooth throughout the keystroke, no tactile bump.
 
-Switch type changes only the sound/feel character the rest of the app
-associates with keystrokes on this board; it has no interaction with RGB or
-Ambient Focus, and this gesture behaves identically regardless of which
-subsystem currently has control focus.
+**Long press** (held 500 ms or more): toggles RGB lighting on or off as a
+secondary action. The long-press fires while the key is still held; on
+release the short-press action is skipped automatically so the two gestures
+never collide.
 
-This used to be a press-and-hold-for-3-seconds gesture. It was changed to a
-triple-click because a sustained hold with zero mouse movement over a full
-three seconds proved unreliable in a browser — the knob's own drag
+Switch-type changes take effect on the fly — mid-typing, mid-RGB, mid-
+Ambient, any time. Both the key-press physics (travel feel) and the typing
+engine's sound profile update immediately, with no restart required.
+
+The knob dot indicator (the small circle inside the knob body) always
+shows the current switch type as a color: **blue** for Blue, **brown** for
+Brown, **red** for Red. It is a pure read-only indicator and is not
+connected to the RGB system.
+
+**Why ScrollLock?** It is the only full-size key on the Das Keyboard that:
+(a) has no OS-level intercept on any platform (the browser always sees the
+event), (b) is never used during normal typing, (c) can be fully
+intercepted with `e.preventDefault()` so no lock state, no character, and
+no browser shortcut ever fires alongside the switch change.
+
+Previous switch-type mechanism (for historical context only): the knob's
+triple-click gesture used to cycle switch type. It was replaced because a
+sustained multi-click sequence proved unreliable — the knob's drag
 threshold, momentary focus loss, or an imprecise release could all silently
-cancel it. Discrete clicks don't have that failure mode. The one tradeoff:
-because the knob now has three click tiers (single/unused, double, triple),
-its double-click action waits a brief moment (comparable to Sleep and
-Mute's own double-click window) after the second click before firing, to
-see whether a third click follows. That's an imperceptible delay in
-practice and a worthwhile trade for a gesture that now always registers.
+cancel it. ScrollLock has none of these failure modes.
 
 ---
 
@@ -115,14 +134,15 @@ or vice versa.
   at; every other gesture in the cluster acts on the current focus without
   changing it.
 - **Seeing the current focus** — the media bar itself is the indicator.
-  It's lit and colored **red** when focus is on RGB, or **blue** when focus
-  is on Ambient, matching that subsystem's own on/off state (dim when that
-  subsystem is off, lit when it's on). No separate indicator exists or is
-  needed — the media bar already changes color continuously, not just as a
-  momentary flash, so it's always a glance away.
+  It is lit when the focused subsystem is on. While focus is on **Ambient**
+  it glows **white** (neutral, unambiguous "sound is active"). While focus
+  is on **RGB** it glows in the **current RGB color** at the current
+  brightness level, so the media bar feels like a physical extension of the
+  same lighting system as the keycaps. Dark when the focused subsystem is
+  off.
 
-Single clicks on Sleep and Mute are never affected by focus — they always
-mean exactly what section 5 says.
+Single clicks on Sleep are never affected by focus — they always mean
+exactly what section 5 says.
 
 ---
 
@@ -139,9 +159,11 @@ control focus.
   toggles RGB on or off.
 - **Knob, double-click (no drag in between), while focus is on RGB** —
   also toggles RGB on or off.
+- **ScrollLock key, long press (≥ 500 ms)** — also toggles RGB on or off
+  (Das keyboard only).
 
-All three controls always agree — turning RGB off through any one of them
-turns off the same single RGB state the other two read from.
+All four controls always agree — toggling RGB through any one of them
+toggles the same single RGB state the others read from.
 
 ### RGB effects
 
@@ -167,30 +189,36 @@ turns RGB on automatically if it was off, since pressing what looks like a
 
 ### RGB color palette
 
-Mute button double-click (while focus is on RGB) steps through a fixed
-palette of 16 preset colors, plus one additional 17th slot reserved for a
-fully custom color:
+There are three ways to cycle through colors, all while focus is on RGB
+and RGB is on:
+
+- **Knob single-click** — advances one step forward through the palette.
+  The 350 ms settle window means the action fires about a third of a second
+  after you click, which is imperceptible for a deliberate single-click but
+  gives time for a second click to register as a double-click instead.
+- **Knob horizontal scroll** (trackpad left/right swipe, or a tilt-wheel
+  mouse) — swipe right = next color, swipe left = previous color. The
+  dominant axis is used, so a diagonal swipe always resolves cleanly to
+  color cycling or brightness, never both.
+- **Mute button double-click** (while focus is on RGB) — advances one step
+  forward through the palette.
+
+All three cycle through the same fixed palette of 16 preset colors, plus
+one additional 17th slot reserved for a fully custom color:
 
 Red, Green, Blue, Cyan, Magenta, Yellow, Orange, Purple, Pink, Mint, Gold,
 Ice, Ember, Lime, Indigo, White, then **Custom**.
 
-Like the effect cycle, this only advances while RGB is on.
+Like the effect cycle, color cycling only runs while RGB is on.
 
 ### RGB brightness
 
-Mute button **single click** steps brightness through four fixed levels —
-25%, 50%, 75%, 100% — wrapping back to 25% after 100%. This is a coarse,
-predictable control meant for quick adjustments and, unlike the palette and
-effect cycling, it always runs regardless of whether RGB is currently on,
-so the brightness value is ready and correct the next time RGB is switched
-on.
-
-The knob gives finer control, while focus is on RGB:
+The knob gives continuous brightness control while focus is on RGB:
 
 - **Drag up/down** — continuously adjusts brightness (or, when the palette
   is parked on the Custom slot, adjusts hue instead — see below).
-- **Scroll** — nudges brightness in small (about 2%) increments per scroll
-  tick, for precise fine-tuning.
+- **Scroll up/down** (vertical scroll only) — nudges brightness in small
+  (~2%) increments per scroll tick, for precise fine-tuning.
 
 ### Custom hue (knob "hue mode")
 
@@ -199,8 +227,8 @@ RGB is on, and focus is on RGB, the knob's drag gesture switches from
 controlling brightness to controlling hue: dragging sweeps a full 360°
 color wheel, and the RGB color updates live at full saturation as you drag.
 Releasing leaves the color at wherever you stopped. This mode is
-exclusively a knob-drag behavior — it does not apply to scroll or to any
-other control.
+exclusively a knob-drag behavior — it does not apply to vertical scroll or
+to any other control.
 
 ---
 
@@ -219,23 +247,21 @@ of RGB. Switch focus back to RGB (double-click Play/Pause) at any time —
 Ambient Focus keeps playing at whatever volume it was left at; switching
 focus away from it doesn't pause or stop it.
 
-Single clicks on Sleep and Mute are never affected by any of this — they
-always mean exactly what section 5 says, in both focus states.
+Single clicks on Sleep are never affected by any of this — they always
+mean exactly what section 5 says, in both focus states.
 
 ### Knob — ambient volume
 
 - **Drag up/down** — continuously adjusts Ambient Focus's master volume
   from 0% to 100%, following the same up-is-louder direction as RGB
   brightness.
-- **Scroll** — nudges master volume in small (about 2%) increments per
-  scroll tick.
+- **Scroll up/down** (vertical scroll only) — nudges master volume in
+  small (~2%) increments per scroll tick.
 - **Double-click (no drag in between)** — mutes Ambient Focus if it's
   currently audible, or restores it to whatever volume it was at before
   muting if it's currently silent. Muting and unmuting this way never
   changes the Ambient Focus on/off switch itself — it only zeroes and
   restores the volume.
-- **Triple-click** — unchanged: still cycles switch type, the same as
-  while focus is on RGB (see section 3).
 
 ### Sleep button — ambient on/off
 
@@ -244,19 +270,17 @@ always mean exactly what section 5 says, in both focus states.
   toggle, not a one-way shutdown). The same action is also reachable from
   the media bar's Play/Pause single-click while focus is on Ambient; the
   redundancy is intentional, mirroring how RGB's own on/off is reachable
-  from three different controls in section 5.
+  from multiple controls in section 5.
 
 ### Mute button — ambient volume nudge
 
-- **Single click** — unchanged: steps RGB brightness through its usual
-  25/50/75/100% ladder.
 - **Double click** — nudges Ambient Focus's volume up by a fixed amount
   from wherever it currently sits, wrapping back down near 0% once it
-  passes 100%. This is deliberately **not** a fixed four-step ladder like
-  RGB brightness: because the knob can be dragged to any arbitrary volume
-  (11%, 22%, 63%, anything), Mute's double-click always steps from that
-  exact value rather than snapping to a canned percentage. Drag the knob to
-  roughly where you want, then double-click Mute to fine-nudge from there.
+  passes 100%. This is deliberately not a fixed four-step ladder: because
+  the knob can be dragged to any arbitrary volume (11%, 22%, 63%, anything),
+  Mute's double-click always steps from that exact value rather than
+  snapping to a canned percentage. Drag the knob to roughly where you want,
+  then double-click Mute to fine-nudge from there.
 
 ### Media bar — ambient browser
 
@@ -285,8 +309,7 @@ outline that fades in and back out over roughly a quarter of a second. It's
 intentionally minimal: a quiet confirmation that the action registered, not
 a notification or a toast. You'll see it on the knob, Sleep, Mute, or the
 media bar depending on which one you used. The same glow also confirms a
-successful switch-type change (knob triple-click) and a control-focus
-switch (Play/Pause double-click).
+successful control-focus switch (Play/Pause double-click).
 
 ### Discoverability
 
@@ -294,7 +317,7 @@ Every control's tooltip (shown on hover) updates its wording to reflect
 whichever subsystem currently has control focus, so hovering any control
 while focus is on Ambient will describe its ambient behavior rather than
 its RGB one. There is no separate onboarding walkthrough for this — the
-tooltips, plus the media bar's persistent red/blue coloring (section 4),
+tooltips, plus the media bar's persistent white/color coding (section 4),
 are the intended way to learn the mapping.
 
 ---

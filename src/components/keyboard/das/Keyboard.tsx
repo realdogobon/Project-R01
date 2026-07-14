@@ -307,7 +307,11 @@ export function Keyboard({
 
     if (code === "NumLock")    onLocksChange(p => ({...p, NumLock: realLockState ?? !p.NumLock}));
     if (code === "CapsLock")   onLocksChange(p => ({...p, CapsLock: realLockState ?? !p.CapsLock}));
-    if (code === "ScrollLock") onLocksChange(p => ({...p, ScrollLock: realLockState ?? !p.ScrollLock}));
+    // ScrollLock is repurposed as the Das-exclusive switch-type key (handled
+    // in DasKeyboardApp). It must NOT toggle the lock LED state here — the
+    // key animates normally via pressKey() but the ScrollLock indicator stays
+    // permanently off so it never confuses users or conflicts with the new
+    // switch-cycling gesture.
     forceTick(t => t+1);
     ensureLoopRunning();
   }, [ensureLoopRunning, onLocksChange]);

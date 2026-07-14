@@ -110,7 +110,7 @@ export function DasKeyboardApp({ onKeyVirtualDown, onKeyVirtualUp }: DasKeyboard
   // switching to Classic and back, an exam remount, a crash/reload. See
   // the header comment above and keyboard-controls.md section 6.
   const {
-    dasSwitchType: activeSwitch, setDasSwitchType: setActiveSwitch,
+    dasSwitchType: activeSwitch, setDasSwitchType, setActiveSwitch,
     dasRgbEnabled: rgbEnabled, setDasRgbEnabled: setRgbEnabled,
     dasRgbEffect, setDasRgbEffect,
     dasRgbPaletteIndex: rgbPaletteIndex, setDasRgbPaletteIndex: setRgbPaletteIndex,
@@ -133,6 +133,7 @@ export function DasKeyboardApp({ onKeyVirtualDown, onKeyVirtualUp }: DasKeyboard
   const rgbEffectRef = useRef(rgbEffect); rgbEffectRef.current = rgbEffect;
   const rgbBrightnessRef = useRef(rgbBrightness); rgbBrightnessRef.current = rgbBrightness;
   const rgbCustomHueRef = useRef(rgbCustomHue); rgbCustomHueRef.current = rgbCustomHue;
+  const rgbPaletteIndexRef = useRef(rgbPaletteIndex); rgbPaletteIndexRef.current = rgbPaletteIndex;
   const isCustomSlotRef = useRef(rgbPaletteIndex === RGB_PRESETS.length); isCustomSlotRef.current = rgbPaletteIndex === RGB_PRESETS.length;
   const focusRef = useRef(focus); focusRef.current = focus;
   const ambientOnRef = useRef(ambientOn); ambientOnRef.current = ambientOn;
@@ -263,12 +264,18 @@ export function DasKeyboardApp({ onKeyVirtualDown, onKeyVirtualUp }: DasKeyboard
         knobClickTimerRef.current = setTimeout(() => {
           const count = knobClickCountRef.current;
           knobClickCountRef.current = 0;
-          if (count >= 3) {
-            const order: Array<"blue"|"brown"|"red"> = ["blue","brown","red"];
-            const next = order[(order.indexOf(swRef.current)+1) % order.length];
-            setActiveSwitch(next);
-            flashAmbient("knob");
-          } else if (count === 2) {
+          if (count === 1) {
+            // Single-click in RGB mode: advance to the next color in the
+            // palette. No-op while focus is on Ambient or RGB is off — the
+            // knob's visual affordance is brightness/volume so a click that
+            // does nothing in those states avoids surprising the user.
+            if (focusRef.current === "rgb" && rgbEnabledRef.current) {
+              const total = RGB_PRESETS.length + 1; // +1 for custom hue slot
+              const next = (rgbPaletteIndexRef.current + 1) % total;
+              if (next < RGB_PRESETS.length) setRgbColor(RGB_PRESETS[next]);
+              setRgbPaletteIndex(next);
+            }
+          } else if (count >= 2) {
             if (focusRef.current === "ambient") {
               if (ambientVolumeRef.current > 0.001) {
                 ambientPreMuteVolumeRef.current = ambientVolumeRef.current;
@@ -292,10 +299,27 @@ export function DasKeyboardApp({ onKeyVirtualDown, onKeyVirtualUp }: DasKeyboard
     knobUpHandlerRef.current = up;
     document.addEventListener("mousemove", move);
     document.addEventListener("mouseup", up);
-  }, [flashAmbient, setActiveSwitch, setAmbientVolume, setRgbEnabled]);
+  }, [flashAmbient, setDasSwitchType, setActiveSwitch, setAmbientVolume, setRgbEnabled, setRgbColor, setRgbPaletteIndex]);
 
   const handleKnobWheel = useCallback((e: React.WheelEvent) => {
     e.stopPropagation();
+    // Horizontal scroll (trackpad two-finger left/right swipe, or a tilt
+    // wheel) cycles through the RGB color palette when focus is on RGB and
+    // RGB is on. We pick the dominant axis so a diagonal gesture never
+    // triggers both actions at once. deltaX > 0 = swipe left = previous
+    // color; deltaX < 0 = swipe right = next color (natural trackpad
+    // direction: swipe right to go forward).
+    if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
+      if (focusRef.current === "rgb" && rgbEnabledRef.current) {
+        const total = RGB_PRESETS.length + 1; // +1 for custom hue slot
+        const dir = e.deltaX > 0 ? -1 : 1;   // right swipe → next
+        const next = (rgbPaletteIndexRef.current + dir + total) % total;
+        if (next < RGB_PRESETS.length) setRgbColor(RGB_PRESETS[next]);
+        setRgbPaletteIndex(next);
+      }
+      return;
+    }
+    // Vertical scroll → brightness (RGB focus) or volume (Ambient) — unchanged.
     if (focusRef.current === "ambient") {
       const nv = Math.min(1, Math.max(0, ambientVolumeRef.current + (e.deltaY>0?-0.02:0.02)));
       setRotation(nv*360);
@@ -305,7 +329,69 @@ export function DasKeyboardApp({ onKeyVirtualDown, onKeyVirtualUp }: DasKeyboard
     const nv = Math.min(1, Math.max(0, rgbBrightnessRef.current + (e.deltaY>0?-0.02:0.02)));
     setRotation(nv*360);
     setRgbBrightness(nv);
-  }, [setAmbientVolume, setRgbBrightness]);
+  }, [setAmbientVolume, setRgbBrightness, setRgbColor, setRgbPaletteIndex]);
+
+  // ── ScrollLock key — Das-exclusive switch-type cycling ─────────────────
+  // This component only mounts when the Das keyboard is active, so this
+  // listener is automatically scoped to Das — it silently does nothing on
+  // the Classic keyboard because it never registers.
+  //
+  // Short press (keyup before 500 ms): advance switch type blue→brown→red→blue.
+  // Also updates the global activeSwitch so the typing-engine sound profile
+  // (which reads from that field) matches the new physics immediately.
+  //
+  // Long press (key held ≥ 500 ms): toggle RGB on/off as a secondary action.
+  // The long-press fires on the timer while the key is still held down;
+  // keyup then sees the flag and skips the short-press action so the two
+  // gestures never collide.
+  //
+  // e.preventDefault() on keydown blocks every other side-effect: the
+  // browser never sees it as a ScrollLock toggle, and the typing engine
+  // never processes it as a keystroke. The key animation still plays because
+  // Keyboard.tsx's own window-keydown listener fires (it was registered
+  // independently and e.preventDefault does NOT stop propagation).
+  useEffect(() => {
+    const timerRef = { current: null as ReturnType<typeof setTimeout> | null };
+    const longPressedRef = { current: false };
+    const LONG_PRESS_MS = 500;
+
+    const onDown = (e: KeyboardEvent) => {
+      if (e.code !== "ScrollLock" || e.repeat) return;
+      e.preventDefault();
+      longPressedRef.current = false;
+      timerRef.current = setTimeout(() => {
+        longPressedRef.current = true;
+        // Long press → toggle RGB
+        setRgbEnabled(!rgbEnabledRef.current);
+      }, LONG_PRESS_MS);
+    };
+
+    const onUp = (e: KeyboardEvent) => {
+      if (e.code !== "ScrollLock") return;
+      e.preventDefault();
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+      if (!longPressedRef.current) {
+        // Short press → cycle switch type
+        const order: Array<"blue"|"brown"|"red"> = ["blue","brown","red"];
+        const next = order[(order.indexOf(swRef.current) + 1) % order.length];
+        setDasSwitchType(next);   // Das physics (travel, spring)
+        setActiveSwitch(next);    // global → typing-engine sound profile
+        flashAmbient("knob");     // brief knob glow confirms the change
+      }
+      longPressedRef.current = false;
+    };
+
+    window.addEventListener("keydown", onDown);
+    window.addEventListener("keyup", onUp);
+    return () => {
+      window.removeEventListener("keydown", onDown);
+      window.removeEventListener("keyup", onUp);
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, [setDasSwitchType, setActiveSwitch, setRgbEnabled, flashAmbient]);
 
   // ── Sleep: click = toggle RGB on/off (always, regardless of focus).
   //    Double-click cycles RGB effect when focus is on RGB, or toggles
@@ -413,23 +499,29 @@ export function DasKeyboardApp({ onKeyVirtualDown, onKeyVirtualUp }: DasKeyboard
     flashAmbient("media");
   }, [flashAmbient, setAmbientMix, setAmbientOn]);
 
-  const indicatorColor = rgbEnabled
-    ? `rgb(${rgbColor[0]},${rgbColor[1]},${rgbColor[2]})`
-    : (SWITCH_INDICATOR[activeSwitch]?.dot ?? "#ff0000");
-  const indicatorShadow = rgbEnabled
-    ? `0 0 12px rgba(${rgbColor[0]},${rgbColor[1]},${rgbColor[2]},1),inset 0 1.2px 2px rgba(255,255,255,0.4)`
-    : `0 0 12px ${SWITCH_INDICATOR[activeSwitch]?.shadow ?? "rgba(255,0,0,1)"},inset 0 1.2px 2px rgba(255,255,255,0.4)`;
+  // Knob dot is a pure switch-type indicator — always shows blue/brown/red
+  // regardless of whether RGB is on or off, and regardless of the current
+  // RGB color. It is not wired to RGB at all; its sole job is to tell the
+  // user at a glance which switch they are currently using.
+  const indicatorColor = SWITCH_INDICATOR[activeSwitch]?.dot ?? "#ff0000";
+  const indicatorShadow = `0 0 12px ${SWITCH_INDICATOR[activeSwitch]?.shadow ?? "rgba(255,0,0,1)"},inset 0 1.2px 2px rgba(255,255,255,0.4)`;
 
-  // ── Media bar backlight — reads as "lit" whenever the currently *focused*
-  //    subsystem is on, colored blue for Ambient / red for RGB. Because this
-  //    is applied continuously (not just as a transient flash), the media
-  //    bar itself doubles as the persistent, glanceable "which system am I
-  //    steering right now" indicator — no separate UI needed for that.
+  // ── Media bar backlight — lit whenever the currently *focused* subsystem
+  //    is on. Color: white for Ambient focus (neutral, unambiguous "sound
+  //    is active"), or the actual current RGB color at the current brightness
+  //    level for RGB focus (so the media bar feels physically part of the
+  //    same lighting system as the keycaps). This makes the media bar a
+  //    persistent, glanceable "which system + which color" indicator with no
+  //    separate UI needed.
   const mediaLit = focus === "ambient" ? ambientOn : rgbEnabled;
-  const mediaLitColor = focus === "ambient" ? "rgba(125,195,255,0.95)" : "rgba(255,100,100,0.9)";
+  const [mr, mg, mb] = rgbColor;
+  const mediaLitOpacity = Math.min(0.95, 0.70 + rgbBrightness * 0.25);
+  const mediaLitColor = focus === "ambient"
+    ? "rgba(255,255,255,0.95)"
+    : `rgba(${mr},${mg},${mb},${mediaLitOpacity})`;
   const mediaLitGlow = focus === "ambient"
-    ? "drop-shadow(0 0 1px rgba(150,210,255,0.95)) drop-shadow(0 0 2px rgba(125,195,255,0.6))"
-    : "drop-shadow(0 0 1px rgba(255,60,60,0.95)) drop-shadow(0 0 2px rgba(255,40,40,0.6))";
+    ? "drop-shadow(0 0 1px rgba(255,255,255,0.95)) drop-shadow(0 0 2px rgba(255,255,255,0.6))"
+    : `drop-shadow(0 0 1px rgba(${mr},${mg},${mb},0.95)) drop-shadow(0 0 2px rgba(${mr},${mg},${mb},0.6))`;
 
   return (
     <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center",
@@ -627,7 +719,7 @@ export function DasKeyboardApp({ onKeyVirtualDown, onKeyVirtualUp }: DasKeyboard
                           outlineOffset:"2px", borderRadius:"50%", transition:"outline-color 0.25s ease" }}
                  onMouseDown={handleKnobMouseDown}
                  onWheel={handleKnobWheel}
-                 title={focus === "ambient" ? "Drag or scroll: Ambient volume · Double-click: mute/unmute · Triple-click: switch type" : "Drag or scroll: RGB brightness/hue · Double-click: RGB on/off · Triple-click: switch type"}>
+                 title={focus === "ambient" ? "Scroll ↑↓: Ambient volume · Double-click: mute/unmute" : "Scroll ↑↓: brightness · Scroll ←→: cycle color · Click: next color · Double-click: RGB on/off"}>
               <div style={{ position:"absolute", inset:0, pointerEvents:"none",
                             transform:`rotate(${rotation}deg)`,
                             transition:"transform 0.1s cubic-bezier(0.15,0.45,0.3,1)" }}>
