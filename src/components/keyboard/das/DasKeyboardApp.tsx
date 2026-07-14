@@ -331,18 +331,22 @@ export function DasKeyboardApp({ onKeyVirtualDown, onKeyVirtualUp }: DasKeyboard
     } else {
       sleepClickTimerRef.current = setTimeout(() => {
         sleepClickCountRef.current = 0;
-        setRgbEnabled(prev => !prev);
+        // Use the ref (always current) rather than a function updater, because
+        // setDasRgbEnabled in SettingsContext only accepts a concrete boolean —
+        // passing a function updater would make String(fn) get stored in
+        // localStorage instead of "true"/"false", corrupting the persisted state.
+        setRgbEnabled(!rgbEnabledRef.current);
       }, 300);
     }
   }, [flashAmbient, setAmbientOn, setRgbEnabled]);
 
-  // ── Mute: click = cycle RGB brightness in steps (always). Double-click
-  //    cycles RGB palette when focus is on RGB, or nudges ambient volume by
-  //    a fixed amount from wherever it currently sits when focus is on
-  //    Ambient — deliberately not a fixed 25/50/75/100 ladder, so dragging
-  //    the knob to an arbitrary level (22%, 11%, whatever) and then
-  //    double-clicking Mute steps from that exact value instead of
-  //    snapping to a canned one ─────────────────────────────────────────
+  // ── Mute: click = cycle RGB palette (when RGB is enabled and focus is on
+  //    RGB), or nudge Ambient volume (when focus is on Ambient). Single-click
+  //    no longer steps RGB brightness — that was visually gimmicky (knob
+  //    snapped instantly) and redundant with the knob drag. The knob is the
+  //    right control for brightness; Mute's single-click is now a no-op so
+  //    accidental single-clicks don't snap the knob. Double-click stays:
+  //    palette cycle on RGB focus, volume nudge on Ambient focus. ─────────
   const handleMuteClick = useCallback(() => {
     muteClickCountRef.current++;
     if (muteClickTimerRef.current) clearTimeout(muteClickTimerRef.current);
@@ -363,18 +367,13 @@ export function DasKeyboardApp({ onKeyVirtualDown, onKeyVirtualUp }: DasKeyboard
     } else {
       muteClickTimerRef.current = setTimeout(() => {
         muteClickCountRef.current = 0;
-        const steps = [0.25, 0.5, 0.75, 1];
-        const idx = steps.findIndex(s => Math.abs(s - rgbBrightnessRef.current) < 0.01);
-        const next = steps[(idx === -1 ? 3 : idx + 1) % steps.length];
-        // Do NOT call setRotation here — the rotation effect (which now has
-        // rgbBrightness as a dep) will fire automatically and set the correct
-        // angle based on whichever subsystem currently has focus. An explicit
-        // setRotation(next*360) would snap the knob to the brightness position
-        // even when focus is on Ambient and the knob should show volume.
-        setRgbBrightness(next);
+        // Single-click: no-op. Brightness is controlled by the knob (drag or
+        // scroll). The old step-through-four-levels behavior caused the knob
+        // to snap visually and felt gimmicky; removing it makes the knob the
+        // sole brightness control, which is what it looks like it should be.
       }, 300);
     }
-  }, [flashAmbient, setAmbientVolume, setRgbBrightness, setRgbColor, setRgbPaletteIndex, rgbPaletteIndex]);
+  }, [flashAmbient, setAmbientVolume, setRgbColor, setRgbPaletteIndex, rgbPaletteIndex]);
 
   // ── RGB media browser — prev/next step through RGB_EFFECTS, turning RGB
   //    on automatically if it was off (pressing what looks like a track
@@ -523,7 +522,7 @@ export function DasKeyboardApp({ onKeyVirtualDown, onKeyVirtualUp }: DasKeyboard
                     style={{ width:"100%", height:"100%", borderRadius:"50%", border:"1px solid #1a1a1c",
                              display:"flex", alignItems:"center", justifyContent:"center",
                              background:"linear-gradient(to bottom,#222225,#18181a)", cursor:"pointer", padding:0 }}
-                    title={focus === "ambient" ? "RGB Brightness Step (double-click: nudge Ambient volume)" : "RGB Brightness Step (double-click to cycle RGB color)"}
+                    title={focus === "ambient" ? "Double-click: nudge Ambient volume up" : "Double-click: cycle RGB color palette"}
                   >
                     <svg width="10" height="10" viewBox="0 0 24 24" style={{ fill:"currentColor", color: rgbEnabled ? "#d4d4d4" : "#737373", stroke:"currentColor", strokeWidth:1.5, strokeLinecap:"round", strokeLinejoin:"round", transition:"color 0.2s, filter 0.2s",
                                    filter: rgbEnabled ? "drop-shadow(0 0 1px rgba(255,255,255,0.95)) drop-shadow(0 0 2px rgba(255,255,255,0.55))" : "none" }}>
