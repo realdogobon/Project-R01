@@ -1,3 +1,4 @@
+- [Das keyboard dead after tab/model switch](das-keyboard-dead-after-switch.md) — activeRef stuck true in StrictMode cleanup + missing auto-refocus after switch; three-part fix in Keyboard.tsx + TypingScreen.tsx.
 - [Per-account state ownership](per-account-state-ownership.md) — a child component with its own persistence should own restore fully; don't let a parent keep a second, competing source of truth for the same state.
 - [StrictMode effect guards](strictmode-effect-guards.md) — a boolean "first run" ref only skips one of StrictMode's two dev mount firings; compare actual prev vs current dep values instead.
 - [One-time resume refs](one-time-resume-refs.md) — a ref seeded for a single resume-hydrate on child mount must be nulled after first use, or later fresh-start remounts silently reuse stale state.

@@ -192,53 +192,62 @@ export function Keyboard({
     if (activeRef.current) return;
     activeRef.current = true;
     const tick = (now: number) => {
-      let anyActive = false;
-      let anyStructuralChange = false;
-      if (rgbEnabledRef.current) paintRgb(now);
-      for (const key of DAS_LAYOUT) {
-        const s = statesRef.current.get(key.code);
-        if (!s) continue;
-        const prog = getProgress(s, now, swRef.current);
-        const travel = Math.max(-1.5, prog * getTravelPx(swRef.current));
-        const wasPressed = wobblesRef.current.has(`__pressed_${key.code}`);
-        const pressed = prog > 0.01;
+      try {
+        let anyActive = false;
+        let anyStructuralChange = false;
+        if (rgbEnabledRef.current) paintRgb(now);
+        for (const key of DAS_LAYOUT) {
+          const s = statesRef.current.get(key.code);
+          if (!s) continue;
+          const prog = getProgress(s, now, swRef.current);
+          const travel = Math.max(-1.5, prog * getTravelPx(swRef.current));
+          const wasPressed = wobblesRef.current.has(`__pressed_${key.code}`);
+          const pressed = prog > 0.01;
 
-        // Wobble trigger: key bottoms out at >90% travel
-        if (prog > 0.9 && !s.releasedAt && !wobblesRef.current.has(key.code)) {
-          wobblesRef.current.set(key.code, { t: now, dir: Math.random() < 0.5 ? 1 : -1 });
+          // Wobble trigger: key bottoms out at >90% travel
+          if (prog > 0.9 && !s.releasedAt && !wobblesRef.current.has(key.code)) {
+            wobblesRef.current.set(key.code, { t: now, dir: Math.random() < 0.5 ? 1 : -1 });
+          }
+          if (s.releasedAt && prog < 0.01) wobblesRef.current.delete(key.code);
+
+          let wobbleX = 0;
+          const w = wobblesRef.current.get(key.code);
+          if (w && prog > 0.01) {
+            const elapsed = now - w.t;
+            // Scaled up alongside the heavier PHYSICS/RELEASE_PHYSICS timings
+            // (~1.7x the original 80ms/0.3px) so the bottom-out wobble reads as
+            // a dense keycap settling under real mass, not a light snap-back.
+            if (elapsed < 135) wobbleX = w.dir * 0.5 * (1 - elapsed/135);
+          }
+
+          const wrap = wrapRefs.current.get(key.code);
+          if (wrap) wrap.style.transform = `translate3d(${wobbleX}px, ${travel}px, 0)`;
+
+          if (pressed !== wasPressed) {
+            anyStructuralChange = true;
+            if (pressed) wobblesRef.current.set(`__pressed_${key.code}`, { t: 0, dir: 0 });
+            else wobblesRef.current.delete(`__pressed_${key.code}`);
+          }
+
+          if (prog > 0.001 || (s.releasedAt && now - s.releasedAt < 260)) anyActive = true;
+
+          if (s.releasedAt && now - s.releasedAt > 260) {
+            statesRef.current.delete(key.code);
+            anyStructuralChange = true;
+          }
         }
-        if (s.releasedAt && prog < 0.01) wobblesRef.current.delete(key.code);
-
-        let wobbleX = 0;
-        const w = wobblesRef.current.get(key.code);
-        if (w && prog > 0.01) {
-          const elapsed = now - w.t;
-          // Scaled up alongside the heavier PHYSICS/RELEASE_PHYSICS timings
-          // (~1.7x the original 80ms/0.3px) so the bottom-out wobble reads as
-          // a dense keycap settling under real mass, not a light snap-back.
-          if (elapsed < 135) wobbleX = w.dir * 0.5 * (1 - elapsed/135);
+        if (anyStructuralChange) forceTick(t => t+1);
+        if (anyActive || rgbNeedsLoop()) {
+          rafRef.current = requestAnimationFrame(tick);
+        } else {
+          activeRef.current = false;
         }
-
-        const wrap = wrapRefs.current.get(key.code);
-        if (wrap) wrap.style.transform = `translate3d(${wobbleX}px, ${travel}px, 0)`;
-
-        if (pressed !== wasPressed) {
-          anyStructuralChange = true;
-          if (pressed) wobblesRef.current.set(`__pressed_${key.code}`, { t: 0, dir: 0 });
-          else wobblesRef.current.delete(`__pressed_${key.code}`);
-        }
-
-        if (prog > 0.001 || (s.releasedAt && now - s.releasedAt < 260)) anyActive = true;
-
-        if (s.releasedAt && now - s.releasedAt > 260) {
-          statesRef.current.delete(key.code);
-          anyStructuralChange = true;
-        }
-      }
-      if (anyStructuralChange) forceTick(t => t+1);
-      if (anyActive || rgbNeedsLoop()) {
-        rafRef.current = requestAnimationFrame(tick);
-      } else {
+      } catch (err) {
+        // If anything in the tick throws (shouldn't happen, but defensive),
+        // reset both flags so the next ensureLoopRunning() call can restart
+        // cleanly rather than seeing activeRef=true and returning early forever.
+        console.error("[Keyboard] tick error:", err);
+        rafRef.current = 0;
         activeRef.current = false;
       }
     };
@@ -260,7 +269,19 @@ export function Keyboard({
     }
   }, [rgbEnabled, rgbEffect, rgbColor, rgbBrightness, paintRgb, clearRgb, ensureLoopRunning]);
 
-  useEffect(() => () => cancelAnimationFrame(rafRef.current), []);
+  // On unmount (and on StrictMode's simulated-unmount between the two effect
+  // firings), cancel the pending frame AND reset the active flag so the next
+  // mount's ensureLoopRunning() doesn't see a stale `true` and return early
+  // before any frame has actually been scheduled.  Without this reset, the
+  // StrictMode sequence is:
+  //   mount → RGB effect sets activeRef=true, schedules frame
+  //   StrictMode cleanup → cancelAnimationFrame (frame gone) but activeRef still true
+  //   re-mount → ensureLoopRunning() sees true → returns early → loop never runs
+  useEffect(() => () => {
+    cancelAnimationFrame(rafRef.current);
+    rafRef.current = 0;
+    activeRef.current = false;
+  }, []);
 
   // realLockState: when this key-press came from a physical keyboard event,
   // the browser can tell us the OS lock state directly (via
@@ -337,6 +358,25 @@ export function Keyboard({
       window.removeEventListener("typing-error", onErr);
     };
   }, [pressKey, releaseKey]);
+
+  // When the browser tab becomes visible again (after the user switched away),
+  // the rAF loop may have throttled to 1 Hz or stopped entirely. Restart it
+  // so RGB animation and key-press physics resume immediately on return.
+  // Also restart on window focus for the keyboard-switch case: when the user
+  // closes the Settings modal the page regains focus and the loop should be
+  // live again without requiring a manual key press.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible") ensureLoopRunning();
+    };
+    const onFocus = () => ensureLoopRunning();
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onFocus);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [ensureLoopRunning]);
 
   useEffect(() => {
     const now = performance.now();

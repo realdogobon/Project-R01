@@ -610,6 +610,32 @@ export function TypingScreen({
     return () => window.removeEventListener("keydown", handleGlobalKeyFocus, true);
   }, [isFocused, countdown, strictViolation]);
 
+  // After a tab switch the input loses focus (isFocused=false) and stays that
+  // way until the user manually clicks or presses a key. Auto-refocus when the
+  // tab becomes visible again so the Das keyboard is immediately live — RGB
+  // loop, button clicks, and key animations all depend on a focused input.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible" && countdown === null && strictViolation === null) {
+        inputRef.current?.focus();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [countdown, strictViolation]);
+
+  // After switching keyboard models (via the Settings modal), the input is
+  // blurred because the modal had focus. Re-focus it as soon as the Das
+  // keyboard renders so button clicks and key animations work without the user
+  // needing to click into the text area first.
+  useEffect(() => {
+    if (keyboardModel === "das_keyboard_4" && countdown === null && strictViolation === null) {
+      // Small delay lets the keyboard finish mounting/animating in before we
+      // steal focus — avoids a race with the modal's exit animation.
+      const t = setTimeout(() => inputRef.current?.focus(), 80);
+      return () => clearTimeout(t);
+    }
+  }, [keyboardModel, countdown, strictViolation]);
 
   const handleInputFocus = useCallback(() => {
     setIsFocused(true);
