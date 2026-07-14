@@ -598,9 +598,11 @@ export function TypingScreen({
       }
 
       e.preventDefault();
-      e.stopPropagation();
-
-
+      // No stopPropagation — that would kill the capture phase and prevent
+      // Keyboard.tsx's window-bubble keydown listener from firing, making the
+      // key press animation dead until the user clicks back in. The typing
+      // engine reads from the <input> element's own events, not window-keydown,
+      // so letting this propagate does not cause a double-character input.
       inputRef.current?.focus();
     };
 

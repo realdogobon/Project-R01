@@ -196,10 +196,16 @@ export function DasKeyboardApp({ onKeyVirtualDown, onKeyVirtualUp }: DasKeyboard
   // currently dialing — ambient volume while focus is on Ambient, RGB
   // brightness otherwise — so it never shows a stale angle left over from
   // the other mode when you switch focus.
+  //
+  // rgbBrightness and ambientVolume are explicit deps (not refs) so this
+  // effect re-fires when SettingsContext hydrates from localStorage on the
+  // first load, correcting the initial rotation from the default value (1)
+  // to whatever was actually persisted. Without these deps the rotation
+  // effect only fires when focus changes, so the knob stays visually wrong
+  // until the user interacts with it or switches focus.
   useEffect(() => {
-    setRotation((focus === "ambient" ? ambientVolume : rgbBrightnessRef.current) * 360);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focus]);
+    setRotation((focus === "ambient" ? ambientVolume : rgbBrightness) * 360);
+  }, [focus, ambientVolume, rgbBrightness]);
 
   useEffect(() => {
     const clear = () => setMediaPressedBtn(null);
@@ -314,12 +320,18 @@ export function DasKeyboardApp({ onKeyVirtualDown, onKeyVirtualUp }: DasKeyboard
         setAmbientOn(!ambientOnRef.current);
         flashAmbient("sleep");
       } else if (rgbEnabledRef.current) {
-        setRgbEffect(prev => RGB_EFFECTS[(RGB_EFFECTS.indexOf(prev)+1) % RGB_EFFECTS.length]);
+        // Use rgbEffectRef.current (always fresh) + setDasRgbEffect directly
+        // rather than the setRgbEffect wrapper with a function updater. The
+        // wrapper evaluates updater(rgbEffect-at-render-time), not the current
+        // value, because handleSleepClick is a stale useCallback closure —
+        // its deps never include dasRgbEffect, so it was recreated only on
+        // mount, capturing whichever setRgbEffect instance existed then.
+        setDasRgbEffect(RGB_EFFECTS[(RGB_EFFECTS.indexOf(rgbEffectRef.current) + 1) % RGB_EFFECTS.length]);
       }
     } else {
       sleepClickTimerRef.current = setTimeout(() => {
         sleepClickCountRef.current = 0;
-        setRgbEnabled(!rgbEnabledRef.current);
+        setRgbEnabled(prev => !prev);
       }, 300);
     }
   }, [flashAmbient, setAmbientOn, setRgbEnabled]);
@@ -354,7 +366,11 @@ export function DasKeyboardApp({ onKeyVirtualDown, onKeyVirtualUp }: DasKeyboard
         const steps = [0.25, 0.5, 0.75, 1];
         const idx = steps.findIndex(s => Math.abs(s - rgbBrightnessRef.current) < 0.01);
         const next = steps[(idx === -1 ? 3 : idx + 1) % steps.length];
-        setRotation(next*360);
+        // Do NOT call setRotation here — the rotation effect (which now has
+        // rgbBrightness as a dep) will fire automatically and set the correct
+        // angle based on whichever subsystem currently has focus. An explicit
+        // setRotation(next*360) would snap the knob to the brightness position
+        // even when focus is on Ambient and the knob should show volume.
         setRgbBrightness(next);
       }, 300);
     }
