@@ -72,6 +72,7 @@ import { AccountPicker } from "../components/AccountPicker";
 import type { PracticeConfig } from "../pages/PracticeMode";
 import { AuthModal } from "../components/modals/AuthModal";
 import { WorkspaceDashboard } from "../components/dashboard/WorkspaceDashboard";
+import logoImage from "../assets/images/logo.png";
 import { useSettings, THEME_OPTIONS } from "../contexts/SettingsContext";
 import { SettingsModal } from "../components/modals/SettingsModal";
 import { useSoundEngine } from "../hooks/useSoundEngine";
@@ -3421,8 +3422,22 @@ export default function Workspace() {
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
               <div className="flex items-center gap-2">
+                <img
+                  src={logoImage}
+                  alt="RoyScript logo"
+                  className="h-[30px] md:h-[36px] w-auto select-none"
+                  draggable={false}
+                />
                 <span className="font-bold text-xl md:text-[26px] tracking-[-0.04em] text-neutral-900 dark:text-neutral-50 font-sans antialiased select-none leading-none">
-                  Document
+                  RoyScript
+                </span>
+                <span
+                  className="font-black text-[17px] md:text-[18px] tracking-[0.05em] uppercase font-sans antialiased select-none transition-all duration-300 leading-none"
+                  style={{
+                    color: themeAccentColor
+                  }}
+                >
+                  TSR
                 </span>
               </div>
               {user && (
