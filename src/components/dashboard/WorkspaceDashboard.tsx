@@ -2,7 +2,6 @@ import React, { useState, useTransition, useMemo } from "react";
 import { useAuth, TypingSession, CloudFile, LinkedAccountInfo, getAvatarColor } from "../../contexts/AuthContext";
 import { useSettings, THEME_OPTIONS } from "../../contexts/SettingsContext";
 import { useResizable } from "../../hooks/useResizable";
-import { SmoothInput } from "../ui/SmoothInputs";
 import {
   X, FileText, BarChart2, Trash2, Share2,
   Calendar, Clipboard, ChevronRight, Archive,
@@ -1497,8 +1496,7 @@ export function WorkspaceDashboard({ isOpen, onClose, onLoadFileToEditor, onOpen
                     </div>
 
                     <div className="relative w-full sm:w-64">
-                      <SmoothInput
-                        type="text"
+                      <input                         type="text"
                         placeholder="Search records..."
                         value={searchQuery}
                         onChange={e => setSearchQuery(e.target.value)}
@@ -1732,8 +1730,7 @@ export function WorkspaceDashboard({ isOpen, onClose, onLoadFileToEditor, onOpen
                     </div>
 
                     <div className="relative w-full sm:w-64">
-                      <SmoothInput
-                        type="text"
+                      <input                         type="text"
                         placeholder="Search drafts..."
                         value={searchQuery}
                         onChange={e => setSearchQuery(e.target.value)}

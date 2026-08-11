@@ -50,7 +50,6 @@ import {
 } from "../../hooks/useSoundEngine";
 import { previewAmbientSound, stopAmbientPreview } from "../../hooks/useAmbientEngine";
 import { motion, AnimatePresence } from "motion/react";
-import { SmoothInput } from "../ui/SmoothInputs";
 
 function cn(...classes: (string | undefined | null | boolean)[]) {
   return classes.filter(Boolean).join(" ");
@@ -1043,8 +1042,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                       {isSavingPreset && (
                         <div className="px-2 py-3 mb-2 rounded-lg bg-neutral-100 dark:bg-neutral-800">
                           <div className="flex items-center gap-2">
-                            <SmoothInput
-                              type="text"
+                            <input                               type="text"
                               autoFocus
                               placeholder="Preset name..."
                               value={newPresetName}

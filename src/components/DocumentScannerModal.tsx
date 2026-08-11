@@ -3,7 +3,6 @@ import ReactCrop, { Crop } from "react-image-crop";
 import "react-image-crop/dist/ReactCrop.css";
 import { motion, AnimatePresence } from "motion/react";
 import { useResizable } from "../hooks/useResizable";
-import { SmoothInput } from "./ui/SmoothInputs";
 import {
   X,
   Settings,
@@ -1388,8 +1387,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                     <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">Save to Library</h3>
                     <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">Give this scanned note a memorable title.</p>
 
-                    <SmoothInput
-                      type="text"
+                    <input                       type="text"
                       value={saveAsName}
                       onChange={(e) => setSaveAsName(e.target.value)}
                       onKeyDown={(e) => {

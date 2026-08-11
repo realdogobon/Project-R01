@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
-import { SmoothInput, SmoothTextarea } from "../components/ui/SmoothInputs";
 import { ArrowLeft, Play, CheckCircle, Clock, ShieldAlert, Sparkles, Loader2, Settings2, ArrowRight, RotateCcw, RotateCw, X, Zap, Trophy, FileText, BookOpen, HeartPulse, FastForward, PlaySquare, Lock, Hourglass, SlidersHorizontal, ChevronDown } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { useSoundEngine } from "../hooks/useSoundEngine";
@@ -1695,8 +1694,7 @@ export function PracticeMode({
                               <label className="block text-[13px] font-medium text-neutral-700 dark:text-neutral-300 mb-2">
                                 Session Title (Optional)
                               </label>
-                              <SmoothInput
-                                type="text"
+                              <input                                 type="text"
                                 value={title}
                                 onChange={(e) => setTitle(e.target.value)}
                                 placeholder="e.g. Speed Drill 1"
@@ -1712,8 +1710,7 @@ export function PracticeMode({
                                 <span className="text-[12px] text-neutral-500">{text.split(/\s+/).filter(Boolean).length} words</span>
                               </div>
                               <div className="relative flex-1 flex flex-col">
-                                <SmoothTextarea
-                                  value={text}
+                                <textarea                                   value={text}
                                   onChange={(e) => setText(e.target.value)}
                                   placeholder="Paste the text you want to use for practice..."
                                   className="w-full flex-1 min-h-[140px] bg-transparent border border-black/20 dark:border-white/20 rounded-md px-4 py-3 text-[14px] xl:text-[16px] leading-relaxed focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors resize-none"
@@ -2209,8 +2206,7 @@ export function PracticeMode({
                 <div className="flex items-center justify-center gap-2 font-mono text-center select-none py-4 relative">
                   {/* Hours */}
                   <div className="flex flex-col items-center">
-                    <SmoothInput
-                      type="number"
+                    <input                       type="number"
                       value={timerHrs}
                       onChange={(e) => {
                         const val = Math.max(0, Math.min(23, parseInt(e.target.value) || 0));
@@ -2246,8 +2242,7 @@ export function PracticeMode({
 
                   {/* Minutes */}
                   <div className="flex flex-col items-center">
-                    <SmoothInput
-                      type="number"
+                    <input                       type="number"
                       value={timerMins}
                       onChange={(e) => {
                         const val = Math.max(0, Math.min(59, parseInt(e.target.value) || 0));
@@ -2283,8 +2278,7 @@ export function PracticeMode({
 
                   {/* Seconds */}
                   <div className="flex flex-col items-center">
-                    <SmoothInput
-                      type="number"
+                    <input                       type="number"
                       value={timerSecs}
                       onChange={(e) => {
                         const val = Math.max(0, Math.min(59, parseInt(e.target.value) || 0));
@@ -2320,8 +2314,7 @@ export function PracticeMode({
 
                   {/* Milliseconds */}
                   <div className="flex flex-col items-center">
-                    <SmoothInput
-                      type="number"
+                    <input                       type="number"
                       value={timerMs}
                       onChange={(e) => {
                         const val = Math.max(0, Math.min(999, parseInt(e.target.value) || 0));

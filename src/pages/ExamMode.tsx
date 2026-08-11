@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from "react";
 import { X, ChevronRight, Check, Settings, Mouse } from "lucide-react";
-import { SmoothInput } from "../components/ui/SmoothInputs";
 import { useSettings, THEME_OPTIONS } from "../contexts/SettingsContext";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -111,8 +110,7 @@ export function ExamWizard({
               <div className="flex items-center justify-center gap-2 font-mono text-center select-none py-6 relative">
                 {/* Hours Box */}
                 <div className="flex flex-col items-center">
-                  <SmoothInput
-                    type="number"
+                  <input                     type="number"
                     value={timerHrs}
                     onChange={(e) => setTimerHrs(Math.max(0, Math.min(23, parseInt(e.target.value) || 0)))}
                     onWheel={(e) => {
@@ -138,8 +136,7 @@ export function ExamWizard({
 
                 {/* Minutes Box */}
                 <div className="flex flex-col items-center">
-                  <SmoothInput
-                    type="number"
+                  <input                     type="number"
                     value={timerMins}
                     onChange={(e) => setTimerMins(Math.max(0, Math.min(59, parseInt(e.target.value) || 0)))}
                     onWheel={(e) => {
@@ -165,8 +162,7 @@ export function ExamWizard({
 
                 {/* Seconds Box */}
                 <div className="flex flex-col items-center">
-                  <SmoothInput
-                    type="number"
+                  <input                     type="number"
                     value={timerSecs}
                     onChange={(e) => setTimerSecs(Math.max(0, Math.min(59, parseInt(e.target.value) || 0)))}
                     onWheel={(e) => {

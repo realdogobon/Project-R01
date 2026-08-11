@@ -2,7 +2,6 @@ import React, { useState } from "react";
 import { useAuth } from "../../contexts/AuthContext";
 import { X, Mail, Lock, User, Phone, CheckCircle, AlertCircle } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import { SmoothInput } from "../ui/SmoothInputs";
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -234,8 +233,7 @@ export function AuthModal({ isOpen, onClose, onBeforeSubmit }: AuthModalProps) {
                       </label>
                       <div className="relative">
                         <User className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-neutral-400 dark:text-neutral-600 z-10" />
-                        <SmoothInput
-                          type="text"
+                        <input                           type="text"
                           placeholder="John Doe"
                           value={displayName}
                           onChange={(e) => setDisplayName(e.target.value)}
@@ -251,8 +249,7 @@ export function AuthModal({ isOpen, onClose, onBeforeSubmit }: AuthModalProps) {
                       </label>
                       <div className="relative">
                         <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-neutral-400 dark:text-neutral-600 z-10" />
-                        <SmoothInput
-                          type="tel"
+                        <input                           type="tel"
                           placeholder="+91 98765..."
                           value={mobile}
                           onChange={(e) => setMobile(e.target.value)}
@@ -270,8 +267,7 @@ export function AuthModal({ isOpen, onClose, onBeforeSubmit }: AuthModalProps) {
                   </label>
                   <div className="relative">
                     <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-neutral-400 dark:text-neutral-600 z-10" />
-                    <SmoothInput
-                      type="email"
+                    <input                       type="email"
                       placeholder="you@domain.com"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
@@ -289,8 +285,7 @@ export function AuthModal({ isOpen, onClose, onBeforeSubmit }: AuthModalProps) {
                   </div>
                   <div className="relative">
                     <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-neutral-400 dark:text-neutral-600 z-10" />
-                    <SmoothInput
-                      type="password"
+                    <input                       type="password"
                       placeholder="••••••••"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}

@@ -40,7 +40,6 @@ import {
 import { LexicalEditor, $getRoot, $createParagraphNode, $getSelection, $isRangeSelection, $isNodeSelection, $setSelection, $createNodeSelection, $createRangeSelection, $isTextNode } from "lexical";
 import { Bold, Italic, Underline, Strikethrough, List, ListOrdered, Undo, Redo, Sun, Moon, Image as ImageIcon, AlignLeft, AlignCenter, AlignRight, Upload, Link, Unlink, Minus, Code, Terminal, Table as TableIcon, FileCode, Eye, Pencil, Command, Type, Quote, Indent, Outdent } from "lucide-react";
 import { Select, Dropdown, Dialog } from "./components";
-import { SmoothInput } from "../ui/SmoothInputs";
 import {
   commandsToCommandPaletteItems,
   registerKeyboardShortcuts,
@@ -559,11 +558,11 @@ function Toolbar({
         <div className="lexkit-table-dialog">
           <div className="lexkit-form-group">
             <label htmlFor="table-rows">Rows:</label>
-            <SmoothInput id="table-rows" type="number" min="1" max="20" value={tableConfig.rows} onChange={(e) => setTableConfig((prev) => ({ ...prev, rows: parseInt(e.target.value) || 1 }))} className="lexkit-input" />
+            <input id="table-rows" type="number" min="1" max="20" value={tableConfig.rows} onChange={(e) => setTableConfig((prev) => ({ ...prev, rows: parseInt(e.target.value) || 1 }))} className="lexkit-input" />
           </div>
           <div className="lexkit-form-group">
             <label htmlFor="table-columns">Columns:</label>
-            <SmoothInput id="table-columns" type="number" min="1" max="20" value={tableConfig.columns} onChange={(e) => setTableConfig((prev) => ({ ...prev, columns: parseInt(e.target.value) || 1 }))} className="lexkit-input" />
+            <input id="table-columns" type="number" min="1" max="20" value={tableConfig.columns} onChange={(e) => setTableConfig((prev) => ({ ...prev, columns: parseInt(e.target.value) || 1 }))} className="lexkit-input" />
           </div>
           <div className="lexkit-form-group">
             <label className="lexkit-checkbox-label">
@@ -583,7 +582,7 @@ function Toolbar({
         <div className="lexkit-table-dialog">
           <div className="lexkit-form-group">
             <label htmlFor="link-url">URL:</label>
-            <SmoothInput id="link-url" type="url" placeholder="https://..." value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} className="lexkit-input" autoFocus />
+            <input id="link-url" type="url" placeholder="https://..." value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} className="lexkit-input" autoFocus />
           </div>
           <div className="lexkit-dialog-actions">
             <button onClick={() => setShowLinkDialog(false)} className="lexkit-button-secondary">Cancel</button>
@@ -597,11 +596,11 @@ function Toolbar({
         <div className="lexkit-table-dialog">
           <div className="lexkit-form-group">
             <label htmlFor="image-url">Image URL:</label>
-            <SmoothInput id="image-url" type="url" placeholder="https://..." value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} className="lexkit-input" autoFocus />
+            <input id="image-url" type="url" placeholder="https://..." value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} className="lexkit-input" autoFocus />
           </div>
           <div className="lexkit-form-group">
             <label htmlFor="image-alt">Alt Text (optional):</label>
-            <SmoothInput id="image-alt" type="text" placeholder="Description..." value={imageAlt} onChange={(e) => setImageAlt(e.target.value)} className="lexkit-input" />
+            <input id="image-alt" type="text" placeholder="Description..." value={imageAlt} onChange={(e) => setImageAlt(e.target.value)} className="lexkit-input" />
           </div>
           <div className="lexkit-dialog-actions">
             <button onClick={() => setShowImageUrlDialog(false)} className="lexkit-button-secondary">Cancel</button>

@@ -17,7 +17,6 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { useResizable } from "../../hooks/useResizable";
-import { SmoothInput, SmoothTextarea } from "../ui/SmoothInputs";
 import {
   ScanDocument,
   getAllScans,
@@ -589,8 +588,7 @@ export const LibraryHub: React.FC<LibraryHubProps> = ({
               <div className="flex flex-col gap-1.5 mb-5 mt-2">
                 <label className="text-[13px] text-[#202020] dark:text-[#EAEAEA] pl-0.5">Search</label>
                 <div className="relative">
-                   <SmoothInput
-                     type="text"
+                   <input                      type="text"
                      placeholder="Search title or text..."
                      value={searchQuery}
                      onChange={e => setSearchQuery(e.target.value)}
@@ -673,8 +671,7 @@ export const LibraryHub: React.FC<LibraryHubProps> = ({
                   {/* Title textbox field */}
                   <div className="flex flex-col gap-1.5 mb-4 shrink-0">
                     <label className="text-[13px] text-[#202020] dark:text-[#EAEAEA] pl-0.5">Document Title</label>
-                    <SmoothInput
-                      type="text"
+                    <input                       type="text"
                       spellCheck={true}
                       value={editTitle}
                       onChange={e => {
@@ -697,8 +694,7 @@ export const LibraryHub: React.FC<LibraryHubProps> = ({
                       )}
                     </div>
 
-                    <SmoothTextarea
-                      spellCheck={true}
+                    <textarea                       spellCheck={true}
                       value={editContent}
                       onChange={e => {
                         setEditContent(e.target.value);

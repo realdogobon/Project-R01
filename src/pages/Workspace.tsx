@@ -6,7 +6,6 @@ import {
   DefaultTemplate,
   DefaultTemplateRef,
 } from "../components/lexkit/DefaultTemplate";
-import { SmoothInput, SmoothTextarea } from "../components/ui/SmoothInputs";
 import { ThemeProvider, useTheme } from "next-themes";
 const ThemeProviderCast: any = ThemeProvider;
 import {
@@ -4407,8 +4406,7 @@ export default function Workspace() {
                     <label className="block text-[10px] uppercase tracking-widest font-extrabold text-neutral-400 mb-1.5">
                       Document Title
                     </label>
-                    <SmoothInput
-                      type="text"
+                    <input                       type="text"
                       value={editingDoc.title}
                       onChange={(e) => setEditingDoc({ ...editingDoc, title: e.target.value })}
                       className="w-full px-3 py-2 bg-neutral-50 dark:bg-neutral-900 border border-black/10 dark:border-white/10 rounded-lg text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/50"
@@ -4419,8 +4417,7 @@ export default function Workspace() {
                     <label className="block text-[10px] uppercase tracking-widest font-extrabold text-neutral-400 mb-1.5">
                       Document Content
                     </label>
-                    <SmoothTextarea
-                      value={editingDoc.content}
+                    <textarea                       value={editingDoc.content}
                       onChange={(e) => setEditingDoc({ ...editingDoc, content: e.target.value })}
                       rows={10}
                       className="w-full px-3 py-2 bg-neutral-50 dark:bg-neutral-900 border border-black/10 dark:border-white/10 rounded-lg text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/50 font-mono resize-none leading-relaxed"
