@@ -209,13 +209,22 @@
   }
 
 
+    /*
+   * ── Selection, refined to match the brushed-steel caret.
+   *  • desaturated ink-toned slate (not generic blue) — matches --lexkit-fg
+   *  • low luminance fill (13–19%) so text stays the hero, highlight stays quiet
+   *  • soft inset shadow adds 1px of depth — a lifted-glass feel, not a sticker
+   *  • text darkens slightly under selection for contrast harmony
+   */
   ::selection {
-    background-color: rgba(59, 130, 246, 0.22) !important;
+    background-color: rgba(30, 41, 59, 0.15) !important;
     color: inherit !important;
+    text-shadow: 0 0.5px 0 rgba(30, 41, 59, 0.12) !important;
+    border-radius: 0.5px;
   }
-
   .dark ::selection {
-    background-color: rgba(96, 165, 250, 0.28) !important;
+    background-color: rgba(237, 237, 237, 0.19) !important;
+    text-shadow: 0 0.5px 0 rgba(237, 237, 237, 0.08) !important;
     color: inherit !important;
   }
 

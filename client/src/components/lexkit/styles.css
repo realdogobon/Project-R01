@@ -718,9 +718,11 @@
   text-align: right;
 }
 
+/* Quiet image-selection ring — softer than the default accent outline, matching the refined selection vibe */
 .lexical-image.selected {
-  outline: 2px solid var(--lexkit-accent);
+  outline: 1.5px solid color-mix(in oklab, var(--lexkit-fg, #000) 45%, transparent);
   outline-offset: 2px;
+  border-radius: 2px;
 }
 
 .lexical-image.uploading {
@@ -1307,7 +1309,12 @@ table[data-lexical-table-selection] {
 }
 
 table td[data-lexical-table-cell-selection] {
-  background-color: rgba(59, 130, 246, 0.1);
+  background-color: rgba(30, 41, 59, 0.15) !important;
+}
+[data-theme="dark"] table td[data-lexical-table-cell-selection],
+.dark table td[data-lexical-table-cell-selection],
+.lexkit-editor-wrapper[data-editor-theme="dark"] table td[data-lexical-table-cell-selection] {
+  background-color: rgba(237, 237, 237, 0.19) !important;
 }
 
 
