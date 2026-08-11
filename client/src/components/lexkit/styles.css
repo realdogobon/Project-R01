@@ -1421,6 +1421,13 @@ table td[data-lexical-table-cell-selection] {
 }
 
 
+/*
+ * ── The Caret, refined.
+ *  • 1.5px hairline with rounded ends (anti-aliased caps, no jagged edges)
+ *  • whisper contact shadow — 1px of soft depth, felt not seen
+ *  • faint ambient halo around the tip — the caret reads as alive on any paper,
+ *    light or dark; opacity is capped so it never crosses into neon
+ */
 .custom-smooth-caret {
   position: absolute;
   left: 0;
@@ -1429,8 +1436,11 @@ table td[data-lexical-table-cell-selection] {
   background-color: var(--lexkit-fg, #000);
   z-index: 10;
   pointer-events: none;
-  border-radius: 0;
+  border-radius: 1px;
   will-change: transform, height, opacity;
+  box-shadow:
+    0 0 0 0.5px color-mix(in oklab, var(--lexkit-fg, #000) 6%, transparent),
+    0 2px 5px -1px color-mix(in oklab, var(--lexkit-fg, #000) 20%, transparent);
 }
 
 .animate-caret-blink {

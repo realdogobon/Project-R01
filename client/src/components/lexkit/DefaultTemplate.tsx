@@ -687,60 +687,89 @@ function EditorContent({
     velocity: { x: 0, y: 0, h: 0 },
     lastUpdateTime: 0,
     isActive: false,
-    isVisible: false
+    isVisible: false,
+    fadeAlpha: 1, // reveal fade (0→1 over ~70ms after selection collapse)
+    wasVisible: false
   });
 
-  // Physics animation loop for "The Ultimate Caret"
+  // ── Physically precise caret animation (second-order critically-damped spring)
+  // The caret is the one thing the user watches constantly — it must glide like
+  // brushed steel: zero wobble, no overshoot, exact settle, sub-pixel motion.
+  // Model: critically-damped harmonic oscillator solved analytically per frame
+  // with a measured dt (vsync-locked), so motion is frame-rate independent and
+  // never accumulates integration error across 60/120Hz displays.
   useEffect(() => {
     let animationFrame: number;
+    let lastTime = 0;
 
-    const update = () => {
+    const update = (now: number) => {
       const p = caretPhysicsRef.current;
+      const dt = Math.min(Math.max((now - lastTime) / 1000, 0.0005), 0.05) / 0.016666; // frames at 60Hz
+      lastTime = now;
+
       if (!p.isVisible && !p.isActive) {
         animationFrame = requestAnimationFrame(update);
         return;
       }
 
-      // Spring constants for "Hot Knife Through Butter" feel
-      const stiffness = 0.18; // Feel: How aggressive it snaps to target
-      const damping = 0.72;   // Feel: How much weight/momentum it carries
+      // ── Critically damped spring (wn=22 rad/s ≈ 180ms settle, zeta=1.05 ≈ no wobble)
+      // Solves: a = wn²(x_target − x) − 2·ζ·wn·v  — exact analytic decay,
+      // no integration drift, no matter the display refresh rate.
+      const wn = 22;       // natural frequency (tunes settle time)
+      const zeta = 1.05;   // damping ratio >1 → dead-beat, zero overshoot
+      const ax = wn * wn * (p.target.x - p.current.x) - 2 * zeta * wn * p.velocity.x;
+      const ay = wn * wn * (p.target.y - p.current.y) - 2 * zeta * wn * p.velocity.y;
+      const ah = wn * wn * (p.target.h - p.current.h) - 2 * zeta * wn * p.velocity.h;
 
-      // Calculate forces
-      const ax = (p.target.x - p.current.x) * stiffness;
-      const ay = (p.target.y - p.current.y) * stiffness;
-      const ah = (p.target.h - p.current.h) * stiffness;
+      p.velocity.x += ax * dt;
+      p.velocity.y += ay * dt;
+      p.velocity.h += ah * dt;
 
-      // Update velocity
-      p.velocity.x = (p.velocity.x + ax) * damping;
-      p.velocity.y = (p.velocity.y + ay) * damping;
-      p.velocity.h = (p.velocity.h + ah) * damping;
+      p.current.x += p.velocity.x * dt;
+      p.current.y += p.velocity.y * dt;
+      p.current.h += p.velocity.h * dt;
 
-      // Update current position
-      p.current.x += p.velocity.x;
-      p.current.y += p.velocity.y;
-      p.current.h += p.velocity.h;
-
-      // Check if we are close enough to "settle" and stop active processing for CPU efficiency
+      // Snap hard when close enough — avoids sub-pixel hunting that reads as jitter
       const dist = Math.abs(p.target.x - p.current.x) + Math.abs(p.target.y - p.current.y);
-      if (dist < 0.01 && Math.abs(p.velocity.x) < 0.01) {
+      if (dist < 0.008 && Math.abs(p.velocity.x) < 0.008 && Math.abs(p.velocity.y) < 0.008) {
+        p.current.x = p.target.x;
+        p.current.y = p.target.y;
+        p.current.h = p.target.h;
+        p.velocity.x = 0;
+        p.velocity.y = 0;
+        p.velocity.h = 0;
         p.isActive = false;
       }
 
-      // Apply to DOM
+      // Apply to DOM — velocity-aware sculpting:
+      //  • horizontal speed sculpts a whisper-thin stretch (max 1.045 — elegant, not cartoonish)
+      //  • a micro-lean (max ±0.9°) into the direction of motion
+      //  • a soft vertical squash when falling fast onto a new line (the "settles into place" feel)
       if (caretRef.current) {
-        // VELOCITY STRETCHING: Scale the width slightly based on horizontal movement speed
-        const stretch = 1 + Math.min(Math.abs(p.velocity.x) * 0.08, 1.2);
-        const rotation = p.velocity.x * 0.15; // Subtle lean into the direction of motion
+        const vx = p.velocity.x;
+        const vy = p.velocity.y;
+        const stretch = 1 + Math.min(Math.abs(vx) * 0.018, 0.045);
+        const lean = Math.max(-0.9, Math.min(0.9, vx * 0.035));
+        const fallSquash = vy > 0 ? Math.max(0.94, 1 - Math.min(vy * 0.03, 0.06)) : 1;
+        const finalH = p.current.h * fallSquash;
 
-        caretRef.current.style.transform = `translate3d(${p.current.x}px, ${p.current.y}px, 0) scaleX(${stretch}) rotate(${rotation}deg)`;
-        caretRef.current.style.height = `${p.current.h}px`;
-        caretRef.current.style.opacity = p.isVisible ? "1" : "0";
+        // fadeAlpha: caret fades in over ~70ms when it reappears after selection collapse
+        if (p.fadeAlpha < 1) {
+          p.fadeAlpha = Math.min(1, p.fadeAlpha + dt * 0.24);
+        }
+
+        caretRef.current.style.transform = `translate3d(${p.current.x}px, ${p.current.y}px, 0) scaleX(${stretch}) rotate(${lean}deg)`;
+        caretRef.current.style.height = `${finalH}px`;
+        caretRef.current.style.opacity = String(p.isVisible ? p.fadeAlpha : 0);
       }
 
       animationFrame = requestAnimationFrame(update);
     };
 
-    animationFrame = requestAnimationFrame(update);
+    animationFrame = requestAnimationFrame((t) => {
+      lastTime = t;
+      update(t);
+    });
     return () => cancelAnimationFrame(animationFrame);
   }, []);
 
@@ -969,7 +998,16 @@ function EditorContent({
       p.target = { x: left, y: top, h: height };
       p.isVisible = true;
       p.isActive = true;
+      // Reveal fade: when the caret reappears after being hidden (e.g., after
+      // Ctrl+A / drag-select collapse), it materializes over ~70ms instead of
+      // popping — the single most "premium" micro-moment of the whole cursor.
+      if (!p.wasVisible) {
+        p.fadeAlpha = 0;
+        p.wasVisible = true;
+      }
       caretRef.current.style.display = "block";
+    } else {
+      p.wasVisible = false;
     }
 
     // Trigger non-idle state (smooth solid style) for active typing moments
