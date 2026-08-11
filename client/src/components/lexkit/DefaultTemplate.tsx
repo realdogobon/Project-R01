@@ -785,6 +785,21 @@ function EditorContent({
     }
   }, []);
 
+  // ----------------------------------------------------------------
+  // CARET SURGERY (round 2) — proper 60fps custom smooth caret
+  // Rules:
+  //  1. Native caret is hidden at the CSS level (caret-color: transparent
+  //     on the editable + all its descendants — no opacity gimmicks).
+  //  2. The custom caret is drawn ONLY for a collapsed (typing) point.
+  //     Any non-collapsed selection (Ctrl+A, drag-select, double-click)
+  //     hides the caret entirely — exactly like the native caret.
+  //  3. Positioning uses a freshly-built collapsed range at the
+  //     selection FOCUS point, never the selection bbox (bbox origin can
+  //     sit anywhere — at the anchor side, off-screen, negative coords).
+  //  4. The editable scrolls, the caret container doesn't — so we
+  //     subtract editable.scrollTop/scrollLeft from every measurement.
+  //  5. All updates are rAF-throttled so nothing fights the frame budget.
+  // ----------------------------------------------------------------
   const updateCaretPosition = useCallback(() => {
     if (!containerRef.current) return;
 
@@ -821,6 +836,16 @@ function EditorContent({
       return;
     }
 
+    // --- SURGERY FIX #1: non-collapsed selection → hide caret entirely ---
+    // The native caret disappears during any selection; ours must too.
+    // Otherwise Ctrl+A / drag-select leaves a stray caret floating around.
+    if (selection.isCollapsed === false) {
+      const p = caretPhysicsRef.current;
+      p.isVisible = false;
+      caretRef.current.style.display = "none";
+      return;
+    }
+
     const range = selection.getRangeAt(0);
 
     // Make sure selection is part of our editable wrapper
@@ -829,18 +854,51 @@ function EditorContent({
       return;
     }
 
-    // Get client rect of user's typing insertion point
-    let rect = range.getBoundingClientRect();
+    // --- SURGERY FIX #2: build a collapsed range at the FOCUS point ---
+    // The selection's bbox can start anywhere (anchor side, off-screen,
+    // negative coordinates when scrolled). The caret must follow the
+    // actual typing point, which is always the FOCUS end.
+    const focusNode = selection.focusNode;
+    const focusOffset = selection.focusOffset;
+    const caretRange = focusNode ? document.createRange() : null;
+    if (caretRange && focusNode) {
+      try {
+        caretRange.setStart(focusNode, Math.max(0, focusOffset));
+        caretRange.collapse(true);
+      } catch {
+        caretRef.current.style.display = "none";
+        return;
+      }
+    }
+
+    // --- SURGERY FIX #3: subtract the editable's scroll offsets ---
+    // The caret div lives in the non-scrolling lexkit-editor container
+    // while the text lives in the scrolling editable. Their vertical
+    // positions drift apart by exactly scrollTop / scrollLeft.
+    const scrollTop = editableEl.scrollTop;
+    const scrollLeft = editableEl.scrollLeft;
+
     const containerRect = containerRef.current.getBoundingClientRect();
 
     let left = 0;
     let top = 0;
     let height = 0;
     let fontSize = 16;
+    let sourceNode: Node | null = focusNode ?? selection.anchorNode;
+
+    // Get client rect of the user's typing insertion point (caret range)
+    // getClientRects()[0] gives the line box at the insertion point,
+    // which is more accurate than the whole-range bbox for wrapped lines.
+    const caretRects = caretRange ? caretRange.getClientRects() : null;
+    let rect: DOMRect | null = (caretRects && caretRects.length > 0) ? caretRects[0] : null;
+    // Fallback for detached-range rects that report zeroes
+    if (!rect || (rect.left === 0 && rect.top === 0)) {
+      rect = caretRange ? caretRange.getBoundingClientRect() : null;
+    }
 
     // Handle collapsed range on extremely empty lines, fallback elegantly
-    if (rect.left === 0 && rect.top === 0) {
-      const node = selection.anchorNode;
+    if (!rect || (rect.left === 0 && rect.top === 0)) {
+      const node = sourceNode;
       if (node) {
         let el = node.nodeType === Node.ELEMENT_NODE ? (node as HTMLElement) : node.parentElement;
         if (el) {
@@ -855,12 +913,12 @@ function EditorContent({
         }
       }
     } else {
-      left = rect.left - containerRect.left;
-      top = rect.top - containerRect.top;
+      left = rect.left - containerRect.left - scrollLeft;
+      top = rect.top - containerRect.top - scrollTop;
       height = rect.height;
 
       // Extract font size of the active container text block to calculate proportional caret size
-      const node = selection.anchorNode;
+      const node = sourceNode;
       if (node) {
         let el = node.nodeType === Node.ELEMENT_NODE ? (node as HTMLElement) : node.parentElement;
         if (el) {
@@ -924,9 +982,17 @@ function EditorContent({
     }, 550); // Blink state is restored when idle for 550ms
   }, []);
 
+  // rAF-throttled handleEvents so selectionchange/key/scroll storms don't
+  // burn the frame budget — max one measurement pass per animation frame
+  const pendingCaretUpdateRef = useRef(false);
   const handleEvents = useCallback(() => {
-    updateCaretPosition();
-    updateScrollStats();
+    if (pendingCaretUpdateRef.current) return;
+    pendingCaretUpdateRef.current = true;
+    requestAnimationFrame(() => {
+      pendingCaretUpdateRef.current = false;
+      updateCaretPosition();
+      updateScrollStats();
+    });
   }, [updateCaretPosition, updateScrollStats]);
 
   useEffect(() => {
