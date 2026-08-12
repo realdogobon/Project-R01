@@ -54,26 +54,7 @@ export interface DocumentScannerModalProps {
   setCropQueue: React.Dispatch<React.SetStateAction<Array<any>>>;
   scannerImgRef: React.RefObject<HTMLImageElement>;
 
-  /* ── Dormant pro-mode plumbing (ID splicer, handwriting eraser, book dewarp,
-     QR scan, auto-detect crops). Engine implementations live in Workspace.tsx;
-     the modal UI currently exposes no entry points. Props kept so the doors
-     can be re-opened with a single wiring pass later. ── */
-  scannerProMode?: "standard" | "book" | "idcard" | "erasewritings";
-  setScannerProMode?: React.Dispatch<React.SetStateAction<"standard" | "book" | "idcard" | "erasewritings">>;
-  idCardFront?: string | null;
-  setIdCardFront?: (url: string | null) => void;
-  idCardBack?: string | null;
-  setIdCardBack?: (url: string | null) => void;
-  idCardStep?: "front" | "back" | "ready";
-  setIdCardStep?: React.Dispatch<React.SetStateAction<"front" | "back" | "ready">>;
-  eraseTolerance?: number;
-  setEraseTolerance?: (val: number) => void;
-  detectedQrCodes?: string[];
-  applyHandwritingEraser?: () => void;
-  dewarpBookSpread?: () => void;
-  spliceIDCards?: () => void;
   handleAddToQueue: () => void;
-  handleAutoDetectCrops?: () => void;
   handlePageChange: (newPage: number) => Promise<void>;
   executeExtraction: () => Promise<string>;
 
@@ -99,8 +80,6 @@ export interface DocumentScannerModalProps {
 
   selectedScanner: string;
   setSelectedScanner: React.Dispatch<React.SetStateAction<string>>;
-  selectedFileType: string;
-  setSelectedFileType: React.Dispatch<React.SetStateAction<string>>;
   selectedColourMode: string;
   setSelectedColourMode: React.Dispatch<React.SetStateAction<string>>;
   selectedResolution: string;
@@ -152,8 +131,6 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
 
   selectedScanner,
   setSelectedScanner,
-  selectedFileType,
-  setSelectedFileType,
   selectedColourMode,
   setSelectedColourMode,
   selectedResolution,
@@ -677,24 +654,32 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
 
             {/* AI Model — pipeline routing for the scan */}
             <div className="flex flex-col gap-1.5 mb-5">
-              <label className="text-[13px] text-[#202020] dark:text-[#EAEAEA] pl-0.5">AI Model</label>
+              <label className="text-[13px] text-[#202020] dark:text-[#EAEAEA] pl-0.5">Scanner</label>
               <div className="relative">
                  <select
                    value={selectedScanner}
                    onChange={e => setSelectedScanner(e.target.value)}
                    className="w-full appearance-none bg-white dark:bg-[#2A2A35] border border-[#E5DCDA] dark:border-[#1A1A23] rounded-md px-3 py-1.5 text-[13px] text-[#202020] dark:text-[#EAEAEA] outline-none shadow-sm focus:border-[#C28181] dark:focus:border-[#60C5EA]"
                  >
-                    <optgroup label="Gemini">
+                    <optgroup label="Google Gemini">
                       <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+                      <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash-Lite</option>
                       <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+                      <option value="gemini-2.0-flash-exp">Gemini 2.0 Flash</option>
+                      <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
                     </optgroup>
                     <optgroup label="Groq">
                       <option value="groq-llama-3.3-70b">Llama 3.3 70B (Groq)</option>
+                      <option value="groq-llama-3.1-8b">Llama 3.1 8B (Groq)</option>
                       <option value="groq-mixtral-8x7b">Mixtral 8x7B (Groq)</option>
+                      <option value="groq-gemma2-9b">Gemma 2 9B (Groq)</option>
                     </optgroup>
                     <optgroup label="OpenAI">
                       <option value="openai-gpt-4o">GPT-4o</option>
                       <option value="openai-gpt-4o-mini">GPT-4o mini</option>
+                      <option value="openai-gpt-4.1">GPT-4.1</option>
+                      <option value="openai-gpt-4.1-mini">GPT-4.1 mini</option>
+                      <option value="openai-gpt-4.1-nano">GPT-4.1 nano</option>
                     </optgroup>
                  </select>
                  <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500 pointer-events-none" />
@@ -710,11 +695,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                      ? 'text-[#202020] dark:text-[#EAEAEA]'
                      : 'text-gray-400 dark:text-gray-500'
                  }`}>{detectedFileType}</span>
-                 {detectedFileType && (
-                   <CheckCircle className="w-3.5 h-3.5 ml-auto text-emerald-500 dark:text-emerald-400" />
-                 )}
               </div>
-              <span className="text-[11px] text-gray-400 dark:text-gray-500 pl-0.5">Detected automatically from your file</span>
             </div>
 
             {/* Color Profile Setting with unique bullet radios */}

@@ -85,7 +85,6 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = `/assets/pdf.worker.mjs`;
 import { ScannerEngine } from "../lib/ScannerEngine";
 import { ExportEngine } from "../lib/ExportEngine";
 import { ingestDocument, searchIntelligence, syncRagIndex, ScanDocument, getAllScans, deleteScan, updateDocument, restoreScan } from "../lib/rag-search";
-import { ScannerProEngine } from "../lib/ScannerProEngine";
 const globalScannerEngine = new ScannerEngine();
 
 
@@ -1114,48 +1113,12 @@ export default function Workspace() {
   }, [fontCssFamily]);
 
   const [isOcrLoading, setIsOcrLoading] = useState(false);
-  const [isTranslating, setIsTranslating] = useState(false);
   const [ocrResult, setOcrResult] = useState("");
   const [ocrError, setOcrError] = useState("");
 
-  const [isPrivacyMode, setIsPrivacyMode] = useState(false);
   const [editorZoom, setEditorZoom] = useState(1.0);
   const [isDragActive, setIsDragActive] = useState(false);
   const ocrInputRef = useRef<HTMLInputElement>(null);
-
-  const handleTranslate = async (targetLanguage: string) => {
-    if (!ocrResult) return;
-    try {
-      setIsTranslating(true);
-      setScannerLogs(prev => [...prev, `Translating to ${targetLanguage}...`]);
-
-      if (typeof navigator !== "undefined" && navigator.vibrate) {
-         navigator.vibrate([10]);
-      }
-
-      const res = await aiAwareFetch("/api/translate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: ocrResult, targetLanguage })
-      });
-      const data = await res.json();
-      if (res.ok && data.text) {
-        setOcrResult(data.text);
-        setScannerLogs(prev => [...prev, `Successfully translated to ${targetLanguage}.`]);
-        if (typeof navigator !== "undefined" && navigator.vibrate) {
-          navigator.vibrate([30]);
-        }
-      } else {
-        throw new Error(data.details || data.error || "Failed to translate");
-      }
-    } catch (err: any) {
-      console.error(err);
-      setOcrError("Failed to translate: " + err.message);
-    } finally {
-      setIsTranslating(false);
-    }
-  };
-
 
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [isLibraryOpen, setIsLibraryOpen] = useState(false);
@@ -1237,7 +1200,6 @@ export default function Workspace() {
   const [isEnhancementOpen, setIsEnhancementOpen] = useState<boolean>(false);
 
   const [selectedScanner, setSelectedScanner] = useState("gemini-2.5-flash");
-  const [selectedFileType, setSelectedFileType] = useState("PDF");
   const [selectedColourMode, setSelectedColourMode] = useState("Colour");
   const [selectedResolution, setSelectedResolution] = useState("200 dpi");
   const [selectedDestinationFolder, setSelectedDestinationFolder] = useState("");
@@ -1246,11 +1208,6 @@ export default function Workspace() {
     if (!isScannerOpen) return;
     setScannerLogs(prev => [...prev, `[Pipeline] Scan routed through ${selectedScanner}. Ready.`]);
   }, [selectedScanner]);
-
-  useEffect(() => {
-    if (!isScannerOpen) return;
-    setScannerLogs(prev => [...prev, `[Profiles] Active Output Format calibrated to ${selectedFileType}.`]);
-  }, [selectedFileType]);
 
   useEffect(() => {
     if (!isScannerOpen) return;
@@ -1306,122 +1263,6 @@ export default function Workspace() {
   const [fallbackType, setFallbackType] = useState<"save" | "print">("save");
   const [fallbackContent, setFallbackContent] = useState("");
   const [fallbackCopied, setFallbackCopied] = useState(false);
-
-
-  /* ═══ DORMANT PRO-MODE FAMILY (ID splicer, handwriting eraser, book dewarp,
-     QR scan, auto-detect crops, privacy mode, translate) ═══
-     All engine implementations below are real and functional, but the scanner
-     modal UI currently exposes no entry points that trigger them. State +
-     handlers are kept intact so a future pro-mode UI can be wired in with a
-     single pass — nothing here is junk; it is unopened doors.
-     (isPrivacyMode/setIsPrivacyMode defined at line ~1121; isTranslating +
-     handleTranslate defined at lines ~1117/1126 — same dormant pattern.)
-  */
-  const [scannerProMode, setScannerProMode] = useState<"standard" | "book" | "idcard" | "erasewritings">("standard");
-  const [idCardFront, setIdCardFront] = useState<string | null>(null);
-  const [idCardBack, setIdCardBack] = useState<string | null>(null);
-  const [idCardStep, setIdCardStep] = useState<"front" | "back" | "ready">("front");
-  const [eraseTolerance, setEraseTolerance] = useState<number>(1.0);
-  const [detectedQrCodes, setDetectedQrCodes] = useState<string[]>([]);
-
-  const applyHandwritingEraser = () => {
-    if (!scannerImgRef.current) return;
-    setScannerLogs(prev => [...prev, "⚡ Applying Localized AI Handwriting Eraser..."]);
-
-    const canvas = document.createElement("canvas");
-    canvas.width = scannerImgRef.current.naturalWidth;
-    canvas.height = scannerImgRef.current.naturalHeight;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    ctx.drawImage(scannerImgRef.current, 0, 0);
-
-    const clearedCanvas = ScannerProEngine.eraseHandwriting(canvas, eraseTolerance);
-    const newB64 = clearedCanvas.toDataURL("image/jpeg", 0.95);
-    setScannerPreviewUrl(newB64);
-    setScannerStitchedUrl(newB64);
-
-    setScannerLogs(prev => [...prev, "✓ All blue/red ink markings neutralized instantly!"]);
-    if (typeof navigator !== "undefined" && navigator.vibrate) {
-      navigator.vibrate([10, 30]);
-    }
-  };
-
-  const dewarpBookSpread = () => {
-    if (!scannerImgRef.current) return;
-    setScannerLogs(prev => [...prev, "📖 Straightening curved text near book spine..."]);
-
-    const canvas = document.createElement("canvas");
-    canvas.width = scannerImgRef.current.naturalWidth;
-    canvas.height = scannerImgRef.current.naturalHeight;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    ctx.drawImage(scannerImgRef.current, 0, 0);
-
-    const dewarped = ScannerProEngine.dewarpBookPage(canvas, 0.12);
-
-
-    const b64L = dewarped.left.toDataURL("image/jpeg", 0.92);
-    const b64R = dewarped.right.toDataURL("image/jpeg", 0.92);
-
-    setCropQueue(prev => [
-      ...prev,
-      {
-        id: Math.random().toString(36).substring(7),
-        page: scannerPage,
-        crop: { x: 0, y: 0, width: 50, height: 100, unit: "%" } as any,
-        imgUrl: b64L,
-        base64Data: b64L.split(",")[1]
-      },
-      {
-        id: Math.random().toString(36).substring(7),
-        page: scannerPage + 1,
-        crop: { x: 50, y: 0, width: 50, height: 100, unit: "%" } as any,
-        imgUrl: b64R,
-        base64Data: b64R.split(",")[1]
-      }
-    ]);
-
-    setScannerPage(p => p + 2);
-    setScannerLogs(prev => [...prev, "✓ Cylindrical book pages flattened & split into two separate flat captures!"]);
-    if (typeof navigator !== "undefined" && navigator.vibrate) {
-      navigator.vibrate([30]);
-    }
-  };
-
-  const spliceIDCards = async () => {
-    if (!idCardFront || !idCardBack) {
-      setScannerLogs(prev => [...prev, "⚠️ Please capture both FRONT and BACK of ID Card first."]);
-      return;
-    }
-    setScannerLogs(prev => [...prev, "📇 Splicing ID Front and Back cleanly onto A4 canvas..."]);
-
-    const fusedCanvas = await ScannerProEngine.spliceIdCard(idCardFront, idCardBack);
-    const newB64 = fusedCanvas.toDataURL("image/jpeg", 0.95);
-
-    setScannerPreviewUrl(newB64);
-    setScannerStitchedUrl(newB64);
-    setIdCardStep("ready");
-    setScannerLogs(prev => [...prev, "✓ ID front/back spliced successfully. Ready for OCR!"]);
-  };
-
-  const scanQRCodesOnDocument = async () => {
-    if (!scannerImgRef.current) return;
-    const canvas = document.createElement("canvas");
-    canvas.width = scannerImgRef.current.naturalWidth;
-    canvas.height = scannerImgRef.current.naturalHeight;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    ctx.drawImage(scannerImgRef.current, 0, 0);
-
-    ScannerProEngine.extractQrCodes(canvas).then(codes => {
-      if (codes.length > 0) {
-        setDetectedQrCodes(codes);
-        setScannerLogs(prev => [...prev, `🔍 Scanned ${codes.length} actionable bar/QR symbols.`]);
-      } else {
-        setScannerLogs(prev => [...prev, "No QR/Barcodes detected on the sheet layout."]);
-      }
-    });
-  };
 
 
 
@@ -1614,45 +1455,6 @@ export default function Workspace() {
       isFullPage: isFullPage
     }]);
     setScannerCrop(undefined);
-  };
-
-  const handleAutoDetectCrops = () => {
-    if (!scannerImgRef.current) return;
-    const canvas = document.createElement("canvas");
-    canvas.width = scannerImgRef.current.naturalWidth;
-    canvas.height = scannerImgRef.current.naturalHeight;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    ctx.drawImage(scannerImgRef.current, 0, 0);
-
-    const crops = globalScannerEngine.autoDetectCrops(canvas);
-
-    if (crops.length > 0) {
-      setScannerLogs(prev => [...prev, `Auto-detected ${crops.length} distinct items.`]);
-      crops.forEach((cvCrop) => {
-
-         const cCanvas = document.createElement('canvas');
-         cCanvas.width = cvCrop.width;
-         cCanvas.height = cvCrop.height;
-         const cCtx = cCanvas.getContext('2d');
-         if (cCtx) {
-           cCtx.drawImage(canvas, cvCrop.x, cvCrop.y, cvCrop.width, cvCrop.height, 0, 0, cvCrop.width, cvCrop.height);
-           const pCanvas = globalScannerEngine.purifyCanvas(cCanvas, selectedColourMode);
-           const b64 = pCanvas.toDataURL('image/jpeg', 0.9);
-
-           setCropQueue(prev => [...prev, {
-             id: Math.random().toString(36).substring(7),
-             page: scannerPage,
-             crop: { x: cvCrop.unitX, y: cvCrop.unitY, width: cvCrop.unitWidth, height: cvCrop.unitHeight, unit: '%' } as any,
-             imgUrl: b64,
-             base64Data: b64.split(',')[1]
-           }]);
-         }
-      });
-      if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate([20, 50, 20]);
-    } else {
-      setScannerLogs(prev => [...prev, "No dense distinct items found automatically."]);
-    }
   };
 
   const executeExtraction = async () => {
@@ -4099,9 +3901,7 @@ export default function Workspace() {
             setCropQueue={setCropQueue}
             scannerStitchedUrl={scannerStitchedUrl}
             scannerImgRef={scannerImgRef}
-            /* Dormant pro-mode plumbing — see DocumentScannerModalProps header comment */
             handleAddToQueue={handleAddToQueue}
-            handleAutoDetectCrops={handleAutoDetectCrops}
             handlePageChange={handlePageChange}
             executeExtraction={executeExtraction}
             scannerProgress={scannerProgress}
@@ -4123,8 +3923,6 @@ export default function Workspace() {
             setIsEnhancementOpen={setIsEnhancementOpen}
             selectedScanner={selectedScanner}
             setSelectedScanner={setSelectedScanner}
-            selectedFileType={selectedFileType}
-            setSelectedFileType={setSelectedFileType}
             selectedColourMode={selectedColourMode}
             setSelectedColourMode={setSelectedColourMode}
             selectedResolution={selectedResolution}
@@ -4160,8 +3958,7 @@ export default function Workspace() {
               setIsExamMode(true);
               setMode("Write");
             }}
-            userName={user?.displayName || "User"}
-            themeAccentColor={currentThemeObj?.colors[2] || "#0a84ff"}
+                      themeAccentColor={currentThemeObj?.colors[2] || "#0a84ff"}
           />
 
           {/* Unsaved Changes \u2014 Native OS Alert Dialog */}

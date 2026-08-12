@@ -91,49 +91,4 @@ export class ScannerEngine {
     }
   }
 
-  public autoDetectCrops(sourceCanvas: HTMLCanvasElement): Array<{ x: number, y: number, width: number, height: number, unitX: number, unitY: number, unitWidth: number, unitHeight: number }> {
-    if (!this.isLoaded()) return [];
-    try {
-      const src = this.cv.imread(sourceCanvas);
-      const gray = new this.cv.Mat();
-      const blurred = new this.cv.Mat();
-      const edges = new this.cv.Mat();
-      const contours = new this.cv.MatVector();
-      const hierarchy = new this.cv.Mat();
-
-      this.cv.cvtColor(src, gray, this.cv.COLOR_RGBA2GRAY, 0);
-      this.cv.GaussianBlur(gray, blurred, new this.cv.Size(5, 5), 0, 0, this.cv.BORDER_DEFAULT);
-      this.cv.Canny(blurred, edges, 75, 200, 3, false);
-
-      this.cv.findContours(edges, contours, hierarchy, this.cv.RETR_EXTERNAL, this.cv.CHAIN_APPROX_SIMPLE);
-
-      const crops = [];
-      const imageArea = src.rows * src.cols;
-
-      for (let i = 0; i < contours.size(); ++i) {
-        const contour = contours.get(i);
-        const rect = this.cv.boundingRect(contour);
-        const area = rect.width * rect.height;
-
-
-        if (area > imageArea * 0.02 && area < imageArea * 0.90) {
-
-          crops.push({
-             x: rect.x, y: rect.y, width: rect.width, height: rect.height,
-             unitX: (rect.x / src.cols) * 100,
-             unitY: (rect.y / src.rows) * 100,
-             unitWidth: (rect.width / src.cols) * 100,
-             unitHeight: (rect.height / src.rows) * 100
-          });
-        }
-        contour.delete();
-      }
-
-      src.delete(); gray.delete(); blurred.delete(); edges.delete(); contours.delete(); hierarchy.delete();
-      return crops;
-    } catch(e) {
-      console.error("Auto Detect Crops failed:", e);
-      return [];
-    }
-  }
 }
