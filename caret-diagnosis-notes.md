@@ -208,3 +208,70 @@ Final pass on C58wbags bundle (idle re-sync included):
 - restore: caret x 1158 vs line 1159 ✓
 - Desktop screenshot renders correctly (empty editor, light theme).
 Remaining actions: checkpoint (auto-publish enabled), deliver with explicit publish/hard-refresh instructions since user's phone shows the OLD published site.
+
+## OPTION A (user decision) — LexKit native caret 1:1
+User chose: ERADICATE custom caret root-to-branch, go NATIVE browser caret styled LexKit 1:1. Repo cloned at /home/ubuntu/lexkit (novincode/lexkit).
+
+LexKit findings:
+- NO custom caret anywhere in lexkit repo. Caret = 100% NATIVE. No caret-color override anywhere. No ::selection CSS at all in templates (browser default blue).
+- .lexkit-content-editable: flex 1; padding 20px; outline none; color var(--lexkit-fg); line-height 1.7; font-size 16px; bg var(--lexkit-bg); transition bg 0.2s. Focus: outline none only.
+- Table selection: table[data-lexical-table-selection] { box-shadow: 0 0 0 2px var(--lexkit-accent) }; td[data-lexical-table-cell-selection] { background: rgba(59,130,246,0.1) }
+- Theme vars: light fg #0f172a, bg #fff; dark fg #ededed, bg #0a0a0a, accent #ededed; accent-hover #d4d4d8.
+- Mobile: .lexkit-content-editable font-size 16px (prevent iOS zoom).
+- .lexkit-editor: position relative, flex col, min-height 400.
+
+Plan for our app:
+1. Delete custom caret div + physics loop + refs + state in DefaultTemplate.tsx
+2. Remove ALL caret listeners (selectionchange etc.) except what editor needs — keep minimal. NOTE: LexKit uses Lexical's native listeners only; remove our synthetic selectionchange/input double-shot/composition/touchend/visualViewport/idle-sync.
+3. Remove caret-color: transparent from our CSS (editable). Restore native caret.
+4. Optional polish: caret-color set to theme fg (native color anyway), ::selection styling (our existing elegant one is fine — keep, since LexKit uses default but user wanted elegant earlier; LexKit itself doesn't style ::selection; KEEP user-approved elegant selection).
+5. Table cell selection: use LexKit's rgba(59,130,246,0.1) rule.
+6. Remove .custom-smooth-caret CSS from styles.css; keep editor wrapper structure (lexkit-editor position relative stays — harmless, it's the real LexKit structure too).
+7. Caret container div (.custom-smooth-caret) + surrounding absolute overlay JSX removed.
+8. Verify typing/selection/mobile.
+
+## Option A removal map (DefaultTemplate.tsx)
+TSX file /home/ubuntu/royscript-tsr/client/src/components/lexkit/DefaultTemplate.tsx:
+- Lines 676-1121: entire custom caret subsystem (caretRef, caretFocused state, onViewportResizeRef, caretPhysicsRef, physics rAF loop ~697-819, updateCaretPosition ~874-1121) → DELETE whole block
+- Lines 1123-1241: handleEvents + useEffect listener registration (all caret-related) → DELETE; KEEP updateScrollStats wiring? handleEvents only calls updateCaretPosition + updateScrollStats — if deleted, updateScrollStats must still be called somewhere (scrollbar virtualization needs it). Check where updateScrollStats is defined and add its own listener effect (scroll, resize, input).
+- Lines 1402-1423: Lexical update-listener effect calling updateCaretPosition → REMOVE the updateCaretPosition call; keep onChange + could remove effect entirely (onChange needed? it's for parent). KEEP onChange rAF scheduling but drop caret part.
+- Lines 1533-1537: caret JSX div → DELETE
+- Floating toolbar selectionchange watcher (lines 253-269) → KEEP (toolbar placement, not caret)
+
+CSS styles.css:
+- Lines 512-519: caret-color: transparent / -webkit — REMOVE
+- Lines 1438-1463: .custom-smooth-caret rule → DELETE
+- Lines 1314-1325: table selection (ours) → replace with LexKit rule: table[data-lexical-table-selection]{box-shadow:0 0 0 2px var(--lexkit-accent)} td[data-lexical-table-cell-selection]{background:rgba(59,130,246,0.1)}
+- Note: earlier mobile selection allow rules (user-select:text etc on .lexkit-content-editable) — safe to keep (native selection)
+index.css:
+- Lines 83-90: base native caret colors — fine, keep
+- Lines 215-229: ::selection — keep our elegant styling (user approved earlier; LexKit itself uses default but ours matches brand)
+- Lines 424-433: absolute-positioning override for .lexkit-content-editable (print) — leave, unrelated
+- Also check index.css around 265-285: user-select:none blanket rule (was flagged earlier; must NOT apply to editable)
+
+LexKit actual caret facts (from cloned repo /home/ubuntu/lexkit):
+- No custom caret code at all. Native browser caret. No caret-color CSS anywhere. No ::selection CSS.
+- LexKit .lexkit-content-editable: flex 1; padding 20px; outline none; color var(--lexkit-fg); line-height 1.7; font-size 16px; bg var(--lexkit-bg); transition bg 0.2s ease. Focus: outline none only.
+- Mobile media query: font-size 16px (prevent iOS zoom), padding 16px.
+- Table selection: table[data-lexical-table-selection] { box-shadow: 0 0 0 2px var(--lexkit-accent) }; td[data-lexical-table-cell-selection] { background-color: rgba(59,130,246,0.1) }
+- Theme vars dark: fg #ededed, bg #0a0a0a, accent #ededed; light: fg #0f172a, bg #fff.
+
+## Option A progress (08:58)
+DONE in DefaultTemplate.tsx:
+- Deleted physics loop + caretPhysicsRef + caretRef + caretFocused state + onViewportResizeRef (sed 682-1110)
+- Deleted handleEvents + full listener effect (sed 683-801)
+- Restored scroll state vars + updateScrollStats (re-added via edit)
+- Added new useEffect: scrollbar-only listeners (editable scroll + window resize) calling updateScrollStats
+
+REMAINING errors (3):
+1. Line ~916: Lexical update-listener effect still calls updateCaretPosition → remove the rAF updateCaretPosition block; keep onChange part or delete whole effect (check if onChange needed by parent — methods ref only). Safe: keep effect, call onChange in rAF, remove updateCaretPosition reference.
+2. Line ~1032: JSX caret div (ref={caretRef} className="custom-smooth-caret") → DELETE the div
+3. Also check `const [caretFocused...]` usage gone; `setCaretFocused` gone; verify no other refs.
+
+CSS remaining in styles.css:
+- Lines ~512-519: caret-color:transparent block → DELETE
+- Lines ~1438-1463: .custom-smooth-caret rule → DELETE
+- Lines ~1318-1325: td cell selection dark variant rgba(237,237,237,0.19) → change to LexKit 1:1 rgba(59,130,246,0.1) (or keep theme-aware; LexKit uses rgba(59,130,246,0.1) in BOTH themes)
+index.css: keep ::selection elegant styling (lines 219-229), keep everything else.
+
+Then: tsc clean, dev server, verify typing/selection/mobile (375px), checkpoint+deliver.

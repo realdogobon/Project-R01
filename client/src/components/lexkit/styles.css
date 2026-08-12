@@ -509,14 +509,6 @@
   display: none;
 }
 
-.lexkit-content-editable,
-.lexkit-content-editable *,
-.lexkit-content-editable p,
-.lexkit-content-editable span,
-.lexkit-content-editable div {
-  caret-color: transparent !important;
-  -webkit-caret-color: transparent !important;
-}
 
 .lexkit-content-editable:focus {
   outline: none;
@@ -1316,12 +1308,7 @@ table[data-lexical-table-selection] {
 }
 
 table td[data-lexical-table-cell-selection] {
-  background-color: rgba(30, 41, 59, 0.15) !important;
-}
-[data-theme="dark"] table td[data-lexical-table-cell-selection],
-.dark table td[data-lexical-table-cell-selection],
-.lexkit-editor-wrapper[data-editor-theme="dark"] table td[data-lexical-table-cell-selection] {
-  background-color: rgba(237, 237, 237, 0.19) !important;
+  background-color: rgba(59, 130, 246, 0.1) !important;
 }
 
 
@@ -1434,33 +1421,6 @@ table td[data-lexical-table-cell-selection] {
   }
 }
 
-
-/*
- * ── The Caret, refined.
- *  • 1.5px hairline with rounded ends (anti-aliased caps, no jagged edges)
- *  • whisper contact shadow — 1px of soft depth, felt not seen
- *  • faint ambient halo around the tip — the caret reads as alive on any paper,
- *    light or dark; opacity is capped so it never crosses into neon
- */
-.custom-smooth-caret {
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 1.5px;
-  background-color: var(--lexkit-fg, #000);
-  z-index: 10;
-  pointer-events: none;
-  border-radius: 1px;
-  will-change: transform, height, opacity;
-  box-shadow:
-    0 0 0 0.5px color-mix(in oklab, var(--lexkit-fg, #000) 6%, transparent),
-    0 2px 5px -1px color-mix(in oklab, var(--lexkit-fg, #000) 20%, transparent);
-}
-
-/* NOTE: caret blink is now driven inside the JS physics loop (see
-   DefaultTemplate.tsx). A CSS animation animating `opacity` would fight
-   the loop's inline opacity writes and could pin the caret at opacity 0
-   mid-typing — so no keyframes here. */
 
 
 .lexkit-scrollbar-track-v {
