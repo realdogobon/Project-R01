@@ -677,8 +677,6 @@ function EditorContent({
   const containerRef = useRef<HTMLDivElement>(null);
   const caretRef = useRef<HTMLDivElement>(null);
   const [caretFocused, setCaretFocused] = useState(false);
-  const [isCaretIdle, setIsCaretIdle] = useState(true);
-  const caretIdleTimeoutRef = useRef<any>(null);
 
   // Physics-based Caret Ref
   const caretPhysicsRef = useRef({
@@ -689,7 +687,9 @@ function EditorContent({
     isActive: false,
     isVisible: false,
     fadeAlpha: 1, // reveal fade (0→1 over ~70ms after selection collapse)
-    wasVisible: false
+    wasVisible: false,
+    settledAt: 0,   // timestamp when the caret last locked onto its target
+    blinkPhaseOffset: 0 // keeps the blink rhythm continuous when active→idle
   });
 
   // ── Physically precise caret animation (second-order critically-damped spring)
@@ -704,41 +704,75 @@ function EditorContent({
 
     const update = (now: number) => {
       const p = caretPhysicsRef.current;
-      const dt = Math.min(Math.max((now - lastTime) / 1000, 0.0005), 0.05) / 0.016666; // frames at 60Hz
+      let elapsed = Math.min(Math.max((now - lastTime) / 1000, 0.0005), 0.1);
       lastTime = now;
 
-      if (!p.isVisible && !p.isActive) {
+      // ── The loop MUST keep ticking whenever the caret is visible, even
+      // when fully settled: that's what drives the idle blink. Only a hidden
+      // caret (nothing to render) lets the loop go idle — it wakes right back
+      // up the moment handleEvents flips isVisible on and posts an event.
+      if (!p.isVisible) {
         animationFrame = requestAnimationFrame(update);
         return;
       }
 
       // ── Critically damped spring (wn=22 rad/s ≈ 180ms settle, zeta=1.05 ≈ no wobble)
-      // Solves: a = wn²(x_target − x) − 2·ζ·wn·v  — exact analytic decay,
-      // no integration drift, no matter the display refresh rate.
-      const wn = 22;       // natural frequency (tunes settle time)
+      // Solves: a = wn²(x_target − x) − 2·ζ·wn·v per integration step.
+      // ── SUB-STEPPED: big dt bursts (120Hz displays, tab-switch hiccups,
+      // janky frames during fast typing) are chopped into ≤16.67ms slices
+      // so no single step can ever overshoot — motion stays silky at ANY
+      // typing speed, and the result is frame-rate independent.
+      const wn = 22;       // natural frequency, rad/s (tunes settle time)
       const zeta = 1.05;   // damping ratio >1 → dead-beat, zero overshoot
-      const ax = wn * wn * (p.target.x - p.current.x) - 2 * zeta * wn * p.velocity.x;
-      const ay = wn * wn * (p.target.y - p.current.y) - 2 * zeta * wn * p.velocity.y;
-      const ah = wn * wn * (p.target.h - p.current.h) - 2 * zeta * wn * p.velocity.h;
+      const maxStep = 0.016666; // seconds — spring stability ceiling: 2/wn ≈ 0.09s
+      let lastDt = 1;      // final sub-step dt in frame units (for fade/blink math)
+      while (elapsed > 1e-5) {
+        const s = Math.min(elapsed, maxStep); // seconds this sub-step covers
+        const dt = s / maxStep;               // 1.0 = one 60Hz frame (fades/blink)
+        lastDt = dt;
+        elapsed -= s;
 
-      p.velocity.x += ax * dt;
-      p.velocity.y += ay * dt;
-      p.velocity.h += ah * dt;
+        // Semi-implicit Euler with dt IN SECONDS. A previous revision fed
+        // frame-unit dt (up to 6 per 100ms step) into this wn=22 spring:
+        // wn·dt = 132 ≫ 2, so the integrator exploded to ±MAX_VALUE in one
+        // frame and the caret transform went to -3.4e38px. With dt in seconds
+        // the max step gives wn·dt = 0.37 — comfortably stable.
+        const ax = wn * wn * (p.target.x - p.current.x) - 2 * zeta * wn * p.velocity.x;
+        const ay = wn * wn * (p.target.y - p.current.y) - 2 * zeta * wn * p.velocity.y;
+        const ah = wn * wn * (p.target.h - p.current.h) - 2 * zeta * wn * p.velocity.h;
 
-      p.current.x += p.velocity.x * dt;
-      p.current.y += p.velocity.y * dt;
-      p.current.h += p.velocity.h * dt;
+        p.velocity.x += ax * s;
+        p.velocity.y += ay * s;
+        p.velocity.h += ah * s;
 
-      // Snap hard when close enough — avoids sub-pixel hunting that reads as jitter
+        p.current.x += p.velocity.x * s;
+        p.current.y += p.velocity.y * s;
+        p.current.h += p.velocity.h * s;
+      }
+
+      // Belt-and-braces velocity clamps — any residual numerical drift can
+      // never again reach transform-poisoning magnitudes.
+      const MAX_VEL = 4000; // px/s — above this the caret would teleport anyway
+      p.velocity.x = Math.max(-MAX_VEL, Math.min(MAX_VEL, p.velocity.x));
+      p.velocity.y = Math.max(-MAX_VEL, Math.min(MAX_VEL, p.velocity.y));
+      p.velocity.h = Math.max(-MAX_VEL / 2, Math.min(MAX_VEL / 2, p.velocity.h));
+
+      // Snap hard when close enough — avoids sub-pixel hunting that reads as jitter.
+      // Only transition INTO the settled state (active→idle); p.settledAt is the
+      // blink metronome anchor, so refreshing it every frame would keep the
+      // 150ms settle-grace perpetually true and the caret would never blink.
       const dist = Math.abs(p.target.x - p.current.x) + Math.abs(p.target.y - p.current.y);
       if (dist < 0.008 && Math.abs(p.velocity.x) < 0.008 && Math.abs(p.velocity.y) < 0.008) {
+        if (p.isActive) {
+          p.isActive = false;
+          p.settledAt = now;
+        }
         p.current.x = p.target.x;
         p.current.y = p.target.y;
         p.current.h = p.target.h;
         p.velocity.x = 0;
         p.velocity.y = 0;
         p.velocity.h = 0;
-        p.isActive = false;
       }
 
       // Apply to DOM — velocity-aware sculpting:
@@ -748,19 +782,39 @@ function EditorContent({
       if (caretRef.current) {
         const vx = p.velocity.x;
         const vy = p.velocity.y;
-        const stretch = 1 + Math.min(Math.abs(vx) * 0.018, 0.045);
-        const lean = Math.max(-0.9, Math.min(0.9, vx * 0.035));
-        const fallSquash = vy > 0 ? Math.max(0.94, 1 - Math.min(vy * 0.03, 0.06)) : 1;
+        // NOTE: vx/vy are now px/s (were px/frame before the dt fix), so the
+        // sculpting coefficients are scaled down by ~60 to keep the same feel.
+        const stretch = 1 + Math.min(Math.abs(vx) * 0.0003, 0.045);
+        const lean = Math.max(-0.9, Math.min(0.9, vx * 0.0006));
+        const fallSquash = vy > 0 ? Math.max(0.94, 1 - Math.min(vy * 0.0005, 0.06)) : 1;
         const finalH = p.current.h * fallSquash;
 
         // fadeAlpha: caret fades in over ~70ms when it reappears after selection collapse
         if (p.fadeAlpha < 1) {
-          p.fadeAlpha = Math.min(1, p.fadeAlpha + dt * 0.24);
+          p.fadeAlpha = Math.min(1, p.fadeAlpha + lastDt * 0.24);
         }
+
+        // ── Round 3: JS-driven blink. A CSS animation animating `opacity` was
+        // fighting these inline writes and could pin the caret at opacity 0
+        // mid-typing. Now the loop owns opacity entirely: solid while active,
+        // a true step-end blink while idle (exactly how the native caret feels).
+        const BLINK_PERIOD = 0.8;
+        // Continuous phase anchored at the moment the caret settled, so the
+        // blink rhythm never jumps or resets when typing resumes — one
+        // steady metronome for the lifetime of the editor.
+        const blinkPhase = ((now - p.settledAt) / 1000 + p.blinkPhaseOffset) % BLINK_PERIOD;
+        const blinkOn = blinkPhase < BLINK_PERIOD / 2;
+        // ── settle grace: hold solid for ~150ms after locking, so a
+        // mid-flight blink-off never catches the eye right as you stop typing
+        const grace = now - p.settledAt < 150;
+        // While actively gliding (typing), hold solid; when settled and past
+        // grace, ease into the blink rhythm so it feels alive, not frozen.
+        const activeGlow = (p.isActive && lastDt > 0) || grace ? 1 : (blinkOn ? 1 : 0);
+        const targetAlpha = Math.min(p.fadeAlpha, activeGlow);
 
         caretRef.current.style.transform = `translate3d(${p.current.x}px, ${p.current.y}px, 0) scaleX(${stretch}) rotate(${lean}deg)`;
         caretRef.current.style.height = `${finalH}px`;
-        caretRef.current.style.opacity = String(p.isVisible ? p.fadeAlpha : 0);
+        caretRef.current.style.opacity = String(p.isVisible ? targetAlpha : 0);
       }
 
       animationFrame = requestAnimationFrame(update);
@@ -837,7 +891,9 @@ function EditorContent({
     if (!editableEl) return;
 
     // Check focus state — also treat selection-inside-editor as focused,
-    // because click fires before document.activeElement updates in some browsers.
+    // because click/touch fires before document.activeElement updates in
+    // some browsers, and mobile soft-keyboard sessions can temporarily
+    // detach activeElement from the editable while typing is still live.
     const activeEl = document.activeElement;
     const isDocFocused = document.hasFocus();
     const nativeFocus = !!(activeEl && (editableEl.contains(activeEl) || activeEl === editableEl) && isDocFocused);
@@ -849,7 +905,18 @@ function EditorContent({
         return editableEl === r.commonAncestorContainer || editableEl.contains(r.commonAncestorContainer);
       } catch { return false; }
     })();
-    const hasFocus = nativeFocus || selectionInsideEditor;
+    // ── Round 3: mobile tolerance ── on touch devices the document may
+    // report !hasFocus() while the soft keyboard is open and the user is
+    // genuinely typing. If there is a live collapsed selection inside our
+    // editable, trust it over the focus flags.
+    const liveCollapsedTyping = selectionInsideEditor && (() => {
+      try {
+        const s = window.getSelection();
+        return !!s && s.rangeCount > 0 && s.isCollapsed && !!s.focusNode &&
+          editableEl.contains(s.focusNode);
+      } catch { return false; }
+    })();
+    const hasFocus = nativeFocus || selectionInsideEditor || liveCollapsedTyping;
     setCaretFocused(hasFocus);
 
     if (!caretRef.current) return;
@@ -988,6 +1055,19 @@ function EditorContent({
         return;
       }
 
+      // ── Round 3: Infinity guard ── during a rapid typing burst (or a DOM
+      // commit mid-flight), getClientRects() can hand back a poisoned rect
+      // (-3.4e38 / -Infinity). Writing that into the spring target poisons the
+      // whole physics state: the caret flies off-screen and never settles,
+      // which also freezes the blink. So clamp any non-finite coordinate to a
+      // safe sentinel (1e6 px away — far off-screen, finite, spring-safe) so
+      // the physics never breaks, and keep the LAST GOOD position as a warm
+      // fallback the caret can glide back to as soon as a valid rect lands.
+      const poisonedRect = !isFinite(left) || !isFinite(top) || !isFinite(height) || height <= 0;
+      if (poisonedRect) {
+        left = -1e6; top = -1e6; height = 20;
+      }
+
       // If this is the first jump or a long-distance jump, snap instantly, then glide
       const jumpDist = Math.abs(p.target.x - left) + Math.abs(p.target.y - top);
       if (!p.isVisible || jumpDist > 200) {
@@ -996,28 +1076,30 @@ function EditorContent({
       }
 
       p.target = { x: left, y: top, h: height };
-      p.isVisible = true;
       p.isActive = true;
-      // Reveal fade: when the caret reappears after being hidden (e.g., after
-      // Ctrl+A / drag-select collapse), it materializes over ~70ms instead of
-      // popping — the single most "premium" micro-moment of the whole cursor.
-      if (!p.wasVisible) {
-        p.fadeAlpha = 0;
-        p.wasVisible = true;
+      // A poisoned rect must never be seen: while the target is the sentinel
+      // the caret renders invisible; the moment a valid rect lands, the caret
+      // glides back to the right place (a clean "nothing happened" — the user
+      // never sees a caret teleport).
+      if (poisonedRect) {
+        p.isVisible = false;
+      } else {
+        p.isVisible = true;
+        // Reveal fade: when the caret reappears after being hidden (e.g., after
+        // Ctrl+A / drag-select collapse), it materializes over ~70ms instead of
+        // popping — the single most "premium" micro-moment of the whole cursor.
+        if (!p.wasVisible) {
+          p.fadeAlpha = 0;
+          p.wasVisible = true;
+        }
+        caretRef.current.style.display = "block";
       }
-      caretRef.current.style.display = "block";
     } else {
       p.wasVisible = false;
     }
 
-    // Trigger non-idle state (smooth solid style) for active typing moments
-    setIsCaretIdle(false);
-    if (caretIdleTimeoutRef.current) {
-      clearTimeout(caretIdleTimeoutRef.current);
-    }
-    caretIdleTimeoutRef.current = setTimeout(() => {
-      setIsCaretIdle(true);
-    }, 550); // Blink state is restored when idle for 550ms
+    // The blink itself is now fully owned by the physics loop (see above):
+    // solid while gliding, step-end blink while idle, with a settle grace.
   }, []);
 
   // rAF-throttled handleEvents so selectionchange/key/scroll storms don't
@@ -1048,6 +1130,17 @@ function EditorContent({
       editable.addEventListener("click", handleEvents);
       editable.addEventListener("mouseup", handleEvents);
       editable.addEventListener("pointerup", handleEvents);
+      // ── Round 3: mobile / IME typing events ──
+      // `input` fires for every character inserted via the soft keyboard,
+      // composition events fire while the IME is building text (Hindi/Chinese/
+      // predictive typing). selectionchange alone can lag during these,
+      // so we pin the caret in real time for a zero-lag feel.
+      editable.addEventListener("input", handleEvents);
+      editable.addEventListener("compositionstart", handleEvents);
+      editable.addEventListener("compositionupdate", handleEvents);
+      editable.addEventListener("compositionend", handleEvents);
+      // touchend fires even when activeElement hasn't updated yet (mobile)
+      editable.addEventListener("touchend", handleEvents);
     }
 
     // Hide caret when clicking outside the editor container
@@ -1077,11 +1170,13 @@ function EditorContent({
         editable.removeEventListener("click", handleEvents);
         editable.removeEventListener("mouseup", handleEvents);
         editable.removeEventListener("pointerup", handleEvents);
+        editable.removeEventListener("input", handleEvents);
+        editable.removeEventListener("compositionstart", handleEvents);
+        editable.removeEventListener("compositionupdate", handleEvents);
+        editable.removeEventListener("compositionend", handleEvents);
+        editable.removeEventListener("touchend", handleEvents);
       }
       clearTimeout(timeoutId);
-      if (caretIdleTimeoutRef.current) {
-        clearTimeout(caretIdleTimeoutRef.current);
-      }
     };
   }, [handleEvents]);
 
@@ -1365,7 +1460,7 @@ function EditorContent({
         {/* Buttery Smooth Custom Gliding Caret */}
         <div
           ref={caretRef}
-          className={`custom-smooth-caret ${isCaretIdle ? "animate-caret-blink" : ""}`}
+          className="custom-smooth-caret"
         />
 
         {/* Custom Virtualized Scrollbar Overlay */}

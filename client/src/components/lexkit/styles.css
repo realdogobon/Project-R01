@@ -483,6 +483,13 @@
 .lexkit-content-editable {
   flex: 1;
   padding: 20px 20px;
+  /* ── Round 3 fix: mobile selection must be allowed — native touch drag
+     selection + long-press handles must reach the text unhindered ── */
+  -webkit-user-select: auto;
+  user-select: auto;
+  -webkit-user-modify: read-write;
+  touch-action: auto;
+  -webkit-touch-callout: default;
   outline: none;
   color: var(--lexkit-fg);
   line-height: 1.7;
@@ -1450,14 +1457,10 @@ table td[data-lexical-table-cell-selection] {
     0 2px 5px -1px color-mix(in oklab, var(--lexkit-fg, #000) 20%, transparent);
 }
 
-.animate-caret-blink {
-  animation: caret-blink 0.8s step-end infinite;
-}
-
-@keyframes caret-blink {
-  from, to { opacity: 1; }
-  50% { opacity: 0; }
-}
+/* NOTE: caret blink is now driven inside the JS physics loop (see
+   DefaultTemplate.tsx). A CSS animation animating `opacity` would fight
+   the loop's inline opacity writes and could pin the caret at opacity 0
+   mid-typing — so no keyframes here. */
 
 
 .lexkit-scrollbar-track-v {
