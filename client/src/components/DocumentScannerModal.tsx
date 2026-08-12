@@ -233,12 +233,16 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
 
     const sidebarWidth = windowSize.width >= 768 ? 310 : 0;
     const basePageWidth = Math.max(180, Math.round(basePageHeight * pageAspectRatio));
-    const fitWidth = isSingleBookPage ? basePageWidth : basePageWidth * 2 + 10;
+    // Keep the shell wide enough for the full scanner toolbar in every PDF state.
+    // A cover page still renders as one page, but it should not force the controls
+    // into a narrow column while the following spread gets the wider book shell.
+    const spreadComfortWidth = basePageWidth * 2 + 10;
+    const fitWidth = Math.max(documentWidth, spreadComfortWidth);
     fitToSize(
       Math.min(1240, windowSize.width - 24, fitWidth + sidebarWidth + 48),
       Math.min(900, windowSize.height - 24, basePageHeight + 86),
     );
-  }, [basePageHeight, fitToSize, hasDocumentLoaded, isScannerOpen, isSingleBookPage, pageAspectRatio, windowSize.height, windowSize.width]);
+  }, [basePageHeight, documentWidth, fitToSize, hasDocumentLoaded, isScannerOpen, pageAspectRatio, windowSize.height, windowSize.width]);
 
   // Auto-detected file type from the uploaded file's extension (read-only indicator)
   const detectedFileType = React.useMemo(() => {
