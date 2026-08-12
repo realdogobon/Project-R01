@@ -961,7 +961,14 @@ function EditorContent({
     const caretRange = focusNode ? document.createRange() : null;
     if (caretRange && focusNode) {
       try {
-        caretRange.setStart(focusNode, Math.max(0, focusOffset));
+        // Clamp the offset to the node's actual length — mobile/IME sessions
+        // can report a focusOffset beyond the node's content (e.g. after
+        // Lexical's text-node merge), and an unclamped offset makes the range
+        // measure a stale/empty position instead of the insertion point.
+        const maxLen = focusNode.nodeType === Node.TEXT_NODE
+          ? (focusNode.textContent ?? "").length
+          : (focusNode as Element).childNodes.length;
+        caretRange.setStart(focusNode, Math.max(0, Math.min(focusOffset, maxLen)));
         caretRange.collapse(true);
       } catch {
         caretRef.current.style.display = "none";
@@ -984,31 +991,40 @@ function EditorContent({
     let fontSize = 16;
     let sourceNode: Node | null = focusNode ?? selection.anchorNode;
 
-    // Get client rect of the user's typing insertion point (caret range)
-    // getClientRects()[0] gives the line box at the insertion point,
-    // which is more accurate than the whole-range bbox for wrapped lines.
-    const caretRects = caretRange ? caretRange.getClientRects() : null;
-    let rect: DOMRect | null = (caretRects && caretRects.length > 0) ? caretRects[0] : null;
-    // Fallback for detached-range rects that report zeroes
-    if (!rect || (rect.left === 0 && rect.top === 0)) {
-      rect = caretRange ? caretRange.getBoundingClientRect() : null;
+    // ── Round 6: rebuilt measurement (v2) ── Single robust path:
+    // getBoundingClientRect() of the collapsed caret range. It always returns
+    // a finite rect (never the zero-height junk rects that getClientRects()
+    // can emit at weird offsets), and its top/left IS the line box at the
+    // insertion point. The old getClientRects() path was rejecting valid
+    // measurements mid-typing, forcing the stale element fallback.
+    const isValidRect = (r: DOMRect | null): boolean =>
+      !!r && isFinite(r.left) && isFinite(r.top) && isFinite(r.width) && isFinite(r.height) && r.height > 0;
+
+    let rect: DOMRect | null = null;
+    if (caretRange) {
+      try {
+        rect = isValidRect(caretRange.getBoundingClientRect()) ? caretRange.getBoundingClientRect() : null;
+      } catch {
+        rect = null;
+      }
     }
 
-    // Handle collapsed range on extremely empty lines, fallback elegantly
-    if (!rect || (rect.left === 0 && rect.top === 0)) {
+    if (!rect) {
+      // ── Element fallback ── only when range measurement is genuinely dead.
+      // Place the caret at the left edge of the source node's parent LINE
+      // (the paragraph's line box) using the text node's own font metrics —
+      // never at the parent's vertical center.
       const node = sourceNode;
-      if (node) {
-        let el = node.nodeType === Node.ELEMENT_NODE ? (node as HTMLElement) : node.parentElement;
-        if (el) {
-          const elRect = el.getBoundingClientRect();
-          left = elRect.left - containerRect.left;
-          top = elRect.top - containerRect.top;
+      let el = node ? (node.nodeType === Node.ELEMENT_NODE ? (node as HTMLElement) : node.parentElement) : null;
+      if (el) {
+        const elRect = el.getBoundingClientRect();
+        left = elRect.left - containerRect.left;
+        top = elRect.top - containerRect.top;
 
-          const style = window.getComputedStyle(el);
-          const parsedLineHeight = parseFloat(style.lineHeight);
-          fontSize = parseFloat(style.fontSize) || 16;
-          height = isNaN(parsedLineHeight) ? fontSize * 1.2 : parsedLineHeight;
-        }
+        const style = window.getComputedStyle(el);
+        const parsedLineHeight = parseFloat(style.lineHeight);
+        fontSize = parseFloat(style.fontSize) || 16;
+        height = isNaN(parsedLineHeight) ? fontSize * 1.2 : parsedLineHeight;
       }
     } else {
       left = rect.left - containerRect.left - scrollLeft;
@@ -1180,6 +1196,21 @@ function EditorContent({
     // Capture initial positions
     const timeoutId = setTimeout(handleEvents, 80);
 
+    // ── Round 6: idle re-sync ── insurance against any event the listener
+    // net misses (obscure IME flows, browser quirks). Every ~250ms of idle
+    // time while focused, the caret re-measures itself from the live
+    // selection — so the caret can never stay stale; any drift self-heals
+    // within a quarter of a second, invisibly.
+    let idleTimer: ReturnType<typeof setInterval> | null = null;
+    let lastActivity = 0;
+    const bumpActivity = () => { lastActivity = Date.now(); };
+    const origHandle = handleEvents;
+    const trackedHandle = () => { bumpActivity(); origHandle(); };
+    const idleSync = () => {
+      if (Date.now() - lastActivity > 250) handleEvents();
+    };
+    idleTimer = setInterval(idleSync, 250);
+
     return () => {
       document.removeEventListener("selectionchange", handleEvents);
       document.removeEventListener("mousedown", onDocMouseDown);
@@ -1205,6 +1236,7 @@ function EditorContent({
         onViewportResizeRef.current = null;
       }
       clearTimeout(timeoutId);
+      if (idleTimer) clearInterval(idleTimer);
     };
   }, [handleEvents]);
 

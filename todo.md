@@ -1,31 +1,28 @@
-# Mobile Caret Fix — Surgery Plan
+# Round 6 — Robust Caret Measurement Rebuild
 
-## Symptom (from user's phone screenshot, 13:59)
-Text: "Hhh jii jj h..." but caret renders at line START under "Hhh" — stale position, doesn't follow the typed text. Mobile soft-keyboard typing.
+## Symptom (screenshot 14:05)
+Text: "Jjjnnnb...nnnn" at bottom + "Hhh" visible; caret floats in EMPTY space, dead-center of the viewport, NOT at the text. Mobile + desktop.
 
-## Hypotheses
-- H1: On mobile, `input` events fire and Lexical commits, but selection measurement happens BEFORE DOM reflow → caretRange rect reports the OLD line-start position.
-- H2: `focusNode` during mobile input may point at a stale/merged text node; caretRange on it gives stale rect.
-- H3: Mobile keyboard appearance changes layout/scroll without firing editable 'scroll'; caret container coords stale.
-- H4: Caret measured from DOM selection while Lexical's internal state selection is elsewhere (focusNode of document.getSelection vs Lexical's $getSelection anchor).
+## Key insight from screenshot
+Caret x ≈ screen-width/2, y ≈ middle. No text near it. This matches the FALLBACK path geometry: when caretRange rect is zero/empty, the node-element fallback gives a position at the center of a container, OR the caretRects[0] zero-area rect at (0,0) → gets subtracted containerRect → weird pos. ALSO possibly: rect.left===0 && rect.top===0 check: after scrolling on mobile, a rect CAN legitimately have left/top==0 — the guard then wrongly takes the WRONG fallback (element rect of the TEXT NODE parent = whole paragraph? → center-ish).
 
-## Diagnosis steps
-- [ ] Re-read updateCaretPosition rect logic + listener wiring
-- [ ] Check caret container's positioning context (which parent is it absolute to? scroll compensation?)
-- [ ] Check whether focusNode during mobile input resolves to stale node
-- [ ] Reproduce in mobile emulation: input-event bursts, then verify caret transform vs text-end position
-- [ ] Check Lexical update listener: does custom caret get refreshed inside Lexical's own commit?
+## Candidate root causes
+- C1: `!rect || (rect.left === 0 && rect.top === 0)` — WRONG heuristic. A legitimately visible caret at (0,0) viewport coords triggers the fallback, which measures the PARENT element's rect (e.g. empty-space fallback to paragraph start) → stale/centered caret.
+- C2: caretRange.getClientRects() on a collapsed range at the END of a line can return a 0-width rect at line START in some Chrome versions under contain:layout paint.
+- C3: `focusNode` during composition/insert is a detached/stale node → rect zero → fallback to element rect of stale node → wrong.
+- C4: The caret container (lexkit-editor) is offset from the editable; scrollTop subtraction uses editableEl.scrollTop but the container rect includes header/toolbar offsets — fine, but the fallback path (element rect) may not subtract scrollTop at all? CHECK: fallback left/top computed with elRect - containerRect — NOT subtracting scrollTop! The editable content is scrolled; element rects are relative to editable padding box... Actually getBoundingClientRect of inner elements includes scroll offset of editable (it's relative to viewport). Then we subtract containerRect (editor). That's correct for BOTH paths. So scroll not the issue.
 
-## Fix
-- [ ] Double-shot measurement: measure immediately + again after requestAnimationFrame (post-reflow)
-- [ ] Prefer measurement right after Lexical commits
-- [ ] Watch resize for keyboard layout shifts
-- [ ] Ensure caret follows $getSelection from Lexical, not only DOM selection
+## Fix plan (rebuild measurement)
+- F1: Drop the `left===0 && top===0` heuristic entirely. Use ONLY caretRange.getClientRects()[0]; fallback to getBoundingClientRect; then fallback to caretRange.startContainer element + offset. Never use zero-detection fallback based on coords.
+- F2: Validate rects: width can legitimately be 0 (collapsed) but left/top must be finite; if any rect is finite, use it.
+- F3: On composition (isComposing), prefer measurement from compositionend; during composing, keep last good position visible (don't hide).
+- F4: Cross-check with Lexical selection if DOM selection is detached (node not in editable) → use Lexical focus to map to DOM node via editorState.read + getDOMTextNode.
+- F5: Keep double-shot + visualViewport + rAF-after-commit from Round 5.
 
 ## Verify
-- [ ] Mobile emulation (375x812): burst input events → caret at text end
-- [ ] Desktop: typing still smooth, blink works
-- [ ] Select-all hide + restore, scroll behavior
+- Desktop: type fast → caret at text end; mid-text click → caret follows; select-all hide
+- Mobile emulation 375px: burst typing + simulate keyboard-open resize → caret at end, not center
+- Verify fallback paths manually by forcing zero rects
 
 ## Deliver
-- [ ] Checkpoint + report
+- Checkpoint + report + publish reminder
