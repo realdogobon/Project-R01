@@ -438,16 +438,6 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
       if (scrollX !== 0 || scrollY !== 0) {
          viewportRef.current.scrollLeft += scrollX;
          viewportRef.current.scrollTop += scrollY;
-
-
-         const syntheticEvent = new PointerEvent("pointermove", {
-            clientX: clientX,
-            clientY: clientY,
-            bubbles: true,
-            cancelable: true,
-            buttons: 1
-         });
-         window.dispatchEvent(syntheticEvent);
       }
     }, 16);
   };
@@ -524,7 +514,9 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
 
   const onPointerUp = (e: React.PointerEvent) => {
     dragRef.current.isDragging = false;
-    if (viewportRef.current) viewportRef.current.releasePointerCapture(e.pointerId);
+    if (viewportRef.current?.hasPointerCapture(e.pointerId)) {
+      viewportRef.current.releasePointerCapture(e.pointerId);
+    }
   };
 
   const handleContextMenu = (e: React.MouseEvent) => {
@@ -994,7 +986,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                onPointerUp={onPointerUp}
                onPointerCancel={onPointerUp}
                onPointerLeave={onPointerUp}
-               className={`flex-1 min-h-0 w-full overflow-auto custom-scrollbar relative bg-[#F9F9F9] dark:bg-[#1A1A22] ${isSpacePressed ? (dragRef.current?.isDragging ? "cursor-grabbing" : "cursor-grab") : isCropEnabled ? "cursor-crosshair" : dragRef.current?.isDragging ? "cursor-grabbing" : "cursor-grab"}`}
+               className={`flex-1 min-h-0 w-full overflow-auto custom-scrollbar relative bg-[#F9F9F9] dark:bg-[#1A1A22] ${isCropEnabled && !isSpacePressed ? "pointer-events-none" : ""} ${isSpacePressed ? (dragRef.current?.isDragging ? "cursor-grabbing" : "cursor-grab") : isCropEnabled ? "cursor-crosshair" : dragRef.current?.isDragging ? "cursor-grabbing" : "cursor-grab"}`}
                onWheel={(e) => {
                   if (e.ctrlKey || e.metaKey || e.altKey) {
                      e.preventDefault();
@@ -1237,7 +1229,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                             </div>
 
                             {isCropEnabled ? (
-                              <div className={`absolute inset-0 z-20 ${isSpacePressed ? "pointer-events-none" : ""}`}>
+                              <div className={`absolute inset-0 z-20 pointer-events-auto ${isSpacePressed ? "pointer-events-none" : ""}`}>
                                 <ReactCrop crop={scannerCrop} onChange={(c) => setScannerCrop(c)} className="w-full h-full" style={{ height: '100%', width: '100%' }}>
                                   <img src={scannerStitchedUrl || scannerPreviewUrl || undefined} className="w-full h-full opacity-0 pointer-events-none block" style={{ objectFit: 'fill' }} alt="Crop overlay" />
                                 </ReactCrop>
@@ -1274,10 +1266,10 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                             onContextMenu={handleContextMenu}
                           >
                              {isCropEnabled ? (
-                               <ReactCrop
+                                 <ReactCrop
                                  crop={scannerCrop}
                                  onChange={(c) => setScannerCrop(c)}
-                                 className={isSpacePressed ? "pointer-events-none" : ""}
+                                 className={isSpacePressed ? "pointer-events-none" : "pointer-events-auto"}
                                >
                                  <img
                                     ref={scannerImgRef}
