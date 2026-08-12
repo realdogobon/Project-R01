@@ -37,6 +37,162 @@ const TopScannerIcon = ({ className }: { className?: string }) => (
   </svg>
 );
 
+interface ScannerCropSurfaceProps {
+  crop?: Crop;
+  onCommit: (crop: Crop) => void;
+  src?: string;
+  sourceWidth: number;
+  sourceHeight: number;
+  visualWidth: number;
+  visualHeight: number;
+  rotation: number;
+  scaleX: number;
+  scaleY: number;
+  className?: string;
+  style?: React.CSSProperties;
+  imageClassName: string;
+  imageStyle?: React.CSSProperties;
+  alt: string;
+}
+
+const normalizeQuarterTurn = (rotation: number) => {
+  const normalized = ((rotation % 360) + 360) % 360;
+  return normalized === 0 ? 0 : normalized === 90 ? 90 : normalized === 180 ? 180 : 270;
+};
+
+const sourcePointToVisual = (x: number, y: number, sourceWidth: number, sourceHeight: number, visualWidth: number, visualHeight: number, rotation: number, scaleX: number, scaleY: number) => {
+  let u = sourceWidth ? x / sourceWidth : 0;
+  let v = sourceHeight ? y / sourceHeight : 0;
+  if (scaleX < 0) u = 1 - u;
+  if (scaleY < 0) v = 1 - v;
+
+  let visualU = u;
+  let visualV = v;
+  switch (normalizeQuarterTurn(rotation)) {
+    case 90:
+      visualU = 1 - v;
+      visualV = u;
+      break;
+    case 180:
+      visualU = 1 - u;
+      visualV = 1 - v;
+      break;
+    case 270:
+      visualU = v;
+      visualV = 1 - u;
+      break;
+  }
+
+  return { x: visualU * visualWidth, y: visualV * visualHeight };
+};
+
+const visualPointToSource = (x: number, y: number, sourceWidth: number, sourceHeight: number, visualWidth: number, visualHeight: number, rotation: number, scaleX: number, scaleY: number) => {
+  const visualU = visualWidth ? x / visualWidth : 0;
+  const visualV = visualHeight ? y / visualHeight : 0;
+  let u = visualU;
+  let v = visualV;
+  switch (normalizeQuarterTurn(rotation)) {
+    case 90:
+      u = visualV;
+      v = 1 - visualU;
+      break;
+    case 180:
+      u = 1 - visualU;
+      v = 1 - visualV;
+      break;
+    case 270:
+      u = 1 - visualV;
+      v = visualU;
+      break;
+  }
+  if (scaleX < 0) u = 1 - u;
+  if (scaleY < 0) v = 1 - v;
+  return { x: u * sourceWidth, y: v * sourceHeight };
+};
+
+const sourceCropToVisual = (crop: Crop | undefined, props: ScannerCropSurfaceProps): Crop | undefined => {
+  if (!crop || !crop.width || !crop.height) return crop;
+  const sourceCrop = crop.unit === "%"
+    ? {
+        x: (crop.x / 100) * props.sourceWidth,
+        y: (crop.y / 100) * props.sourceHeight,
+        width: (crop.width / 100) * props.sourceWidth,
+        height: (crop.height / 100) * props.sourceHeight,
+      }
+    : crop;
+  const corners = [
+    sourcePointToVisual(sourceCrop.x, sourceCrop.y, props.sourceWidth, props.sourceHeight, props.visualWidth, props.visualHeight, props.rotation, props.scaleX, props.scaleY),
+    sourcePointToVisual(sourceCrop.x + sourceCrop.width, sourceCrop.y, props.sourceWidth, props.sourceHeight, props.visualWidth, props.visualHeight, props.rotation, props.scaleX, props.scaleY),
+    sourcePointToVisual(sourceCrop.x, sourceCrop.y + sourceCrop.height, props.sourceWidth, props.sourceHeight, props.visualWidth, props.visualHeight, props.rotation, props.scaleX, props.scaleY),
+    sourcePointToVisual(sourceCrop.x + sourceCrop.width, sourceCrop.y + sourceCrop.height, props.sourceWidth, props.sourceHeight, props.visualWidth, props.visualHeight, props.rotation, props.scaleX, props.scaleY),
+  ];
+  const left = Math.min(...corners.map((point) => point.x));
+  const top = Math.min(...corners.map((point) => point.y));
+  const right = Math.max(...corners.map((point) => point.x));
+  const bottom = Math.max(...corners.map((point) => point.y));
+  return { unit: "px", x: left, y: top, width: right - left, height: bottom - top };
+};
+
+const visualCropToSource = (crop: Crop, props: ScannerCropSurfaceProps): Crop => {
+  const points = [
+    visualPointToSource(crop.x, crop.y, props.sourceWidth, props.sourceHeight, props.visualWidth, props.visualHeight, props.rotation, props.scaleX, props.scaleY),
+    visualPointToSource(crop.x + crop.width, crop.y, props.sourceWidth, props.sourceHeight, props.visualWidth, props.visualHeight, props.rotation, props.scaleX, props.scaleY),
+    visualPointToSource(crop.x, crop.y + crop.height, props.sourceWidth, props.sourceHeight, props.visualWidth, props.visualHeight, props.rotation, props.scaleX, props.scaleY),
+    visualPointToSource(crop.x + crop.width, crop.y + crop.height, props.sourceWidth, props.sourceHeight, props.visualWidth, props.visualHeight, props.rotation, props.scaleX, props.scaleY),
+  ];
+  const left = Math.min(...points.map((point) => point.x));
+  const top = Math.min(...points.map((point) => point.y));
+  const right = Math.max(...points.map((point) => point.x));
+  const bottom = Math.max(...points.map((point) => point.y));
+  return {
+    unit: "px",
+    x: Math.max(0, Math.min(props.sourceWidth, left)),
+    y: Math.max(0, Math.min(props.sourceHeight, top)),
+    width: Math.max(0, Math.min(props.sourceWidth - left, right - left)),
+    height: Math.max(0, Math.min(props.sourceHeight - top, bottom - top)),
+  };
+};
+
+const ScannerCropSurface = React.memo(({
+  crop: committedCrop,
+  onCommit,
+  src,
+  sourceWidth,
+  sourceHeight,
+  visualWidth,
+  visualHeight,
+  rotation,
+  scaleX,
+  scaleY,
+  className,
+  style,
+  imageClassName,
+  imageStyle,
+  alt,
+}: ScannerCropSurfaceProps) => {
+  const transformProps = { sourceWidth, sourceHeight, visualWidth, visualHeight, rotation, scaleX, scaleY };
+  const [crop, setCrop] = useState<Crop | undefined>(() => sourceCropToVisual(committedCrop, { ...transformProps } as ScannerCropSurfaceProps));
+
+  useEffect(() => {
+    setCrop(sourceCropToVisual(committedCrop, { ...transformProps } as ScannerCropSurfaceProps));
+  }, [committedCrop, sourceWidth, sourceHeight, visualWidth, visualHeight, rotation, scaleX, scaleY]);
+
+  const handleChange = (nextCrop: Crop) => {
+    setCrop(nextCrop);
+  };
+
+  const handleComplete = (nextCrop: Crop) => {
+    setCrop(nextCrop);
+    onCommit(visualCropToSource(nextCrop, { ...transformProps } as ScannerCropSurfaceProps));
+  };
+
+  return (
+    <ReactCrop crop={crop} onChange={handleChange} onComplete={handleComplete} className={className} style={style}>
+      <img src={src} className={imageClassName} style={{ ...imageStyle, width: `${visualWidth}px`, height: `${visualHeight}px`, objectFit: 'fill' }} alt={alt} />
+    </ReactCrop>
+  );
+});
+
 export interface DocumentScannerModalProps {
   isScannerOpen: boolean;
   onClose: () => void;
@@ -198,6 +354,11 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
   const pageHeight = Math.round(fittedPageHeight * scannerZoom);
   const pageWidth = Math.max(180, Math.round(pageHeight * pageAspectRatio));
   const documentWidth = isSingleBookPage ? pageWidth : pageWidth * 2 + 10;
+  const cropSourceWidth = isSingleBookPage ? pageWidth : documentWidth;
+  const cropSourceHeight = pageHeight;
+  const cropIsQuarterTurned = normalizeQuarterTurn(scannerRotation) === 90 || normalizeQuarterTurn(scannerRotation) === 270;
+  const cropVisualWidth = cropIsQuarterTurned ? cropSourceHeight : cropSourceWidth;
+  const cropVisualHeight = cropIsQuarterTurned ? cropSourceWidth : cropSourceHeight;
 
   useEffect(() => {
     if (!isScannerOpen) {
@@ -379,110 +540,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
 
   const viewportRef = React.useRef<HTMLDivElement>(null);
   const dragRef = React.useRef({ isDragging: false, startX: 0, startY: 0, scrollL: 0, scrollT: 0 });
-  const scrollIntervalRef = React.useRef<any>(null);
-  const pointerPosRef = React.useRef({ x: 0, y: 0 });
-
-  const stopAutoScroll = () => {
-    if (scrollIntervalRef.current) {
-      clearInterval(scrollIntervalRef.current);
-      scrollIntervalRef.current = null;
-    }
-  };
-
-  const startAutoScrollLoop = () => {
-    if (scrollIntervalRef.current) return;
-    scrollIntervalRef.current = setInterval(() => {
-      if (!viewportRef.current || !isCropEnabled) {
-        stopAutoScroll();
-        return;
-      }
-
-      const rect = viewportRef.current.getBoundingClientRect();
-      const clientX = pointerPosRef.current.x;
-      const clientY = pointerPosRef.current.y;
-
-      if (clientX === 0 && clientY === 0) return;
-
-      const threshold = 80;
-      const maxScrollSpeed = 22;
-
-      let scrollX = 0;
-      let scrollY = 0;
-
-
-      if (clientY < rect.top + threshold) {
-         const distance = rect.top + threshold - clientY;
-         const factor = Math.min(2.0, distance / threshold);
-         scrollY = -maxScrollSpeed * factor;
-      }
-
-      else if (clientY > rect.bottom - threshold) {
-         const distance = clientY - (rect.bottom - threshold);
-         const factor = Math.min(2.0, distance / threshold);
-         scrollY = maxScrollSpeed * factor;
-      }
-
-
-      if (clientX < rect.left + threshold) {
-         const distance = rect.left + threshold - clientX;
-         const factor = Math.min(2.0, distance / threshold);
-         scrollX = -maxScrollSpeed * factor;
-      }
-
-      else if (clientX > rect.right - threshold) {
-         const distance = clientX - (rect.right - threshold);
-         const factor = Math.min(2.0, distance / threshold);
-         scrollX = maxScrollSpeed * factor;
-      }
-
-      if (scrollX !== 0 || scrollY !== 0) {
-         viewportRef.current.scrollLeft += scrollX;
-         viewportRef.current.scrollTop += scrollY;
-      }
-    }, 16);
-  };
-
-
-  useEffect(() => {
-    if (!isCropEnabled || !isScannerOpen) {
-      stopAutoScroll();
-      return;
-    }
-
-    const handleGlobalPointerMove = (e: PointerEvent) => {
-
-      if (e.buttons === 1) {
-         pointerPosRef.current = { x: e.clientX, y: e.clientY };
-         startAutoScrollLoop();
-      } else {
-         stopAutoScroll();
-      }
-    };
-
-    const handleGlobalPointerUp = () => {
-      stopAutoScroll();
-    };
-
-
-    window.addEventListener("pointermove", handleGlobalPointerMove, { passive: true });
-    window.addEventListener("pointerup", handleGlobalPointerUp);
-    window.addEventListener("pointercancel", handleGlobalPointerUp);
-
-    return () => {
-      window.removeEventListener("pointermove", handleGlobalPointerMove);
-      window.removeEventListener("pointerup", handleGlobalPointerUp);
-      window.removeEventListener("pointercancel", handleGlobalPointerUp);
-      stopAutoScroll();
-    };
-  }, [isCropEnabled, isScannerOpen]);
-
-  useEffect(() => {
-    return () => {
-      stopAutoScroll();
-    };
-  }, []);
-
-  const onPointerDown = (e: React.PointerEvent) => {
+  const beginViewportPan = (e: React.PointerEvent) => {
     const target = e.target as HTMLElement;
     if (target.closest("button") || target.closest("input") || target.closest("label") || target.closest("a")) {
       return;
@@ -502,6 +560,17 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
       };
       if (viewportRef.current) viewportRef.current.setPointerCapture(e.pointerId);
     }
+  };
+
+  const onPointerDown = (e: React.PointerEvent) => {
+    beginViewportPan(e);
+  };
+
+  const onCropPointerDownCapture = (e: React.PointerEvent) => {
+    if (e.button !== 1) return;
+    e.preventDefault();
+    e.stopPropagation();
+    beginViewportPan(e);
   };
 
   const onPointerMove = (e: React.PointerEvent) => {
@@ -986,7 +1055,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                onPointerUp={onPointerUp}
                onPointerCancel={onPointerUp}
                onPointerLeave={onPointerUp}
-               className={`flex-1 min-h-0 w-full overflow-auto custom-scrollbar relative bg-[#F9F9F9] dark:bg-[#1A1A22] ${isCropEnabled && !isSpacePressed ? "pointer-events-none" : ""} ${isSpacePressed ? (dragRef.current?.isDragging ? "cursor-grabbing" : "cursor-grab") : isCropEnabled ? "cursor-crosshair" : dragRef.current?.isDragging ? "cursor-grabbing" : "cursor-grab"}`}
+               className={`flex-1 min-h-0 w-full overflow-auto custom-scrollbar relative bg-[#F9F9F9] dark:bg-[#1A1A22] ${isSpacePressed ? (dragRef.current?.isDragging ? "cursor-grabbing" : "cursor-grab") : isCropEnabled ? "cursor-crosshair" : dragRef.current?.isDragging ? "cursor-grabbing" : "cursor-grab"}`}
                onWheel={(e) => {
                   if (e.ctrlKey || e.metaKey || e.altKey) {
                      e.preventDefault();
@@ -1003,7 +1072,10 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                  </div>
                )}
                <div className="w-full min-h-full flex items-center justify-center p-3 sm:p-8 transition-all duration-200">
-                  <div className="m-auto">
+                  <div
+                    className="m-auto relative"
+                    style={isCropEnabled && hasDocumentLoaded ? { width: `${cropVisualWidth}px`, height: `${cropVisualHeight}px` } : undefined}
+                  >
                   {scannerProgress && scannerProgress.status !== 'idle' && cropQueue.length > 0 ? (
                       <div className="relative flex flex-col items-center justify-center w-[280px] sm:w-[360px] h-[380px] sm:h-[480px]">
                          {/* Swiping Cards Deck */}
@@ -1160,15 +1232,16 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                      </div>
                   ) : scannerTotalPages > 1 ? (
                     // Book Spread Layout & Single Cover System
-                    <div className="relative flex items-stretch drop-shadow-2xl bg-transparent transition-transform duration-300 ease-in-out"
+                    <>
+                    <div className={`relative flex items-stretch drop-shadow-2xl bg-transparent transition-transform duration-300 ease-in-out ${isCropEnabled ? 'absolute left-1/2 top-1/2' : ''}`}
                          style={{
-                            transform: `rotate(${scannerRotation}deg) scaleX(${scannerScaleX}) scaleY(${scannerScaleY})`,
+                            transform: `${isCropEnabled ? 'translate(-50%, -50%) ' : ''}rotate(${scannerRotation}deg) scaleX(${scannerScaleX}) scaleY(${scannerScaleY})`,
                             transformOrigin: 'center center',
                             height: `${pageHeight}px`,
                             width: `${documentWidth}px`,
                             aspectRatio: 'auto',
-                            maxWidth: scannerZoom <= 1 ? '100%' : undefined,
-                            maxHeight: scannerZoom <= 1 ? '100%' : undefined
+                            maxWidth: !isCropEnabled && scannerZoom <= 1 ? '100%' : undefined,
+                            maxHeight: !isCropEnabled && scannerZoom <= 1 ? '100%' : undefined
                          }}
                          onContextMenu={handleContextMenu}
                     >
@@ -1228,28 +1301,52 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                               {content}
                             </div>
 
-                            {isCropEnabled ? (
-                              <div className={`absolute inset-0 z-20 pointer-events-auto ${isSpacePressed ? "pointer-events-none" : ""}`}>
-                                <ReactCrop crop={scannerCrop} onChange={(c) => setScannerCrop(c)} className="w-full h-full" style={{ height: '100%', width: '100%' }}>
-                                  <img src={scannerStitchedUrl || scannerPreviewUrl || undefined} className="w-full h-full opacity-0 pointer-events-none block" style={{ objectFit: 'fill' }} alt="Crop overlay" />
-                                </ReactCrop>
-                              </div>
-                            ) : null}
                           </>
                         );
                       })()}
                     </div>
+                    {isCropEnabled ? (
+                      <div onPointerDownCapture={onCropPointerDownCapture} className={`absolute inset-0 z-20 pointer-events-auto ${isSpacePressed ? "pointer-events-none" : ""}`}>
+                        <ScannerCropSurface
+                          crop={scannerCrop}
+                          onCommit={setScannerCrop}
+                          src={scannerStitchedUrl || scannerPreviewUrl || undefined}
+                          sourceWidth={cropSourceWidth}
+                          sourceHeight={cropSourceHeight}
+                          visualWidth={cropVisualWidth}
+                          visualHeight={cropVisualHeight}
+                          rotation={scannerRotation}
+                          scaleX={scannerScaleX}
+                          scaleY={scannerScaleY}
+                          className="w-full h-full"
+                          style={{ height: '100%', width: '100%' }}
+                          imageClassName="w-full h-full opacity-0 pointer-events-none block"
+                          imageStyle={{ objectFit: 'fill' }}
+                          alt="Crop overlay"
+                        />
+                      </div>
+                    ) : null}
+                    </>
                   ) : (
                     // Single Page Layout (Seamlessly fit without scroll when 100%)
-                    <div className="relative shadow-2xl bg-white dark:bg-[#f6f6f6] rounded-sm transition-transform duration-300"
-                         style={{
-                            transform: `rotate(${scannerRotation}deg) scaleX(${scannerScaleX}) scaleY(${scannerScaleY})`,
-                            transformOrigin: 'center center',
-                            width: `${pageWidth}px`,
-                            height: `${pageHeight}px`,
-                            maxWidth: scannerZoom <= 1 ? '100%' : undefined,
-                            maxHeight: scannerZoom <= 1 ? '100%' : undefined
-                         }}>
+                    <>
+                    <div
+                      className={`relative shadow-2xl bg-white dark:bg-[#f6f6f6] rounded-sm transition-transform duration-300 ${isCropEnabled ? 'absolute left-1/2 top-1/2' : ''}`}
+                      style={{
+                        transform: `${isCropEnabled ? 'translate(-50%, -50%) ' : ''}rotate(${scannerRotation}deg) scaleX(${scannerScaleX}) scaleY(${scannerScaleY})`,
+                        transformOrigin: 'center center',
+                        width: `${pageWidth}px`,
+                        height: `${pageHeight}px`,
+                        maxWidth: !isCropEnabled && scannerZoom <= 1 ? '100%' : undefined,
+                        maxHeight: !isCropEnabled && scannerZoom <= 1 ? '100%' : undefined
+                      }}>
+                       <img
+                         ref={scannerImgRef}
+                         src={scannerStitchedUrl || scannerPreviewUrl || undefined}
+                         className="absolute inset-0 w-full h-full opacity-0 pointer-events-none"
+                         style={{ objectFit: 'fill' }}
+                         alt=""
+                       />
                        {isOcrLoading && (
                          <div className="absolute inset-0 z-50 pointer-events-none overflow-hidden rounded-sm">
                            <div className="matrix-grid-overlay"></div>
@@ -1263,31 +1360,15 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                        {scannerPreviewUrl ? (
                           <div
                             className="relative flex justify-center items-center"
+                            onPointerDownCapture={onCropPointerDownCapture}
                             onContextMenu={handleContextMenu}
                           >
-                             {isCropEnabled ? (
-                                 <ReactCrop
-                                 crop={scannerCrop}
-                                 onChange={(c) => setScannerCrop(c)}
-                                 className={isSpacePressed ? "pointer-events-none" : "pointer-events-auto"}
-                               >
-                                 <img
-                                    ref={scannerImgRef}
-                                    src={scannerStitchedUrl || scannerPreviewUrl || undefined}
-                                    alt="Scanned Document Paper Element"
-                                    className="block select-none rounded-sm"
-                                    style={{ height: `${pageHeight}px`, width: 'auto', filter: getImageFilterStyle() }}
-                                 />
-                               </ReactCrop>
-                             ) : (
-                               <img
-                                  ref={scannerImgRef}
-                                  src={scannerStitchedUrl || scannerPreviewUrl || undefined}
-                                  alt="Scanned Document Paper Element"
-                                  className="block pointer-events-none rounded-sm"
-                                  style={{ height: `${pageHeight}px`, width: 'auto', filter: getImageFilterStyle() }}
-                               />
-                             )}
+                             <img
+                                src={scannerStitchedUrl || scannerPreviewUrl || undefined}
+                                alt="Scanned Document Paper Element"
+                                className="block pointer-events-none rounded-sm"
+                                style={{ height: `${pageHeight}px`, width: 'auto', filter: getImageFilterStyle() }}
+                             />
                           </div>
                        ) : (
                           <div
@@ -1391,6 +1472,31 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                           </div>
                        )}
                     </div>
+                    {isCropEnabled ? (
+                      <div
+                        onPointerDownCapture={onCropPointerDownCapture}
+                        className={`absolute inset-0 z-20 ${isSpacePressed ? "pointer-events-none" : "pointer-events-auto"}`}
+                      >
+                        <ScannerCropSurface
+                          crop={scannerCrop}
+                          onCommit={setScannerCrop}
+                          src={scannerStitchedUrl || scannerPreviewUrl || undefined}
+                          sourceWidth={cropSourceWidth}
+                          sourceHeight={cropSourceHeight}
+                          visualWidth={cropVisualWidth}
+                          visualHeight={cropVisualHeight}
+                          rotation={scannerRotation}
+                          scaleX={scannerScaleX}
+                          scaleY={scannerScaleY}
+                          className="w-full h-full"
+                          style={{ height: '100%', width: '100%' }}
+                          imageClassName="w-full h-full opacity-0 pointer-events-none block"
+                          imageStyle={{ objectFit: 'fill' }}
+                          alt="Crop overlay"
+                        />
+                      </div>
+                    ) : null}
+                    </>
                   )}
                   </div>
 
