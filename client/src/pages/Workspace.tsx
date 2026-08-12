@@ -1187,11 +1187,13 @@ export default function Workspace() {
   const [scannerLogs, setScannerLogs] = useState<string[]>([]);
   const [isScannerAnimating, setIsScannerAnimating] = useState(false);
   const [scannerPdfDoc, setScannerPdfDoc] = useState<any>(null);
+  const [isScannerDocumentLoading, setIsScannerDocumentLoading] = useState(false);
   const [scannerStitchedUrl, setScannerStitchedUrl] = useState<string>("");
   const [scannerCrop, setScannerCrop] = useState<Crop>();
   const [cropQueue, setCropQueue] = useState<Array<{ id: string; page: number; crop: Crop; imgUrl: string; base64Data: string }>>([]);
   const [scannerProgress, setScannerProgress] = useState<{ currentIndex: number, total: number, status: 'idle' | 'scanning' | 'success' | 'error' }>({ currentIndex: 0, total: 0, status: 'idle' });
   const scannerImgRef = useRef<HTMLImageElement>(null);
+  const pdfRenderTokenRef = useRef(0);
 
 
   const [scannerRotation, setScannerRotation] = useState<number>(0);
@@ -1220,8 +1222,14 @@ export default function Workspace() {
     setScannerLogs(prev => [...prev, `[Sensing Matrix] Re-pitching optical scanner physical density to [${selectedResolution}].`]);
   }, [selectedResolution]);
 
+  const previousScannerSettingsRef = useRef({ colourMode: selectedColourMode, resolution: selectedResolution });
+
   useEffect(() => {
-    if (!isScannerOpen) return;
+    const previous = previousScannerSettingsRef.current;
+    const settingsChanged = previous.colourMode !== selectedColourMode || previous.resolution !== selectedResolution;
+    previousScannerSettingsRef.current = { colourMode: selectedColourMode, resolution: selectedResolution };
+    if (!isScannerOpen || !settingsChanged) return;
+
     if (scannerPdfDoc) {
       renderPdfPage(scannerPdfDoc, scannerPage);
     } else if (scannerFile && scannerFile.type.startsWith("image/")) {
@@ -1404,11 +1412,7 @@ export default function Workspace() {
     setScannerCrop(undefined);
     setScannerPage(newPage);
     if (scannerPdfDoc) {
-      setTimeout(() => {
-        renderPdfPage(scannerPdfDoc, newPage).catch(e => console.error(e));
-      }, 50);
-    } else {
-
+      await renderPdfPage(scannerPdfDoc, newPage);
     }
   };
 
@@ -1601,7 +1605,15 @@ export default function Workspace() {
   };
 
   const renderPdfPage = async (pdfDoc: any, pageNum: number) => {
+    const renderToken = ++pdfRenderTokenRef.current;
+    setIsScannerDocumentLoading(true);
+    setScannerPreviewUrl("");
+    setScannerPreviewUrl2("");
+    setScannerStitchedUrl("");
+
     try {
+      if (!pdfDoc || pageNum < 1 || pageNum > pdfDoc.numPages) return;
+
       const getPageCanvas = async (num: number) => {
         if (num < 1 || num > pdfDoc.numPages) return null;
         const page = await pdfDoc.getPage(num);
@@ -1612,13 +1624,15 @@ export default function Workspace() {
         canvas.width = viewport.width;
         canvas.height = viewport.height;
         await page.render({ canvasContext: ctx, viewport }).promise;
+        page.cleanup();
+        if (renderToken !== pdfRenderTokenRef.current) return null;
         return canvas;
       };
 
       if (pdfDoc.numPages <= 1 || pageNum === 1 || (pageNum === pdfDoc.numPages && pageNum % 2 === 0)) {
 
          const c1 = await getPageCanvas(pageNum);
-         if (c1) {
+         if (c1 && renderToken === pdfRenderTokenRef.current) {
             const purifiedCanvas = globalScannerEngine.purifyCanvas(c1, selectedColourMode);
             const dataUrl = purifiedCanvas.toDataURL('image/jpeg', 0.85);
             setScannerPreviewUrl(dataUrl);
@@ -1635,13 +1649,14 @@ export default function Workspace() {
              getPageCanvas(rightPageNum)
          ]);
 
+         if (renderToken !== pdfRenderTokenRef.current) return;
          if (cLeft) setScannerPreviewUrl(globalScannerEngine.purifyCanvas(cLeft, selectedColourMode).toDataURL('image/jpeg', 0.85));
          if (cRight) setScannerPreviewUrl2(globalScannerEngine.purifyCanvas(cRight, selectedColourMode).toDataURL('image/jpeg', 0.85));
          else setScannerPreviewUrl2("");
 
          const finalCanvas = document.createElement('canvas');
          const finalCtx = finalCanvas.getContext('2d');
-         if (finalCtx && (cLeft || cRight)) {
+         if (finalCtx && (cLeft || cRight) && renderToken === pdfRenderTokenRef.current) {
              const wLeft = cLeft ? cLeft.width : 0;
              const hLeft = cLeft ? cLeft.height : 0;
              const wRight = cRight ? cRight.width : 0;
@@ -1661,13 +1676,19 @@ export default function Workspace() {
              setScannerStitchedUrl(purifiedCanvas.toDataURL('image/jpeg', 0.85));
          }
       }
-    } catch (e) {
-      console.error(e);
-      setOcrError("Failed to render PDF page.");
+    } catch (e: any) {
+      if (renderToken === pdfRenderTokenRef.current) {
+        console.error(e);
+        setOcrError(e?.message || "Failed to render PDF page.");
+      }
+    } finally {
+      if (renderToken === pdfRenderTokenRef.current) setIsScannerDocumentLoading(false);
     }
   };
 
   const processUploadedFile = async (file: File) => {
+    const uploadToken = ++pdfRenderTokenRef.current;
+    setIsScannerDocumentLoading(true);
     setScannerFile(file);
     setIsScannerOpen(true);
     setOcrResult("");
@@ -1686,15 +1707,21 @@ export default function Workspace() {
     const extension = file?.name ? file.name.split(".").pop()?.toLowerCase() : "";
 
     if (extension === "pdf" || file.type === "application/pdf") {
-       const arrayBuffer = await file.arrayBuffer();
        try {
+         const arrayBuffer = await file.arrayBuffer();
          const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+         if (uploadToken !== pdfRenderTokenRef.current) return;
          setScannerPdfDoc(pdf);
          setScannerTotalPages(pdf.numPages);
          await renderPdfPage(pdf, 1);
          setScannerLogs(["Document loaded successfully. Ready to extract text or crop areas."]);
-       } catch (err) {
-         setOcrError("Failed to load PDF document.");
+       } catch (err: any) {
+         if (uploadToken === pdfRenderTokenRef.current) {
+           setOcrError(err?.message || "Failed to load PDF document.");
+           setScannerLogs(["Unable to load this PDF. Please try another file."]);
+         }
+       } finally {
+         if (uploadToken === pdfRenderTokenRef.current && !scannerPdfDoc) setIsScannerDocumentLoading(false);
        }
     } else if (file?.type && file.type.startsWith("image/")) {
       const reader = new FileReader();
@@ -1717,11 +1744,14 @@ export default function Workspace() {
             setScannerStitchedUrl(resultUrl);
           }
           setScannerLogs(prev => [...prev, "Image loaded and purified perfectly. Ready to extract text or crop areas."]);
+          setIsScannerDocumentLoading(false);
         };
+        img.onerror = () => setIsScannerDocumentLoading(false);
         img.src = resultUrl;
       };
       reader.readAsDataURL(file);
     } else {
+      setIsScannerDocumentLoading(false);
 
       setScannerPreviewUrl("");
       setScannerStitchedUrl("");
@@ -3869,6 +3899,7 @@ export default function Workspace() {
             scannerLogs={scannerLogs}
             setScannerLogs={setScannerLogs}
             isOcrLoading={isOcrLoading}
+            isDocumentLoading={isScannerDocumentLoading}
             scannerPdfDoc={scannerPdfDoc}
             scannerCrop={scannerCrop}
             setScannerCrop={setScannerCrop}

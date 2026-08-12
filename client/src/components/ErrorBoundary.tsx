@@ -16,12 +16,19 @@ interface State {
 
 const RETRIES = 3;
 const RETRY_DELAY_MS = 1500;
+const RETRY_KEY = "roystsr-crash-retries";
 
 export class ErrorBoundary extends Component<
   { children: React.ReactNode },
   State
 > {
   state: State = { error: null, retrying: true };
+
+  componentDidMount() {
+    // A successful mount proves the module graph is healthy; do not carry a
+    // retry counter into a later, unrelated navigation.
+    window.sessionStorage.removeItem(RETRY_KEY);
+  }
 
   static getDerivedStateFromError(error: Error): State {
     return { error, retrying: true };
@@ -33,19 +40,22 @@ export class ErrorBoundary extends Component<
       msg.includes("Cannot read propert") ||
       msg.includes("Invalid hook call") ||
       msg.includes("useState");
-    if (!fatal || !window || typeof window.location === "undefined") {
+    if (!fatal || typeof window === "undefined" || typeof window.location === "undefined") {
       this.setState({ retrying: false });
       return;
     }
-    const retryKey = "roystsr-crash-retries";
-    let remaining = Number(window.sessionStorage.getItem(retryKey) ?? RETRIES);
+    let remaining = Number(window.sessionStorage.getItem(RETRY_KEY) ?? RETRIES);
     if (remaining <= 0) {
       this.setState({ retrying: false });
       return;
     }
-    window.sessionStorage.setItem(retryKey, String(remaining - 1));
+    window.sessionStorage.setItem(RETRY_KEY, String(remaining - 1));
     window.setTimeout(() => {
-      window.location.reload();
+      // A normal reload can reuse the browser's stale Vite dependency graph.
+      // A unique entry URL forces the preview shell to request a fresh graph.
+      const recoveryUrl = new URL(window.location.href);
+      recoveryUrl.searchParams.set("__roy_recover", String(Date.now()));
+      window.location.replace(recoveryUrl.toString());
     }, RETRY_DELAY_MS);
   }
 
@@ -89,7 +99,11 @@ export class ErrorBoundary extends Component<
       >
         <div>Something went wrong while loading the app.</div>
         <button
-          onClick={() => window.location.reload()}
+          onClick={() => {
+            const recoveryUrl = new URL(window.location.href);
+            recoveryUrl.searchParams.set("__roy_recover", String(Date.now()));
+            window.location.replace(recoveryUrl.toString());
+          }}
           style={{
             padding: "8px 18px",
             borderRadius: 8,

@@ -54,6 +54,7 @@ export interface DocumentScannerModalProps {
   scannerLogs: string[];
   setScannerLogs: React.Dispatch<React.SetStateAction<string[]>>;
   isOcrLoading: boolean;
+  isDocumentLoading: boolean;
   scannerPdfDoc: any;
   scannerCrop: Crop | undefined;
   setScannerCrop: (crop: Crop | undefined) => void;
@@ -110,6 +111,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
   scannerPage,
   scannerTotalPages,
   isOcrLoading,
+  isDocumentLoading,
   scannerCrop,
   setScannerCrop,
   scannerImgRef,
@@ -145,7 +147,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
   selectedDestinationFolder,
   setSelectedDestinationFolder,
 }) => {
-  const { width, height, x, y, startResize } = useResizable({
+  const { width, height, x, y, startResize, fitToSize } = useResizable({
     persistKey: 'scanner_v2',
     initialWidth: 860,
     initialHeight: 650
@@ -158,6 +160,85 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
   const [isSpacePressed, setIsSpacePressed] = useState(false);
   const activeAccent = themeAccentColor || "#C28181";
   const hasDocumentLoaded = !!(scannerPreviewUrl || scannerPreviewUrl2 || scannerStitchedUrl);
+  const [windowSize, setWindowSize] = useState(() => ({ width: window.innerWidth, height: window.innerHeight }));
+  const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
+  const [pageAspectRatio, setPageAspectRatio] = useState(1 / 1.414);
+
+  useEffect(() => {
+    const onResize = () => setWindowSize({ width: window.innerWidth, height: window.innerHeight });
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  useEffect(() => {
+    const sourceUrl = scannerPreviewUrl || scannerPreviewUrl2;
+    if (!sourceUrl) {
+      setPageAspectRatio(1 / 1.414);
+      return;
+    }
+
+    const image = new Image();
+    image.onload = () => {
+      if (image.naturalWidth > 0 && image.naturalHeight > 0) {
+        setPageAspectRatio(image.naturalWidth / image.naturalHeight);
+      }
+    };
+    image.src = sourceUrl;
+  }, [scannerPreviewUrl, scannerPreviewUrl2]);
+
+  const isSingleBookPage = scannerTotalPages <= 1 || scannerPage === 1 || (scannerPage === scannerTotalPages && scannerPage % 2 === 0);
+  const basePageHeight = Math.round(Math.max(280, Math.min(760, windowSize.height - (windowSize.width < 1024 ? 150 : 220))));
+  const isNarrowPreview = windowSize.width < 768;
+  const previewWidth = viewportSize.width || Math.max(280, windowSize.width - (windowSize.width >= 768 ? 350 : 24));
+  const previewHeight = viewportSize.height || Math.max(240, windowSize.height - (windowSize.width < 768 ? 430 : 220));
+  const spreadGap = isSingleBookPage ? 0 : 10;
+  const spreadColumns = isSingleBookPage ? 1 : 2;
+  const widthLimitedPageHeight = (Math.max(180, previewWidth - (isNarrowPreview ? 24 : 64) - spreadGap) / spreadColumns) / Math.max(pageAspectRatio, 0.1);
+  const fittedPageHeight = Math.round(Math.max(180, Math.min(basePageHeight, previewHeight - (isNarrowPreview ? 28 : 64), widthLimitedPageHeight)));
+  const pageHeight = Math.round(fittedPageHeight * scannerZoom);
+  const pageWidth = Math.max(180, Math.round(pageHeight * pageAspectRatio));
+  const documentWidth = isSingleBookPage ? pageWidth : pageWidth * 2 + 10;
+
+  useEffect(() => {
+    if (!isScannerOpen) {
+      setViewportSize({ width: 0, height: 0 });
+      return;
+    }
+
+    const measureViewport = () => {
+      const element = viewportRef.current;
+      if (!element) return;
+      const rect = element.getBoundingClientRect();
+      const nextSize = { width: Math.round(rect.width), height: Math.round(rect.height) };
+      setViewportSize(previous => (
+        previous.width === nextSize.width && previous.height === nextSize.height
+          ? previous
+          : nextSize
+      ));
+    };
+
+    measureViewport();
+    const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(measureViewport) : null;
+    if (observer && viewportRef.current) observer.observe(viewportRef.current);
+    window.addEventListener("resize", measureViewport);
+
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", measureViewport);
+    };
+  }, [hasDocumentLoaded, isScannerOpen, scannerTotalPages]);
+
+  useEffect(() => {
+    if (!isScannerOpen || !hasDocumentLoaded || windowSize.width < 640) return;
+
+    const sidebarWidth = windowSize.width >= 768 ? 310 : 0;
+    const basePageWidth = Math.max(180, Math.round(basePageHeight * pageAspectRatio));
+    const fitWidth = isSingleBookPage ? basePageWidth : basePageWidth * 2 + 10;
+    fitToSize(
+      Math.min(1240, windowSize.width - 24, fitWidth + sidebarWidth + 48),
+      Math.min(900, windowSize.height - 24, basePageHeight + 86),
+    );
+  }, [basePageHeight, fitToSize, hasDocumentLoaded, isScannerOpen, isSingleBookPage, pageAspectRatio, windowSize.height, windowSize.width]);
 
   // Auto-detected file type from the uploaded file's extension (read-only indicator)
   const detectedFileType = React.useMemo(() => {
@@ -645,7 +726,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
         onDoubleClick={(e) => e.stopPropagation()}
         transition={{ duration: 0.25, type: 'spring', damping: 25, stiffness: 200 }}
         style={{ position: window.innerWidth < 640 ? 'fixed' : 'absolute' }}
-        className="bg-[#FCF5F3] dark:bg-[#20202A] sm:rounded-xl shadow-[0_24px_54px_rgba(0,0,0,0.25)] overflow-hidden border-none sm:border border-black/5 dark:border-white/10 font-sans flex flex-col"
+        className="bg-[#FCF5F3] dark:bg-[#20202A] sm:rounded-xl shadow-[0_24px_54px_rgba(0,0,0,0.25)] overflow-hidden border-none sm:border border-black/5 dark:border-white/10 font-sans flex flex-col min-h-0"
       >
         {/* Resize & Drag Handles (Only on Desktop) */}
         <div className="hidden sm:block">
@@ -687,9 +768,9 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
         </div>
 
         {/* Dual Panel Body Layout */}
-        <div className="flex flex-col lg:flex-row flex-1 overflow-hidden">
+          <div className="flex flex-col md:flex-row flex-1 min-h-0 overflow-hidden">
           {/* Left Navigation Sidebar Options */}
-          <div className="w-full lg:w-[310px] flex flex-col px-7 pb-6 overflow-y-auto custom-scrollbar shrink-0 border-b lg:border-b-0 lg:border-r border-black/5 dark:border-white/5">
+          <div className="w-full md:w-[310px] flex flex-col min-h-0 max-h-[46vh] md:max-h-none px-7 pb-6 overflow-y-auto custom-scrollbar shrink-0 border-b md:border-b-0 md:border-r border-black/5 dark:border-white/5">
             <h1 className="text-[26px] font-semibold text-[#1E1E1E] dark:text-[#FFFFFF] mt-3 mb-6 tracking-tight">Scan</h1>
 
             {/* AI Model — pipeline routing for the scan */}
@@ -898,7 +979,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
           </div>
 
           {/* Right Main Showcase Canvas Area */}
-          <div className="flex-1 bg-[#F9F9F9] dark:bg-[#1A1A22] rounded-tl-[10px] border-t border-l border-black/5 dark:border-white/5 relative flex flex-col items-center justify-between shadow-[-4px_-4px_16px_rgba(0,0,0,0.02)] overflow-hidden">
+          <div className="flex-1 min-h-[280px] md:min-h-0 bg-[#F9F9F9] dark:bg-[#1A1A22] rounded-tl-[10px] border-t border-l border-black/5 dark:border-white/5 relative flex flex-col items-center justify-between shadow-[-4px_-4px_16px_rgba(0,0,0,0.02)] overflow-hidden">
 
             {/* The Document Presentation Viewport with Scrolling */}
             <div
@@ -909,7 +990,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                onPointerUp={onPointerUp}
                onPointerCancel={onPointerUp}
                onPointerLeave={onPointerUp}
-               className={`flex-1 w-full overflow-auto custom-scrollbar relative bg-[#F9F9F9] dark:bg-[#1A1A22] ${isSpacePressed ? (dragRef.current?.isDragging ? "cursor-grabbing" : "cursor-grab") : isCropEnabled ? "cursor-crosshair" : dragRef.current?.isDragging ? "cursor-grabbing" : "cursor-grab"}`}
+               className={`flex-1 min-h-0 w-full overflow-auto custom-scrollbar relative bg-[#F9F9F9] dark:bg-[#1A1A22] ${isSpacePressed ? (dragRef.current?.isDragging ? "cursor-grabbing" : "cursor-grab") : isCropEnabled ? "cursor-crosshair" : dragRef.current?.isDragging ? "cursor-grabbing" : "cursor-grab"}`}
                onWheel={(e) => {
                   if (e.ctrlKey || e.metaKey || e.altKey) {
                      e.preventDefault();
@@ -917,7 +998,15 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                   }
                }}
             >
-               <div className="min-w-full min-h-full flex p-4 sm:p-8 transition-all duration-200">
+               {isDocumentLoading && (
+                 <div className="absolute inset-0 z-[80] flex items-center justify-center bg-[#F9F9F9]/90 dark:bg-[#1A1A22]/90 backdrop-blur-[2px]">
+                   <div className="flex flex-col items-center gap-3 text-neutral-600 dark:text-neutral-300">
+                     <div className="h-7 w-7 rounded-full border-2 border-current border-t-transparent animate-spin" />
+                     <span className="text-[13px] font-medium">Loading document…</span>
+                   </div>
+                 </div>
+               )}
+               <div className="w-full min-h-full flex items-center justify-center p-3 sm:p-8 transition-all duration-200">
                   <div className="m-auto">
                   {scannerProgress && scannerProgress.status !== 'idle' && cropQueue.length > 0 ? (
                       <div className="relative flex flex-col items-center justify-center w-[280px] sm:w-[360px] h-[380px] sm:h-[480px]">
@@ -1079,9 +1168,11 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                          style={{
                             transform: `rotate(${scannerRotation}deg) scaleX(${scannerScaleX}) scaleY(${scannerScaleY})`,
                             transformOrigin: 'center center',
-                            height: `calc(max(320px, 80vh - 220px) * ${scannerZoom})`,
-                            width: (scannerPage === 1 || (scannerPage === scannerTotalPages && scannerPage % 2 === 0)) ? 'auto' : `calc(max(320px, 80vh - 220px) * 1.414 * ${scannerZoom})`,
-                            aspectRatio: (scannerPage === 1 || (scannerPage === scannerTotalPages && scannerPage % 2 === 0)) ? '1 / 1.414' : 'auto'
+                            height: `${pageHeight}px`,
+                            width: `${documentWidth}px`,
+                            aspectRatio: 'auto',
+                            maxWidth: scannerZoom <= 1 ? '100%' : undefined,
+                            maxHeight: scannerZoom <= 1 ? '100%' : undefined
                          }}
                          onContextMenu={handleContextMenu}
                     >
@@ -1157,7 +1248,11 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                     <div className="relative shadow-2xl bg-white dark:bg-[#f6f6f6] rounded-sm transition-transform duration-300"
                          style={{
                             transform: `rotate(${scannerRotation}deg) scaleX(${scannerScaleX}) scaleY(${scannerScaleY})`,
-                            transformOrigin: 'center center'
+                            transformOrigin: 'center center',
+                            width: `${pageWidth}px`,
+                            height: `${pageHeight}px`,
+                            maxWidth: scannerZoom <= 1 ? '100%' : undefined,
+                            maxHeight: scannerZoom <= 1 ? '100%' : undefined
                          }}>
                        {isOcrLoading && (
                          <div className="absolute inset-0 z-50 pointer-events-none overflow-hidden rounded-sm">
@@ -1185,7 +1280,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                                     src={scannerStitchedUrl || scannerPreviewUrl || undefined}
                                     alt="Scanned Document Paper Element"
                                     className="block select-none rounded-sm"
-                                    style={{ height: `calc(max(320px, 80vh - 220px) * ${scannerZoom})`, width: 'auto', filter: getImageFilterStyle() }}
+                                    style={{ height: `${pageHeight}px`, width: 'auto', filter: getImageFilterStyle() }}
                                  />
                                </ReactCrop>
                              ) : (
@@ -1194,7 +1289,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                                   src={scannerStitchedUrl || scannerPreviewUrl || undefined}
                                   alt="Scanned Document Paper Element"
                                   className="block pointer-events-none rounded-sm"
-                                  style={{ height: `calc(max(320px, 80vh - 220px) * ${scannerZoom})`, width: 'auto', filter: getImageFilterStyle() }}
+                                  style={{ height: `${pageHeight}px`, width: 'auto', filter: getImageFilterStyle() }}
                                />
                              )}
                           </div>

@@ -125,6 +125,25 @@ export function useResizable(options: UseResizableOptions = {}) {
     startPos.current = null;
   }, [resizing, persistKey, state]);
 
+  const fitToSize = useCallback((requestedWidth: number, requestedHeight: number) => {
+    const maxWidth = Math.max(minWidth, window.innerWidth - 24);
+    const maxHeight = Math.max(minHeight, window.innerHeight - 24);
+    const nextWidth = Math.round(Math.min(maxWidth, Math.max(minWidth, requestedWidth)));
+    const nextHeight = Math.round(Math.min(maxHeight, Math.max(minHeight, requestedHeight)));
+    const nextX = Math.max(0, Math.round((window.innerWidth - nextWidth) / 2));
+    const nextY = Math.max(0, Math.round((window.innerHeight - nextHeight) / 2));
+
+    setState({ width: nextWidth, height: nextHeight, x: nextX, y: nextY });
+    if (persistKey) {
+      localStorage.setItem(`lexkit_window_${persistKey}`, JSON.stringify({
+        width: nextWidth,
+        height: nextHeight,
+        x: nextX,
+        y: nextY,
+      }));
+    }
+  }, [minHeight, minWidth, persistKey]);
+
   useEffect(() => {
     if (resizing) {
       window.addEventListener('mousemove', handleMouseMove);
@@ -140,6 +159,7 @@ export function useResizable(options: UseResizableOptions = {}) {
     ...state,
     resizing,
     startResize,
-    setState
+    setState,
+    fitToSize,
   };
 }

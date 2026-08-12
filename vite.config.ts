@@ -205,22 +205,6 @@ function vitePluginStorageProxy(): Plugin {
 
 const plugins = [react(), tailwindcss(), jsxLocPlugin(), vitePluginManusRuntime(), vitePluginManusDebugCollector(), vitePluginStorageProxy()];
 
-// esbuild plugin used by the dependency optimizer: inside dep bundles,
-// the bare "react" specifier resolves to the project's own deduplicated
-// React package (never a nested pnpm-store copy). Combined with
-// optimizeDeps.dedupe below, every dep bundle and the app source share
-// ONE React module — the definitive fix for the duplicate-React
-// "Cannot read properties of null (reading 'useState')" crash.
-function externalizeReactForOptimizer() {
-  const reactPath = path.resolve(import.meta.dirname, "node_modules", "react", "index.js");
-  return {
-    name: "optimizer-dedupe-react",
-    setup(build) {
-      build.onResolve({ filter: /^react$/ }, () => ({ path: reactPath, namespace: "file" }));
-    },
-  };
-}
-
 export default defineConfig({
   plugins,
   optimizeDeps: {
@@ -244,18 +228,12 @@ export default defineConfig({
       "lucide-react",
       "react-image-crop",
     ],
-    // Force every dependency (pre-bundled or transformed) to import the
-    // project's own React package instead of resolving react from its own
-    // node_modules / pnpm store location. Without this, esbuild produces
-    // shared chunks (e.g. chunk-7QECX6ZS.js) with a second inlined copy of
-    // React, causing the "Cannot read properties of null (reading
-    // 'useState')" duplicate-React crash.
-    dedupe: ["react", "react-dom", "react-dom/client"],
-    esbuildOptions: {
-      plugins: [externalizeReactForOptimizer()],
-    },
   },
   resolve: {
+    // React is a peer of the editor, motion, and Lexical packages. Explicit
+    // resolver dedupe prevents pnpm's symlink paths from becoming separate
+    // browser module URLs during Vite development.
+    dedupe: ["react", "react-dom"],
     alias: [
       // Built-in dedupe covers app-source resolution; the optimizer plugin
       // above covers dep bundles. Kept for any deep-import edge cases.
