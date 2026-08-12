@@ -483,6 +483,13 @@
 .lexkit-content-editable {
   flex: 1;
   padding: 20px 20px;
+  /* ── Round 3 fix: mobile selection must be allowed — native touch drag
+     selection + long-press handles must reach the text unhindered ── */
+  -webkit-user-select: auto;
+  user-select: auto;
+  -webkit-user-modify: read-write;
+  touch-action: auto;
+  -webkit-touch-callout: default;
   outline: none;
   color: var(--lexkit-fg);
   line-height: 1.7;
@@ -500,15 +507,6 @@
 
 .lexkit-content-editable::-webkit-scrollbar {
   display: none;
-}
-
-.lexkit-content-editable,
-.lexkit-content-editable *,
-.lexkit-content-editable p,
-.lexkit-content-editable span,
-.lexkit-content-editable div {
-  caret-color: transparent !important;
-  -webkit-caret-color: transparent !important;
 }
 
 .lexkit-content-editable:focus {
@@ -718,9 +716,11 @@
   text-align: right;
 }
 
+/* Quiet image-selection ring — softer than the default accent outline, matching the refined selection vibe */
 .lexical-image.selected {
-  outline: 2px solid var(--lexkit-accent);
+  outline: 1.5px solid color-mix(in oklab, var(--lexkit-fg, #000) 45%, transparent);
   outline-offset: 2px;
+  border-radius: 2px;
 }
 
 .lexical-image.uploading {
@@ -1307,7 +1307,7 @@ table[data-lexical-table-selection] {
 }
 
 table td[data-lexical-table-cell-selection] {
-  background-color: rgba(59, 130, 246, 0.1);
+  background-color: rgba(59, 130, 246, 0.1) !important;
 }
 
 
@@ -1418,28 +1418,6 @@ table td[data-lexical-table-cell-selection] {
     opacity: 1;
     transform: translateX(-50%) scale(1);
   }
-}
-
-
-.custom-smooth-caret {
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 1.5px;
-  background-color: var(--lexkit-fg, #000);
-  z-index: 10;
-  pointer-events: none;
-  border-radius: 0;
-  will-change: transform, height, opacity;
-}
-
-.animate-caret-blink {
-  animation: caret-blink 0.8s step-end infinite;
-}
-
-@keyframes caret-blink {
-  from, to { opacity: 1; }
-  50% { opacity: 0; }
 }
 
 
