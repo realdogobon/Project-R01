@@ -647,6 +647,33 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
 
         {/* Dual Panel Body Layout */}
         <div className="flex flex-col lg:flex-row flex-1 overflow-hidden">
+          {/* Extracted Text Preview — surfaces the live OCR transcription beside the document */}
+          <AnimatePresence>
+            {isTextReady && (
+              <motion.div
+                initial={{ width: 0, opacity: 0 }}
+                animate={{ width: 264, opacity: 1 }}
+                exit={{ width: 0, opacity: 0 }}
+                transition={{ duration: 0.28, ease: [0.23, 1, 0.32, 1] }}
+                className="hidden lg:flex flex-col shrink-0 overflow-hidden border-r border-black/5 dark:border-white/5 bg-[#FDFDFD] dark:bg-[#16161E]"
+              >
+                <div className="flex flex-col h-full min-w-[264px]">
+                  <div className="flex items-center justify-between px-4 py-3 border-b border-black/5 dark:border-white/5">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="w-3.5 h-3.5" style={{ color: activeAccent }} strokeWidth={1.8} />
+                      <span className="text-[12px] font-semibold tracking-wide text-[#202020] dark:text-[#EAEAEA] uppercase">Extracted Text</span>
+                    </div>
+                    <span className="text-[11px] font-mono text-gray-400 dark:text-gray-500">{ocrResult.trim().length} chars</span>
+                  </div>
+                  <div className="flex-1 overflow-y-auto custom-scrollbar px-4 py-3">
+                    <pre className="whitespace-pre-wrap break-words text-[12.5px] leading-[1.65] text-[#2B2B2B] dark:text-[#DCDCE2] font-normal" style={{ fontFamily: "inherit" }}>
+                      {ocrResult}
+                    </pre>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* Left Navigation Sidebar Options */}
           <div className="w-full lg:w-[310px] flex flex-col px-7 pb-6 overflow-y-auto custom-scrollbar shrink-0 border-b lg:border-b-0 lg:border-r border-black/5 dark:border-white/5">
@@ -1100,6 +1127,22 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                             className="relative flex justify-center items-center"
                             onContextMenu={handleContextMenu}
                           >
+                             {/* Slide-in transcription overlay for small screens (lg hides the preview column) */}
+                             {isTextReady && (
+                               <motion.div
+                                 initial={{ opacity: 0, y: 8 }}
+                                 animate={{ opacity: 1, y: 0 }}
+                                 exit={{ opacity: 0, y: 8 }}
+                                 transition={{ duration: 0.25, ease: [0.23, 1, 0.32, 1] }}
+                                 className="absolute -bottom-3 left-1/2 -translate-x-1/2 z-30 w-[min(320px,92%)] max-h-[140px] overflow-y-auto custom-scrollbar rounded-lg border border-black/5 dark:border-white/10 bg-white/95 dark:bg-[#1A1A23]/95 backdrop-blur-md shadow-lg px-4 py-3 lg:hidden"
+                               >
+                                 <div className="flex items-center justify-between mb-1.5">
+                                   <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">Extracted Text</span>
+                                   <span className="text-[10px] font-mono text-gray-400 dark:text-gray-500">{ocrResult.trim().length} chars</span>
+                                 </div>
+                                 <pre className="whitespace-pre-wrap break-words text-[12px] leading-[1.6] text-[#2B2B2B] dark:text-[#DCDCE2]">{ocrResult}</pre>
+                               </motion.div>
+                             )}
                              {isCropEnabled ? (
                                <ReactCrop
                                  crop={scannerCrop}

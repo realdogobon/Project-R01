@@ -950,7 +950,7 @@ export function WorkspaceDashboard({ isOpen, onClose, onLoadFileToEditor, onOpen
                           setIsSavingProfile(true);
                           try {
                             await updateProfile(editName, editEmail, editMobile);
-                            setProfileUpdateMsg("✓ Saved successfully");
+                            setProfileUpdateMsg("Profile updated.");
                             setTimeout(() => setProfileUpdateMsg(null), 2500);
                           } catch (e) {
                             setProfileUpdateMsg("✗ Update failed");

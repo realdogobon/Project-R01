@@ -16,20 +16,19 @@
     <script type="module" src="/src/main.tsx"></script>
     <script>
       if ("serviceWorker" in navigator) {
-        // Only attempt to register service worker if not running inside an iframe (e.g. AI Studio preview)
-        // or other third-party framed environments where the browser blocks SW registration by design.
-        const isIFrame = window.self !== window.top;
-        if (!isIFrame) {
+        // Service worker only on production builds — dev previews must never cache stale
+        // module graphs (Vite optimized-deps hashes change on every dependency update,
+        // and a cached shell pointing at old chunks crashes the app). Offline support
+        // remains fully intact for published users.
+        const isDev = location.hostname !== "royscript-qeditcvm.manus.space";
+        if (!isDev) {
           window.addEventListener("load", () => {
             navigator.serviceWorker.register("/sw.js")
               .then((reg) => console.log("RoyScript TSR SW Registered successfully:", reg.scope))
               .catch((err) => {
-                // Use console.warn to log registration blockages without triggering automated error-alerts
                 console.warn("SW Registration failed:", err);
               });
           });
-        } else {
-          console.log("Service worker registration skipped: running inside an iframe workspace.");
         }
       }
     </script>

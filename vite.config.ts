@@ -203,10 +203,64 @@ function vitePluginStorageProxy(): Plugin {
   };
 }
 
-const plugins = [react(), tailwindcss(), jsxLocPlugin(), vitePluginManusRuntime(), vitePluginManusDebugCollector(), vitePluginStorageProxy()];
+const plugins = [react(), tailwindcss(), jsxLocPlugin(), vitePluginManusRuntime(), vitePluginManusDebugCollector(), vitePluginStorageProxy(), reactNamedExportsPlugin()];
+
+// Dev-only shim: Vite pre-bundles react as `export default require_react()`
+// (no named exports), but app source uses named imports ({ useState }).
+// This plugin appends a named-export map over the shared inlined CJS
+// instance so named imports resolve to the SAME single React object —
+// eliminating the "Cannot read properties of null (reading 'useState')"
+// crash.
+function reactNamedExportsPlugin() {
+  const re = /node_modules\/\.vite\/deps\/react(_jsx-dev-runtime|_jsx-runtime|_dom_client)?\.js$/;
+  return {
+    name: "react-named-exports",
+    enforce: "post",
+    transform(code: string, id: string) {
+      if (!re.test(id) || code.includes("// react-named-exports-shim")) return;
+      // Rewrite `export default require_react();` to also expose every
+      // property of the shared CJS React object as a named export.
+      const patched = code.replace(
+        /export default require_react\(\);/,
+        'const __vite_react_default = require_react();\nexport default __vite_react_default;\n' +
+          'Object.keys(__vite_react_default).forEach((__k) => {\n' +
+          '  const __v = __vite_react_default[__k];\n' +
+          '  if (__v !== undefined) exports[__k] = __v;\n' +
+          '});'
+      );
+      if (patched === code) return;
+      return { code: patched, map: null };
+    },
+  };
+}
 
 export default defineConfig({
   plugins,
+  optimizeDeps: {
+    // Eagerly pre-bundle every dep that imports React (directly or
+    // transitively) so dev-time source imports resolve to the SAME
+    // pre-bundled instance — eliminating the duplicate-React
+    // "Cannot read properties of null (reading 'useState')" crash.
+    include: [
+      // CJS subpath that @lexkit/editor's bundled dist imports with named
+      // exports ({ renderToStaticMarkup }); pre-bundling gives it a proper
+      // ESM export map via needsInterop, otherwise Vite serves raw CJS and
+      // the whole shell throws.
+      "react-dom/server.browser",
+      "motion",
+      "motion/react",
+      "framer-motion",
+      "lucide-react",
+      "react-image-crop",
+    ],
+    // Force every dependency (pre-bundled or transformed) to import the
+    // project's own React package instead of resolving react from its own
+    // node_modules / pnpm store location. Without this, esbuild produces
+    // shared chunks (e.g. chunk-7QECX6ZS.js) with a second inlined copy of
+    // React, causing the "Cannot read properties of null (reading
+    // 'useState')" duplicate-React crash.
+    dedupe: ["react", "react-dom", "react-dom/client"],
+  },
   resolve: {
     alias: {
       "@": path.resolve(import.meta.dirname, "client", "src"),

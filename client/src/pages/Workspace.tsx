@@ -1,5 +1,4 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { aiAwareFetch } from "@/lib/aiNotice";
 import { motion, AnimatePresence } from "motion/react";
 import { jsPDF } from "jspdf";
 import { Document, Packer, Paragraph, TextRun } from "docx";
@@ -13,7 +12,6 @@ import {
   FileCode,
   FileSpreadsheet,
   Settings,
-  CheckCircle,
   FileText,
   Download,
   Save,
@@ -83,6 +81,7 @@ import 'react-image-crop/dist/ReactCrop.css';
 import * as pdfjsLib from 'pdfjs-dist';
 pdfjsLib.GlobalWorkerOptions.workerSrc = `/assets/pdf.worker.mjs`;
 import { ScannerEngine } from "../lib/ScannerEngine";
+import { recognizeImage, releaseWorker } from "../lib/OcrEngine";
 import { ExportEngine } from "../lib/ExportEngine";
 import { ingestDocument, searchIntelligence, syncRagIndex, ScanDocument, getAllScans, deleteScan, updateDocument, restoreScan } from "../lib/rag-search";
 const globalScannerEngine = new ScannerEngine();
@@ -1463,23 +1462,6 @@ export default function Workspace() {
     setOcrError("");
     setScannerLogs([]);
 
-    const logSteps = [
-      "Analyzing selections...",
-      "Optimizing visual contrast...",
-      "Transcribing text exactly as seen...",
-      "Formatting final output..."
-    ];
-
-    let currentStep = 0;
-    const interval = setInterval(() => {
-      if (currentStep < logSteps.length) {
-        setScannerLogs(prev => [...prev, logSteps[currentStep]]);
-        currentStep++;
-      } else {
-        clearInterval(interval);
-      }
-    }, 280);
-
     try {
       let combinedText = "";
 
@@ -1494,23 +1476,9 @@ export default function Workspace() {
            setScannerProgress({ currentIndex: i, total: cropQueue.length, status: 'scanning' });
 
            try {
-             setScannerLogs(prev => [...prev, `Uploading page ${cropItem.page} online for Gemini OCR processing...`]);
-             const res = await aiAwareFetch("/api/ocr-extract", {
-               method: "POST",
-               headers: { "Content-Type": "application/json" },
-               body: JSON.stringify({
-                 image: cropItem.base64Data,
-                 mimeType: "image/jpeg"
-               })
-             });
-             const data = await res.json();
-             if (!res.ok) {
-               throw new Error(data.details || data.error || "OCR failed");
-             }
-             const text = data.text;
+             setScannerLogs(prev => [...prev, `Transcribing page ${cropItem.page} locally...`]);
+             const text = await recognizeImage(cropItem.base64Data);
              results.push({ index: i, page: cropItem.page, text: text });
-
-             await new Promise(r => setTimeout(r, 800));
            } catch (e: any) {
              results.push({ index: i, page: cropItem.page, error: e.message });
            }
@@ -1594,25 +1562,12 @@ export default function Workspace() {
           setScannerLogs(prev => [...prev, `[Bake Warning] ${bakeErr.message}`]);
         }
 
-        setScannerLogs(prev => [...prev, "Uploading document online to Gemini API..."]);
-        const res = await aiAwareFetch("/api/ocr-extract", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            image: base64Data,
-            mimeType: "image/jpeg"
-          })
-        });
-        const data = await res.json();
-        if (!res.ok) {
-          throw new Error(data.details || data.error || "OCR failed");
-        }
-        const text = data.text;
+        setScannerLogs(prev => [...prev, "Transcribing document locally..."]);
+        const text = await recognizeImage(base64Data);
         combinedText = cleanOcrText(text);
       }
 
       setOcrResult((prev) => (prev ? prev + "\n" + combinedText.trim() : combinedText.trim()));
-      setScannerLogs(prev => [...prev, "✓ Text transcribed successfully!"]);
       return combinedText.trim();
     } catch (err: any) {
       console.error(err);
@@ -1621,7 +1576,6 @@ export default function Workspace() {
     } finally {
       setIsOcrLoading(false);
       setIsScannerAnimating(false);
-      clearInterval(interval);
     }
   };
 
@@ -1769,7 +1723,7 @@ export default function Workspace() {
           }
           setOcrResult(text);
           setIsOcrLoading(false);
-          setScannerLogs(["✓ Text loaded successfully!"]);
+          setScannerLogs(["Text loaded from file."]);
         };
         reader.onerror = () => {
            setOcrError("Unable to read the text file contents.");
