@@ -80,3 +80,29 @@ Verified on prod build (localhost:4000, fresh hashed bundle):
 - caretRestored showed 'none' after SIMULATED mouse event (no real selection set) — expected, needs real range selection check which threw IndexSizeError (p has only 1 child: caret element?). Use first text node with length check.
 Remaining: finish real-selection restore check (use text node of length ≥5, else use execCommand), mobile viewport test 375px, checkpoint, deliver.
 Prod serve cmd: cd /home/ubuntu/royscript-tsr/dist/public && python3 -m http.server 4000 (session main)
+
+## Mobile stale-caret diagnosis (Round 5, 08:32)
+Layout confirmed: caret div is absolute inside `.lexkit-editor` (position:relative, overflow:hidden). Editable `.lexkit-content-editable` (overflow:auto, height:100%, contain:layout paint) is a flex child INSIDE lexkit-editor but NOT the caret container. Rect math: caretRange rect (viewport-relative) minus containerRect (editor, viewport-relative) minus editableEl.scrollTop/scrollLeft. Math looks correct on paper.
+Suspects:
+1. TIMING: `input` event fires; Lexical commits asynchronously; DOM selection during the rAF immediately after input may still point at pre-commit position → rect stale.
+2. Lexical's registerUpdateListener calls updateCaretPosition() synchronously in the commit — BUT this is called BEFORE React flushes DOM? Lexical reads its own state; DOM may not yet reflect the new text (React batches). caretRange rect on DOM that hasn't reflowed the new char → rect could be at OLD position. THIS matches the screenshot: caret stays where it was.
+3. Mobile soft keyboard: visualViewport changes, scroll position of editable changes (auto-scroll to keep caret in view). editable 'scroll' fires → handleEvents → one rAF pass. If this races with Lexical's stale selection...
+4. focusNode during mobile composition may be a stale detached node... 
+Plan: (a) in updateCaretPosition, read Lexical's selection via editor.getEditorState().read(()=>$getSelection()) when DOM selection is suspect; use DOM selection otherwise. (b) Also schedule a second rAF pass after input events to re-measure post-reflow. (c) listen to visualViewport resize (keyboard). (d) On mobile only, measure focusNode's DOM element position via caretRange but ALSO cross-check: if measured rect is 'behind' where text ends, use Lexical's offset mapped to DOM node.
+Simplest robust fix: after Lexical commit (registerUpdateListener), schedule updateCaretPosition in NEXT rAF (post-reflow) via requestAnimationFrame; that gives DOM time to reflow. Also add visualViewport resize listener.
+
+## Round 5 fix implemented (08:34)
+File: client/src/components/lexkit/DefaultTemplate.tsx
+Changes: (1) registerUpdateListener now schedules updateCaretPosition() in NEXT rAF (post-reflow), fixing Lexical-commit-before-DOM-reflow stale measurement; (2) input listener now double-shots (handleEvents + rAF again); (3) window.visualViewport resize/scroll listener triggers double-shot (keyboard layout shifts); (4) onViewportResizeRef declared at line ~681 for cleanup.
+NOTE: onInputDoubleShot duplicates the existing editable.addEventListener('input', handleEvents) at line ~1149 — REMOVE the original line 1149 `editable.addEventListener("input", handleEvents);` to avoid double-adding (harmless due to rAF-throttle guard but cleaner to remove).
+Remaining: tsc check, prod rebuild, validate burst measurement in mobile emulation (insertText bursts + verify caret x matches text end), desktop smoke test, checkpoint, deliver.
+Prod serve: cd /home/ubuntu/royscript-tsr/dist/public && python3 -m http.server 4000 (session main, keep running).
+Repo sync (optional after): git push origin main (user's GitHub: realdogobon/Project-R01, remote origin).
+User's phone runs the PUBLISHED site (roycript . manus.space?) — screenshot shows live dark theme with mobile PWA chrome. Publishing needed after checkpoint.
+
+## Round 5 prod validation evidence (08:33)
+Prod bundle (assets/index-CW6PT-oJ.js, built 08:32) loaded on http://localhost:4000/index.html?v=round5.
+Burst test result: caretT translate3d(317.983px, 23.6px, ...) vs textEndRect l=319 — caret lands WITHIN 2px of the true insertion point after a 30-char burst at 30ms intervals. caretComputedTop 0 (transform-based positioning, correct), textLen 215 (prior content persisted).
+Caret follows text end correctly on desktop prod. Remaining: mobile emulation screenshot check (375px) already done earlier; visualViewport listener added for keyboard.
+Cleanup note: onInputDoubleShot replaced editable.addEventListener('input', handleEvents); visualViewport resize/scroll listener + cleanup via onViewportResizeRef — tsc clean, prod build ok.
+Next: snapshot check, checkpoint, deliver report with publish instruction.

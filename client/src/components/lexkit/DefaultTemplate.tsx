@@ -677,6 +677,8 @@ function EditorContent({
   const containerRef = useRef<HTMLDivElement>(null);
   const caretRef = useRef<HTMLDivElement>(null);
   const [caretFocused, setCaretFocused] = useState(false);
+  // Round 5: keeps a handle to the visualViewport resize handler for cleanup
+  const onViewportResizeRef = useRef<EventListener | null>(null);
 
   // Physics-based Caret Ref
   const caretPhysicsRef = useRef({
@@ -1135,12 +1137,33 @@ function EditorContent({
       // composition events fire while the IME is building text (Hindi/Chinese/
       // predictive typing). selectionchange alone can lag during these,
       // so we pin the caret in real time for a zero-lag feel.
-      editable.addEventListener("input", handleEvents);
       editable.addEventListener("compositionstart", handleEvents);
       editable.addEventListener("compositionupdate", handleEvents);
       editable.addEventListener("compositionend", handleEvents);
       // touchend fires even when activeElement hasn't updated yet (mobile)
       editable.addEventListener("touchend", handleEvents);
+      // ── Round 5: double-shot on input ── on mobile the first measurement
+      // pass often reads the pre-reflow geometry (caret stale at old pos).
+      // A second pass after the next animation frame catches the reflowed
+      // position, so the caret can never lag behind the typed text.
+      const onInputDoubleShot = () => {
+        handleEvents();
+        requestAnimationFrame(() => handleEvents());
+      };
+      editable.addEventListener("input", onInputDoubleShot);
+    }
+
+    // ── Round 5: soft-keyboard layout shifts ── the visual viewport shrinks
+    // when the keyboard opens; element geometry changes WITHOUT editable
+    // scroll firing, leaving the caret at stale coords. React to it.
+    if (window.visualViewport) {
+      const onViewportResize = () => {
+        handleEvents();
+        requestAnimationFrame(handleEvents);
+      };
+      window.visualViewport.addEventListener("resize", onViewportResize);
+      window.visualViewport.addEventListener("scroll", onViewportResize);
+      onViewportResizeRef.current = onViewportResize;
     }
 
     // Hide caret when clicking outside the editor container
@@ -1175,6 +1198,11 @@ function EditorContent({
         editable.removeEventListener("compositionupdate", handleEvents);
         editable.removeEventListener("compositionend", handleEvents);
         editable.removeEventListener("touchend", handleEvents);
+      }
+      if (window.visualViewport && onViewportResizeRef.current) {
+        window.visualViewport.removeEventListener("resize", onViewportResizeRef.current);
+        window.visualViewport.removeEventListener("scroll", onViewportResizeRef.current);
+        onViewportResizeRef.current = null;
       }
       clearTimeout(timeoutId);
     };
@@ -1341,10 +1369,23 @@ function EditorContent({
 
   useEffect(() => {
     if (!editor) return;
+    // ── Round 5: mobile stale-caret fix ── Lexical commits run BEFORE the DOM
+    // reflows, so a synchronous updateCaretPosition() here measures the OLD
+    // text geometry and the caret sits one step behind (very visible on
+    // Android soft-keyboard typing: caret frozen at line start while text
+    // flows past it). Scheduling in the NEXT rAF guarantees the browser has
+    // reflowed the newly inserted character and the caretRange rect reports
+    // the true insertion point.
+    let scheduled = false;
     return editor.registerUpdateListener(({ dirtyElements, dirtyLeaves }) => {
       if (dirtyElements.size > 0 || dirtyLeaves.size > 0) {
         if (onChange) onChange();
-        updateCaretPosition();
+        if (scheduled) return;
+        scheduled = true;
+        requestAnimationFrame(() => {
+          scheduled = false;
+          updateCaretPosition();
+        });
       }
     });
   }, [editor, onChange, updateCaretPosition]);
