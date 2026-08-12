@@ -82,6 +82,7 @@ import * as pdfjsLib from 'pdfjs-dist';
 pdfjsLib.GlobalWorkerOptions.workerSrc = `/assets/pdf.worker.mjs`;
 import { ScannerEngine } from "../lib/ScannerEngine";
 import { recognizeImage, releaseWorker } from "../lib/OcrEngine";
+import { transcribeWithModel, hasApiKeyFor, getProviderOf } from "../lib/AiVisionEngine";
 import { ExportEngine } from "../lib/ExportEngine";
 import { ingestDocument, searchIntelligence, syncRagIndex, ScanDocument, getAllScans, deleteScan, updateDocument, restoreScan } from "../lib/rag-search";
 const globalScannerEngine = new ScannerEngine();
@@ -1456,6 +1457,25 @@ export default function Workspace() {
     setScannerCrop(undefined);
   };
 
+  /**
+   * Routes transcription through the selected AI model when its provider
+   * key is configured; otherwise (or on any cloud failure) falls back to
+   * the local Tesseract engine so scans never dead-end.
+   */
+  const recognizeOneImage = async (base64Data: string): Promise<string> => {
+    const useCloud = hasApiKeyFor(selectedScanner);
+    if (useCloud) {
+      try {
+        setScannerLogs(prev => [...prev, `[Pipeline] Routing through ${selectedScanner}...`]);
+        return await transcribeWithModel(selectedScanner, base64Data);
+      } catch (cloudErr: any) {
+        setScannerLogs(prev => [...prev, `[Pipeline] Cloud pass unavailable (${getProviderOf(selectedScanner)}); falling back to local transcription...`]);
+        console.error(cloudErr);
+      }
+    }
+    return recognizeImage(base64Data);
+  };
+
   const executeExtraction = async () => {
     setIsOcrLoading(true);
     setIsScannerAnimating(true);
@@ -1476,8 +1496,8 @@ export default function Workspace() {
            setScannerProgress({ currentIndex: i, total: cropQueue.length, status: 'scanning' });
 
            try {
-             setScannerLogs(prev => [...prev, `Transcribing page ${cropItem.page} locally...`]);
-             const text = await recognizeImage(cropItem.base64Data);
+             setScannerLogs(prev => [...prev, `Transcribing page ${cropItem.page}...`]);
+             const text = await recognizeOneImage(cropItem.base64Data);
              results.push({ index: i, page: cropItem.page, text: text });
            } catch (e: any) {
              results.push({ index: i, page: cropItem.page, error: e.message });
@@ -1562,8 +1582,8 @@ export default function Workspace() {
           setScannerLogs(prev => [...prev, `[Bake Warning] ${bakeErr.message}`]);
         }
 
-        setScannerLogs(prev => [...prev, "Transcribing document locally..."]);
-        const text = await recognizeImage(base64Data);
+        setScannerLogs(prev => [...prev, "Transcribing document..."]);
+        const text = await recognizeOneImage(base64Data);
         combinedText = cleanOcrText(text);
       }
 

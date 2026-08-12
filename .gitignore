@@ -111,3 +111,8 @@ temp/
 # Manus version file (auto-generated, not part of source)
 client/public/__manus__/version.json
 .project-config.json
+
+# Tesseract runtime data (fetched at runtime, never committed)
+eng.traineddata
+todo.md
+DUAL_REACT_FIX_NOTES.md

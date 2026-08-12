@@ -49,6 +49,11 @@ import {
   previewErrorSound,
 } from "../../hooks/useSoundEngine";
 import { previewAmbientSound, stopAmbientPreview } from "../../hooks/useAmbientEngine";
+import {
+  loadProviderKeys,
+  saveProviderKeys,
+  type ProviderKeys,
+} from "../../lib/AiVisionEngine";
 import { motion, AnimatePresence } from "motion/react";
 
 function cn(...classes: (string | undefined | null | boolean)[]) {
@@ -618,6 +623,39 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                         }
                         activeColor={accentColor}
                       />
+                    </Section>
+
+                    {/* SECTION: SCANNER */}
+                    <Section title="Scanner">
+                      <p className="text-[11px] text-neutral-400 dark:text-neutral-500 leading-relaxed -mt-2 mb-3">
+                        AI models only run when a key is saved here. Without a key, scans fall back to the local browser engine. Keys stay on your device.
+                      </p>
+                      <div className="flex flex-col gap-2">
+                        {[
+                          { key: "gemini", label: "Google Gemini" },
+                          { key: "groq", label: "Groq" },
+                          { key: "openai", label: "OpenAI" },
+                        ].map(({ key, label }) => (
+                          <label key={key} className="flex flex-col gap-1">
+                            <span className="text-[11px] font-medium text-neutral-500 dark:text-neutral-400 tracking-wide uppercase">{label}</span>
+                            <input
+                              type="password"
+                              defaultValue={loadProviderKeys()[key as keyof ProviderKeys] || ""}
+                              onBlur={(e) => {
+                                const keys = { ...loadProviderKeys() };
+                                if (e.target.value.trim()) {
+                                  keys[key as keyof ProviderKeys] = e.target.value.trim();
+                                } else {
+                                  delete keys[key as keyof ProviderKeys];
+                                }
+                                saveProviderKeys(keys);
+                              }}
+                              placeholder={`Paste your ${label} API key`}
+                              className="w-full bg-white dark:bg-black/20 border border-neutral-200 dark:border-white/10 rounded px-2 py-1 text-[12px] text-neutral-700 dark:text-neutral-200 outline-none focus:border-[#C28181] dark:focus:border-[#60C5EA] transition-colors"
+                            />
+                          </label>
+                        ))}
+                      </div>
                     </Section>
 
                     {/* Reset Button (Tactile and matching original bottom) */}

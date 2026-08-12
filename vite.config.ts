@@ -203,33 +203,20 @@ function vitePluginStorageProxy(): Plugin {
   };
 }
 
-const plugins = [react(), tailwindcss(), jsxLocPlugin(), vitePluginManusRuntime(), vitePluginManusDebugCollector(), vitePluginStorageProxy(), reactNamedExportsPlugin()];
+const plugins = [react(), tailwindcss(), jsxLocPlugin(), vitePluginManusRuntime(), vitePluginManusDebugCollector(), vitePluginStorageProxy()];
 
-// Dev-only shim: Vite pre-bundles react as `export default require_react()`
-// (no named exports), but app source uses named imports ({ useState }).
-// This plugin appends a named-export map over the shared inlined CJS
-// instance so named imports resolve to the SAME single React object —
-// eliminating the "Cannot read properties of null (reading 'useState')"
-// crash.
-function reactNamedExportsPlugin() {
-  const re = /node_modules\/\.vite\/deps\/react(_jsx-dev-runtime|_jsx-runtime|_dom_client)?\.js$/;
+// esbuild plugin used by the dependency optimizer: inside dep bundles,
+// the bare "react" specifier resolves to the project's own deduplicated
+// React package (never a nested pnpm-store copy). Combined with
+// optimizeDeps.dedupe below, every dep bundle and the app source share
+// ONE React module — the definitive fix for the duplicate-React
+// "Cannot read properties of null (reading 'useState')" crash.
+function externalizeReactForOptimizer() {
+  const reactPath = path.resolve(import.meta.dirname, "node_modules", "react", "index.js");
   return {
-    name: "react-named-exports",
-    enforce: "post",
-    transform(code: string, id: string) {
-      if (!re.test(id) || code.includes("// react-named-exports-shim")) return;
-      // Rewrite `export default require_react();` to also expose every
-      // property of the shared CJS React object as a named export.
-      const patched = code.replace(
-        /export default require_react\(\);/,
-        'const __vite_react_default = require_react();\nexport default __vite_react_default;\n' +
-          'Object.keys(__vite_react_default).forEach((__k) => {\n' +
-          '  const __v = __vite_react_default[__k];\n' +
-          '  if (__v !== undefined) exports[__k] = __v;\n' +
-          '});'
-      );
-      if (patched === code) return;
-      return { code: patched, map: null };
+    name: "optimizer-dedupe-react",
+    setup(build) {
+      build.onResolve({ filter: /^react$/ }, () => ({ path: reactPath, namespace: "file" }));
     },
   };
 }
@@ -246,6 +233,10 @@ export default defineConfig({
       // exports ({ renderToStaticMarkup }); pre-bundling gives it a proper
       // ESM export map via needsInterop, otherwise Vite serves raw CJS and
       // the whole shell throws.
+
+      "react",
+      "react/jsx-runtime",
+      "react/jsx-dev-runtime",
       "react-dom/server.browser",
       "motion",
       "motion/react",
@@ -260,13 +251,18 @@ export default defineConfig({
     // React, causing the "Cannot read properties of null (reading
     // 'useState')" duplicate-React crash.
     dedupe: ["react", "react-dom", "react-dom/client"],
+    esbuildOptions: {
+      plugins: [externalizeReactForOptimizer()],
+    },
   },
   resolve: {
-    alias: {
-      "@": path.resolve(import.meta.dirname, "client", "src"),
-      "@shared": path.resolve(import.meta.dirname, "shared"),
-      "@assets": path.resolve(import.meta.dirname, "attached_assets"),
-    },
+    alias: [
+      // Built-in dedupe covers app-source resolution; the optimizer plugin
+      // above covers dep bundles. Kept for any deep-import edge cases.
+      { find: "@", replacement: path.resolve(import.meta.dirname, "client", "src") },
+      { find: "@shared", replacement: path.resolve(import.meta.dirname, "shared") },
+      { find: "@assets", replacement: path.resolve(import.meta.dirname, "attached_assets") },
+    ],
   },
   envDir: path.resolve(import.meta.dirname),
   root: path.resolve(import.meta.dirname, "client"),

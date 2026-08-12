@@ -4,6 +4,13 @@ import "react-image-crop/dist/ReactCrop.css";
 import { motion, AnimatePresence } from "motion/react";
 import { useResizable } from "../hooks/useResizable";
 import {
+  getProviderOf,
+  hasApiKeyFor,
+  loadProviderKeys,
+  saveProviderKeys,
+  type ProviderKeys,
+} from "../lib/AiVisionEngine";
+import {
   X,
   ChevronUp,
   ChevronDown,
@@ -168,6 +175,40 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
   const [pendingTextToSend, setPendingTextToSend] = useState("");
   const [shakePath, setShakePath] = useState(false);
   const [showPathRequiredError, setShowPathRequiredError] = useState(false);
+
+  // AI provider key handling — keys live in localStorage (never leave the browser)
+  const [showKeyInput, setShowKeyInput] = useState(false);
+  const [keyRefresh, setKeyRefresh] = useState(0);
+  const [apiKeyDraft, setApiKeyDraft] = useState("");
+
+  const providerLabel = (() => {
+    const p = getProviderOf(selectedScanner);
+    return p === "gemini" ? "Gemini" : p === "groq" ? "Groq" : "OpenAI";
+  })();
+
+  const apiKeyConfigured = hasApiKeyFor(selectedScanner);
+
+  const saveApiKey = () => {
+    const provider = getProviderOf(selectedScanner);
+    const keys: ProviderKeys = { ...loadProviderKeys() };
+    if (apiKeyDraft.trim()) {
+      keys[provider] = apiKeyDraft.trim();
+    } else {
+      delete keys[provider];
+    }
+    saveProviderKeys(keys);
+    setShowKeyInput(false);
+    setApiKeyDraft("");
+    setKeyRefresh((v) => v + 1);
+  };
+
+  // Sync draft when the selected model changes (fresh key per provider)
+  useEffect(() => {
+    if (showKeyInput) {
+      const provider = getProviderOf(selectedScanner);
+      setApiKeyDraft(loadProviderKeys()[provider] || "");
+    }
+  }, [selectedScanner, showKeyInput]);
 
   const isTextReady = !!ocrResult?.trim();
 
@@ -647,34 +688,6 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
 
         {/* Dual Panel Body Layout */}
         <div className="flex flex-col lg:flex-row flex-1 overflow-hidden">
-          {/* Extracted Text Preview — surfaces the live OCR transcription beside the document */}
-          <AnimatePresence>
-            {isTextReady && (
-              <motion.div
-                initial={{ width: 0, opacity: 0 }}
-                animate={{ width: 264, opacity: 1 }}
-                exit={{ width: 0, opacity: 0 }}
-                transition={{ duration: 0.28, ease: [0.23, 1, 0.32, 1] }}
-                className="hidden lg:flex flex-col shrink-0 overflow-hidden border-r border-black/5 dark:border-white/5 bg-[#FDFDFD] dark:bg-[#16161E]"
-              >
-                <div className="flex flex-col h-full min-w-[264px]">
-                  <div className="flex items-center justify-between px-4 py-3 border-b border-black/5 dark:border-white/5">
-                    <div className="flex items-center gap-2">
-                      <Sparkles className="w-3.5 h-3.5" style={{ color: activeAccent }} strokeWidth={1.8} />
-                      <span className="text-[12px] font-semibold tracking-wide text-[#202020] dark:text-[#EAEAEA] uppercase">Extracted Text</span>
-                    </div>
-                    <span className="text-[11px] font-mono text-gray-400 dark:text-gray-500">{ocrResult.trim().length} chars</span>
-                  </div>
-                  <div className="flex-1 overflow-y-auto custom-scrollbar px-4 py-3">
-                    <pre className="whitespace-pre-wrap break-words text-[12.5px] leading-[1.65] text-[#2B2B2B] dark:text-[#DCDCE2] font-normal" style={{ fontFamily: "inherit" }}>
-                      {ocrResult}
-                    </pre>
-                  </div>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
           {/* Left Navigation Sidebar Options */}
           <div className="w-full lg:w-[310px] flex flex-col px-7 pb-6 overflow-y-auto custom-scrollbar shrink-0 border-b lg:border-b-0 lg:border-r border-black/5 dark:border-white/5">
             <h1 className="text-[26px] font-semibold text-[#1E1E1E] dark:text-[#FFFFFF] mt-3 mb-6 tracking-tight">Scan</h1>
@@ -711,6 +724,40 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                  </select>
                  <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500 pointer-events-none" />
               </div>
+              {!apiKeyConfigured && (
+                <p className="text-[11px] leading-relaxed text-[#B0413E] dark:text-[#E88A88] pt-1 pl-0.5">
+                  No {providerLabel} key configured — scans will run locally in the browser instead.
+                  <button
+                    onClick={() => setShowKeyInput(true)}
+                    className="underline underline-offset-2 hover:opacity-80 ml-1"
+                  >
+                    Add key
+                  </button>
+                </p>
+              )}
+              {showKeyInput && (
+                <div key={`key-${keyRefresh}`} className="mt-2 flex items-center gap-1.5">
+                  <input
+                    type="password"
+                    placeholder={`${providerLabel} API key`}
+                    defaultValue={loadProviderKeys()[getProviderOf(selectedScanner)] || ""}
+                    onChange={(e) => setApiKeyDraft(e.target.value)}
+                    className="flex-1 min-w-0 appearance-none bg-white dark:bg-[#2A2A35] border border-[#E5DCDA] dark:border-[#1A1A23] rounded-md px-2.5 py-1 text-[12px] text-[#202020] dark:text-[#EAEAEA] outline-none focus:border-[#C28181] dark:focus:border-[#60C5EA]"
+                  />
+                  <button
+                    onClick={() => saveApiKey()}
+                    className="px-2.5 py-1 text-[12px] font-medium rounded-md bg-[#C28181] dark:bg-[#60C5EA] text-white transition-opacity hover:opacity-90 active:scale-[0.97]"
+                  >
+                    Save
+                  </button>
+                  <button
+                    onClick={() => setShowKeyInput(false)}
+                    className="px-2 py-1 text-[12px] text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
+                  >
+                    <X size={13} />
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* File Type — auto-detected from the uploaded file extension */}
@@ -1127,22 +1174,6 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                             className="relative flex justify-center items-center"
                             onContextMenu={handleContextMenu}
                           >
-                             {/* Slide-in transcription overlay for small screens (lg hides the preview column) */}
-                             {isTextReady && (
-                               <motion.div
-                                 initial={{ opacity: 0, y: 8 }}
-                                 animate={{ opacity: 1, y: 0 }}
-                                 exit={{ opacity: 0, y: 8 }}
-                                 transition={{ duration: 0.25, ease: [0.23, 1, 0.32, 1] }}
-                                 className="absolute -bottom-3 left-1/2 -translate-x-1/2 z-30 w-[min(320px,92%)] max-h-[140px] overflow-y-auto custom-scrollbar rounded-lg border border-black/5 dark:border-white/10 bg-white/95 dark:bg-[#1A1A23]/95 backdrop-blur-md shadow-lg px-4 py-3 lg:hidden"
-                               >
-                                 <div className="flex items-center justify-between mb-1.5">
-                                   <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">Extracted Text</span>
-                                   <span className="text-[10px] font-mono text-gray-400 dark:text-gray-500">{ocrResult.trim().length} chars</span>
-                                 </div>
-                                 <pre className="whitespace-pre-wrap break-words text-[12px] leading-[1.6] text-[#2B2B2B] dark:text-[#DCDCE2]">{ocrResult}</pre>
-                               </motion.div>
-                             )}
                              {isCropEnabled ? (
                                <ReactCrop
                                  crop={scannerCrop}
