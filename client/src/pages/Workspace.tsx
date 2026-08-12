@@ -3783,7 +3783,7 @@ export default function Workspace() {
                         examLockedUI ? "opacity-40 grayscale-[40%] cursor-not-allowed pointer-events-none" : "cursor-pointer"
                       } ${
                         isActive
-                          ? "bg-white dark:bg-[#1a1a1a] border-neutral-200 dark:border-white/10 border-t-transparent text-neutral-800 dark:text-neutral-100 font-semibold"
+                          ? "bg-white dark:bg-[#1a1a1a] border-transparent dark:border-transparent text-neutral-800 dark:text-neutral-100 font-semibold"
                           : "bg-neutral-50/50 dark:bg-[#1c1c1c] text-neutral-400 dark:text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300 hover:bg-neutral-200/50 dark:hover:bg-white/[0.02]"
                       }`}
                     >
