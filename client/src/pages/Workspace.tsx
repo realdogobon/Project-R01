@@ -495,24 +495,8 @@ export default function Workspace() {
     };
     measure();
     window.addEventListener("resize", measure);
-    // Keep the glow geometry pinned to the tab's true box even when the label
-    // changes, fonts finish loading, or any layout reflow happens — a stale
-    // viewBox is what made the tube's corner arcs "break" and misalign.
-    const ro = new ResizeObserver(measure);
-    const el = activeTabElRef.current;
-    if (el) ro.observe(el);
-    return () => {
-      window.removeEventListener("resize", measure);
-      ro.disconnect();
-    };
+    return () => window.removeEventListener("resize", measure);
   }, [activeTabId]);
-
-  // The close animation runs on the CLOSING tab, but its SVG is currently built
-  // from the ACTIVE tab's measured box — wrong geometry whenever the two differ
-  // (different label lengths, first-tab flush edges). Snapshot the closing tab's
-  // own real box so the retreating trail follows the exact outline it belongs to.
-  const [closingTabBox, setClosingTabBox] = useState<{ width: number; height: number } | null>(null);
-  const tabElsRef = useRef<Map<string, HTMLDivElement>>(new Map());
   const pendingCloseTabIdRef = useRef<string | null>(null);
   const activeTab = tabs.find(t => t.id === activeTabId);
   const isExamSealed = !!activeTab?.examSealed;
@@ -598,17 +582,6 @@ export default function Workspace() {
       setPendingAction(`animatedCloseTab:${tabId}`);
       setIsUnsavedPopupOpen(true);
       return;
-    }
-    // Snapshot the closing tab's own real box before the layout shifts, so the
-    // retreating trail follows the exact outline of the tab that is being closed.
-    const closingEl = tabElsRef.current.get(tabId);
-    if (closingEl) {
-      const rect = closingEl.getBoundingClientRect();
-      if (rect.width > 0 && rect.height > 0) {
-        setClosingTabBox({ width: rect.width, height: rect.height });
-      }
-    } else {
-      setClosingTabBox(null);
     }
     pendingCloseTabIdRef.current = tabId;
     setClosingTabId(tabId);
@@ -3742,15 +3715,7 @@ export default function Workspace() {
                   return (
                     <div
                       key={tab.id}
-                      ref={(el) => {
-                        if (el) {
-                          tabElsRef.current.set(tab.id, el);
-                          if (isActive) activeTabElRef.current = el;
-                        } else {
-                          tabElsRef.current.delete(tab.id);
-                          if (activeTabElRef.current === el) activeTabElRef.current = null;
-                        }
-                      }}
+                      ref={isActive ? activeTabElRef : undefined}
                       onClick={() => !examLockedUI && switchTab(tab.id)}
                       onDoubleClick={(e) => {
                          e.preventDefault();
@@ -3783,7 +3748,7 @@ export default function Workspace() {
                         examLockedUI ? "opacity-40 grayscale-[40%] cursor-not-allowed pointer-events-none" : "cursor-pointer"
                       } ${
                         isActive
-                          ? "bg-white dark:bg-[#1a1a1a] border-transparent dark:border-transparent text-neutral-800 dark:text-neutral-100 font-semibold"
+                          ? "bg-white dark:bg-[#1a1a1a] border-neutral-200 dark:border-white/10 text-neutral-800 dark:text-neutral-100 font-semibold"
                           : "bg-neutral-50/50 dark:bg-[#1c1c1c] border-transparent text-neutral-400 dark:text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300 hover:bg-neutral-200/50 dark:hover:bg-white/[0.02]"
                       }`}
                     >
@@ -3848,12 +3813,11 @@ export default function Workspace() {
                           glow, played in reverse — the lit trail retreats back to the wall
                           and vanishes, at the same duration the old flat close-drain used. */}
                       {closingTabId === tab.id && (() => {
-                        const closeBox = closingTabBox || activeTabBox;
-                        const closePath = buildTabAccentPath(closeBox.width, closeBox.height, isFirstTab);
+                        const closePath = buildTabAccentPath(activeTabBox.width, activeTabBox.height, isFirstTab);
                         return (
                           <svg
                             className="absolute inset-0 w-full h-full overflow-visible pointer-events-none"
-                            viewBox={`0 0 ${closeBox.width} ${closeBox.height}`}
+                            viewBox={`0 0 ${activeTabBox.width} ${activeTabBox.height}`}
                           >
                             <path
                               d={closePath}
