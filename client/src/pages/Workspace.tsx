@@ -475,14 +475,16 @@ export default function Workspace() {
   const [closingTabId, setClosingTabId] = useState<string | null>(null);
   const [isAccentBarIdle, setIsAccentBarIdle] = useState(false);
   const lastActivityAtRef = useRef<number>(Date.now());
+  const rafPendingRef = useRef<number | null>(null);
   // Real pixel box of the currently-active tab, measured directly from the DOM so the
   // neon-glow outline's curve radius matches the tab's actual rendered corner exactly
   // (no distorted viewBox stretching a square arc onto a rectangular tab).
   const activeTabElRef = useRef<HTMLDivElement | null>(null);
   const [activeTabBox, setActiveTabBox] = useState({ width: 176, height: 40 });
-
   // Measures the active tab's real rendered box so the neon-glow outline can be built
   // in exact pixel units instead of a distorted 0-100 viewBox stretched to fit.
+  // A ResizeObserver keeps the glow pinned to the tab's LIVE geometry even when the
+  // label changes (auto-rename/typing), other tabs come/go, or any layout shift moves it.
   useEffect(() => {
     const measure = () => {
       const el = activeTabElRef.current;
@@ -495,7 +497,21 @@ export default function Workspace() {
     };
     measure();
     window.addEventListener("resize", measure);
-    return () => window.removeEventListener("resize", measure);
+    const observer = new ResizeObserver(() => {
+      // Clamp rAF so rapid layout shifts (e.g. while typing mid-burst) can't thrash state.
+      if (rafPendingRef.current) return;
+      rafPendingRef.current = requestAnimationFrame(() => {
+        rafPendingRef.current = null;
+        measure();
+      });
+    });
+    const target = activeTabElRef.current;
+    if (target) observer.observe(target);
+    return () => {
+      window.removeEventListener("resize", measure);
+      if (rafPendingRef.current) cancelAnimationFrame(rafPendingRef.current);
+      observer.disconnect();
+    };
   }, [activeTabId]);
   const pendingCloseTabIdRef = useRef<string | null>(null);
   const activeTab = tabs.find(t => t.id === activeTabId);
@@ -584,8 +600,22 @@ export default function Workspace() {
       return;
     }
     pendingCloseTabIdRef.current = tabId;
+    // Snapshot the closing tab's live pixel box so the retreat animation can be built
+    // in the closing tab's own geometry (not the active tab's box), kept stable through
+    // the animation even if the layout shifts while closing.
+    const el = document.getElementById(`workspace-tab-${tabId}`);
+    if (el) {
+      const rect = el.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        closingTabBoxRef.current = { width: rect.width, height: rect.height };
+      }
+    }
     setClosingTabId(tabId);
   };
+  // Snapshot of the closing tab's measured box, taken at close-start so the retreat
+  // trail is built in stable geometry (avoids the "animation breaking" caused by
+  // stale/mismatched measurements when the strip reflows mid-animation).
+  const closingTabBoxRef = useRef<{ width: number; height: number }>({ width: 176, height: 40 });
   // --------------------------------
 
   const createNewTab = (name = "New Document", content = "", fileHandle = null) => {
@@ -3714,6 +3744,7 @@ export default function Workspace() {
                   const isFirstTab = tabIndex === 0;
                   return (
                     <div
+                      id={`workspace-tab-${tab.id}`}
                       key={tab.id}
                       ref={isActive ? activeTabElRef : undefined}
                       onClick={() => !examLockedUI && switchTab(tab.id)}
@@ -3813,11 +3844,19 @@ export default function Workspace() {
                           glow, played in reverse — the lit trail retreats back to the wall
                           and vanishes, at the same duration the old flat close-drain used. */}
                       {closingTabId === tab.id && (() => {
-                        const closePath = buildTabAccentPath(activeTabBox.width, activeTabBox.height, isFirstTab);
+                        // Use the closing tab's OWN measured box if we have one; otherwise
+                        // fall back to the live geometry of the closing tab's element.
+                        const tabEl = document.getElementById(`workspace-tab-${tab.id}`);
+                        const fallbackBox = tabEl ? (() => {
+                          const r = tabEl.getBoundingClientRect();
+                          return { width: r.width || 176, height: r.height || 40 };
+                        })() : closingTabBoxRef.current;
+                        const closeBox = closingTabBoxRef.current.width > 0 ? closingTabBoxRef.current : fallbackBox;
+                        const closePath = buildTabAccentPath(closeBox.width, closeBox.height, isFirstTab);
                         return (
                           <svg
                             className="absolute inset-0 w-full h-full overflow-visible pointer-events-none"
-                            viewBox={`0 0 ${activeTabBox.width} ${activeTabBox.height}`}
+                            viewBox={`0 0 ${closeBox.width} ${closeBox.height}`}
                           >
                             <path
                               d={closePath}
