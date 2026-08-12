@@ -5,13 +5,9 @@ import { motion, AnimatePresence } from "motion/react";
 import { useResizable } from "../hooks/useResizable";
 import {
   X,
-  Settings,
-  Minus,
-  Square,
   ChevronUp,
   ChevronDown,
   ChevronRight,
-  Share,
   Send,
   Trash2,
   ZoomIn,
@@ -58,43 +54,35 @@ export interface DocumentScannerModalProps {
   setCropQueue: React.Dispatch<React.SetStateAction<Array<any>>>;
   scannerImgRef: React.RefObject<HTMLImageElement>;
 
-  scannerProMode: "standard" | "book" | "idcard" | "erasewritings";
-  setScannerProMode: React.Dispatch<React.SetStateAction<"standard" | "book" | "idcard" | "erasewritings">>;
-
-  idCardFront: string | null;
-  setIdCardFront: (url: string | null) => void;
-  idCardBack: string | null;
-  setIdCardBack: (url: string | null) => void;
-  idCardStep: "front" | "back" | "ready";
-  setIdCardStep: React.Dispatch<React.SetStateAction<"front" | "back" | "ready">>;
-
-  eraseTolerance: number;
-  setEraseTolerance: (val: number) => void;
-  detectedQrCodes: string[];
-
-  applyHandwritingEraser: () => void;
-  dewarpBookSpread: () => void;
-  spliceIDCards: () => void;
+  /* ── Dormant pro-mode plumbing (ID splicer, handwriting eraser, book dewarp,
+     QR scan, auto-detect crops). Engine implementations live in Workspace.tsx;
+     the modal UI currently exposes no entry points. Props kept so the doors
+     can be re-opened with a single wiring pass later. ── */
+  scannerProMode?: "standard" | "book" | "idcard" | "erasewritings";
+  setScannerProMode?: React.Dispatch<React.SetStateAction<"standard" | "book" | "idcard" | "erasewritings">>;
+  idCardFront?: string | null;
+  setIdCardFront?: (url: string | null) => void;
+  idCardBack?: string | null;
+  setIdCardBack?: (url: string | null) => void;
+  idCardStep?: "front" | "back" | "ready";
+  setIdCardStep?: React.Dispatch<React.SetStateAction<"front" | "back" | "ready">>;
+  eraseTolerance?: number;
+  setEraseTolerance?: (val: number) => void;
+  detectedQrCodes?: string[];
+  applyHandwritingEraser?: () => void;
+  dewarpBookSpread?: () => void;
+  spliceIDCards?: () => void;
   handleAddToQueue: () => void;
-  handleAutoDetectCrops: () => void;
+  handleAutoDetectCrops?: () => void;
   handlePageChange: (newPage: number) => Promise<void>;
   executeExtraction: () => Promise<string>;
 
-  isPrivacyMode: boolean;
-  setIsPrivacyMode: (val: boolean) => void;
-
   ocrResult: string;
   setOcrResult: React.Dispatch<React.SetStateAction<string>>;
-  ocrError: string;
-
-  isTranslating: boolean;
-  handleTranslate: (lang: string) => Promise<void>;
-  scanQRCodesOnDocument: () => Promise<void>;
 
   loadOcrIntoEditor: (forcedText?: string) => void;
   saveOcrIntoRag: (forcedText?: string, customTitle?: string) => Promise<void>;
   loadOcrIntoPractice: (forcedText?: string) => void;
-  isRagIndexing: boolean;
   themeAccentColor?: string;
 
   scannerRotation: number;
@@ -121,11 +109,11 @@ export interface DocumentScannerModalProps {
   setSelectedDestinationFolder: React.Dispatch<React.SetStateAction<string>>;
   onDiscardCurrentDocument?: () => void;
   scannerProgress?: { currentIndex: number, total: number, status: 'idle' | 'scanning' | 'success' | 'error' };
-  userName?: string;
 }
 
 export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
   isScannerOpen,
+  scannerFile,
   onClose,
   scannerPreviewUrl,
   scannerPreviewUrl2,
@@ -142,7 +130,6 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
   handlePageChange,
   executeExtraction,
   scannerProgress,
-  userName,
   loadOcrIntoPractice,
   loadOcrIntoEditor,
   saveOcrIntoRag,
@@ -187,6 +174,17 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
   const [isSpacePressed, setIsSpacePressed] = useState(false);
   const activeAccent = themeAccentColor || "#C28181";
   const hasDocumentLoaded = !!(scannerPreviewUrl || scannerPreviewUrl2 || scannerStitchedUrl);
+
+  // Auto-detected file type from the uploaded file's extension (read-only indicator)
+  const detectedFileType = React.useMemo(() => {
+    if (!scannerFile) return "—";
+    const ext = scannerFile.name.split(".").pop()?.toLowerCase() ?? "";
+    const map: Record<string, string> = {
+      pdf: "PDF", png: "PNG", jpg: "JPEG", jpeg: "JPEG",
+      webp: "WEBP", md: "Markdown", html: "HTML", txt: "Text"
+    };
+    return map[ext] ?? "Unknown";
+  }, [scannerFile]);
 
   const [showSaveAsDialog, setShowSaveAsDialog] = useState(false);
   const [saveAsName, setSaveAsName] = useState("");
@@ -677,37 +675,46 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
           <div className="w-full lg:w-[310px] flex flex-col px-7 pb-6 overflow-y-auto custom-scrollbar shrink-0 border-b lg:border-b-0 lg:border-r border-black/5 dark:border-white/5">
             <h1 className="text-[26px] font-semibold text-[#1E1E1E] dark:text-[#FFFFFF] mt-3 mb-6 tracking-tight">Scan</h1>
 
-            {/* Scanner Device */}
+            {/* AI Model — pipeline routing for the scan */}
             <div className="flex flex-col gap-1.5 mb-5">
-              <label className="text-[13px] text-[#202020] dark:text-[#EAEAEA] pl-0.5">Scanner</label>
+              <label className="text-[13px] text-[#202020] dark:text-[#EAEAEA] pl-0.5">AI Model</label>
               <div className="relative">
                  <select
                    value={selectedScanner}
                    onChange={e => setSelectedScanner(e.target.value)}
                    className="w-full appearance-none bg-white dark:bg-[#2A2A35] border border-[#E5DCDA] dark:border-[#1A1A23] rounded-md px-3 py-1.5 text-[13px] text-[#202020] dark:text-[#EAEAEA] outline-none shadow-sm focus:border-[#C28181] dark:focus:border-[#60C5EA]"
                  >
-                    <option>HP DeskJet 2300 series</option>
-                    <option>Canon Pixma MX922</option>
+                    <optgroup label="Gemini">
+                      <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+                      <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+                    </optgroup>
+                    <optgroup label="Groq">
+                      <option value="groq-llama-3.3-70b">Llama 3.3 70B (Groq)</option>
+                      <option value="groq-mixtral-8x7b">Mixtral 8x7B (Groq)</option>
+                    </optgroup>
+                    <optgroup label="OpenAI">
+                      <option value="openai-gpt-4o">GPT-4o</option>
+                      <option value="openai-gpt-4o-mini">GPT-4o mini</option>
+                    </optgroup>
                  </select>
                  <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500 pointer-events-none" />
               </div>
             </div>
 
-            {/* File Format */}
+            {/* File Type — auto-detected from the uploaded file extension */}
             <div className="flex flex-col gap-1.5 mb-5">
               <label className="text-[13px] text-[#202020] dark:text-[#EAEAEA] pl-0.5">File type</label>
-              <div className="relative">
-                 <select
-                   value={selectedFileType}
-                   onChange={e => setSelectedFileType(e.target.value)}
-                   className="w-full appearance-none bg-white dark:bg-[#2A2A35] border border-[#E5DCDA] dark:border-[#1A1A23] rounded-md px-3 py-1.5 text-[13px] text-[#202020] dark:text-[#EAEAEA] outline-none shadow-sm focus:border-[#C28181] dark:focus:border-[#60C5EA]"
-                 >
-                    <option>PDF</option>
-                    <option>JPEG</option>
-                    <option>PNG</option>
-                 </select>
-                 <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500 pointer-events-none" />
+              <div className="w-full bg-white dark:bg-[#2A2A35] border border-[#E5DCDA] dark:border-[#1A1A23] rounded-md px-3 py-1.5 text-[13px] outline-none shadow-sm flex items-center gap-2 h-[32px]">
+                 <span className={`font-medium tracking-wide ${
+                   detectedFileType
+                     ? 'text-[#202020] dark:text-[#EAEAEA]'
+                     : 'text-gray-400 dark:text-gray-500'
+                 }`}>{detectedFileType}</span>
+                 {detectedFileType && (
+                   <CheckCircle className="w-3.5 h-3.5 ml-auto text-emerald-500 dark:text-emerald-400" />
+                 )}
               </div>
+              <span className="text-[11px] text-gray-400 dark:text-gray-500 pl-0.5">Detected automatically from your file</span>
             </div>
 
             {/* Color Profile Setting with unique bullet radios */}

@@ -224,6 +224,13 @@ export default defineConfig({
     port: 3000,
     strictPort: false, // Will find next available port if 3000 is busy
     host: true,
+    headers: {
+      // Never cache prebundled optimized deps or Vite internals in dev —
+      // stale query-hash chunks are the root cause of the dual-React
+      // "Cannot read properties of null (reading 'useState')" error seen in
+      // cached preview sessions.
+      "Cache-Control": "no-store",
+    },
     allowedHosts: [
       ".manuspre.computer",
       ".manus.computer",

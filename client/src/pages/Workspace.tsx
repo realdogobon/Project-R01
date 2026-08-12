@@ -1236,7 +1236,7 @@ export default function Workspace() {
   const [isCropEnabled, setIsCropEnabled] = useState<boolean>(false);
   const [isEnhancementOpen, setIsEnhancementOpen] = useState<boolean>(false);
 
-  const [selectedScanner, setSelectedScanner] = useState("HP DeskJet 2300 series");
+  const [selectedScanner, setSelectedScanner] = useState("gemini-2.5-flash");
   const [selectedFileType, setSelectedFileType] = useState("PDF");
   const [selectedColourMode, setSelectedColourMode] = useState("Colour");
   const [selectedResolution, setSelectedResolution] = useState("200 dpi");
@@ -1244,7 +1244,7 @@ export default function Workspace() {
 
   useEffect(() => {
     if (!isScannerOpen) return;
-    setScannerLogs(prev => [...prev, `[Device Connection] Active Scanner switched to ${selectedScanner}. Ready.`]);
+    setScannerLogs(prev => [...prev, `[Pipeline] Scan routed through ${selectedScanner}. Ready.`]);
   }, [selectedScanner]);
 
   useEffect(() => {
@@ -1272,12 +1272,22 @@ export default function Workspace() {
         const resultUrl = reader.result as string;
         const img = new Image();
         img.onload = () => {
+          // Resolution setting now does real work: rescale the source to the
+          // chosen dpi-equivalent long-edge before colour purification.
+          const longEdgeDpi: Record<string, number> = { "150 dpi": 150, "200 dpi": 200, "300 dpi": 300 };
+          const targetDpi = longEdgeDpi[selectedResolution] ?? 200;
+          const maxDim = targetDpi * 8.5; // A4 long edge at chosen dpi
+          const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+          const width = Math.round(img.width * scale);
+          const height = Math.round(img.height * scale);
           const canvas = document.createElement('canvas');
-          canvas.width = img.width;
-          canvas.height = img.height;
+          canvas.width = width;
+          canvas.height = height;
           const ctx = canvas.getContext('2d');
           if (ctx) {
-            ctx.drawImage(img, 0, 0);
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+            ctx.drawImage(img, 0, 0, width, height);
             const purifiedCanvas = globalScannerEngine.purifyCanvas(canvas, selectedColourMode);
             const dataUrl = purifiedCanvas.toDataURL('image/jpeg', 0.85);
             setScannerPreviewUrl(dataUrl);
@@ -1298,6 +1308,15 @@ export default function Workspace() {
   const [fallbackCopied, setFallbackCopied] = useState(false);
 
 
+  /* ═══ DORMANT PRO-MODE FAMILY (ID splicer, handwriting eraser, book dewarp,
+     QR scan, auto-detect crops, privacy mode, translate) ═══
+     All engine implementations below are real and functional, but the scanner
+     modal UI currently exposes no entry points that trigger them. State +
+     handlers are kept intact so a future pro-mode UI can be wired in with a
+     single pass — nothing here is junk; it is unopened doors.
+     (isPrivacyMode/setIsPrivacyMode defined at line ~1121; isTranslating +
+     handleTranslate defined at lines ~1117/1126 — same dormant pattern.)
+  */
   const [scannerProMode, setScannerProMode] = useState<"standard" | "book" | "idcard" | "erasewritings">("standard");
   const [idCardFront, setIdCardFront] = useState<string | null>(null);
   const [idCardBack, setIdCardBack] = useState<string | null>(null);
@@ -4080,38 +4099,17 @@ export default function Workspace() {
             setCropQueue={setCropQueue}
             scannerStitchedUrl={scannerStitchedUrl}
             scannerImgRef={scannerImgRef}
-            scannerProMode={scannerProMode}
-            setScannerProMode={setScannerProMode}
-            idCardFront={idCardFront}
-            setIdCardFront={setIdCardFront}
-            idCardBack={idCardBack}
-            setIdCardBack={setIdCardBack}
-            idCardStep={idCardStep}
-            setIdCardStep={setIdCardStep}
-            eraseTolerance={eraseTolerance}
-            setEraseTolerance={setEraseTolerance}
-            detectedQrCodes={detectedQrCodes}
-            applyHandwritingEraser={applyHandwritingEraser}
-            dewarpBookSpread={dewarpBookSpread}
-            spliceIDCards={spliceIDCards}
+            /* Dormant pro-mode plumbing — see DocumentScannerModalProps header comment */
             handleAddToQueue={handleAddToQueue}
             handleAutoDetectCrops={handleAutoDetectCrops}
             handlePageChange={handlePageChange}
             executeExtraction={executeExtraction}
             scannerProgress={scannerProgress}
-            userName={user?.displayName || "User"}
-            isPrivacyMode={isPrivacyMode}
-            setIsPrivacyMode={setIsPrivacyMode}
             ocrResult={ocrResult}
             setOcrResult={setOcrResult}
-            ocrError={ocrError}
-            isTranslating={isTranslating}
-            handleTranslate={(lang: string) => handleTranslate(lang)}
-            scanQRCodesOnDocument={scanQRCodesOnDocument}
             loadOcrIntoEditor={loadOcrIntoEditor}
             saveOcrIntoRag={saveOcrIntoRag}
             loadOcrIntoPractice={loadOcrIntoPractice}
-            isRagIndexing={isRagIndexing}
             themeAccentColor={themeAccentColor}
             scannerRotation={scannerRotation}
             setScannerRotation={setScannerRotation}
