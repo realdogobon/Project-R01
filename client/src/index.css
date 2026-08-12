@@ -209,11 +209,15 @@
   }
 
 
-    /*
-   * ── Option A: 1:1 with LexKit — no custom selection styling here;
-   * the browser's native highlight is used exactly as LexKit does it.
-   * Table-cell selection tint lives in lexkit/styles.css.
-   */
+  ::selection {
+    background-color: rgba(59, 130, 246, 0.22) !important;
+    color: inherit !important;
+  }
+
+  .dark ::selection {
+    background-color: rgba(96, 165, 250, 0.28) !important;
+    color: inherit !important;
+  }
 
 
   .range-slider-custom {

@@ -6,35 +6,9 @@ let masterAmbientGain: GainNode | null = null;
 const activeSounds: Record<string, { source: AudioBufferSourceNode; gain: GainNode }> = {};
 const bufferCache: Record<string, AudioBuffer> = {};
 
-// Ambient MP3s are stored in webdev asset storage (moved out of the repo to keep
-// deployment under the size limit). Map sound ids to their storage paths.
-const AMBIENT_STORAGE_PATHS: Record<string, string> = {
-  "airport": "/manus-storage/airport_e3991c48.mp3",
-  "ceiling-fan": "/manus-storage/ceiling-fan_3d3a119a.mp3",
-  "clock": "/manus-storage/clock_722a814a.mp3",
-  "coffee-shop": "/manus-storage/coffee-shop_7a813e67.mp3",
-  "crickets": "/manus-storage/crickets_bc8302b6.mp3",
-  "fireside": "/manus-storage/fireside_8dec6774.mp3",
-  "fireworks": "/manus-storage/fireworks_f171e9f5.mp3",
-  "owl": "/manus-storage/owl_f866218d.mp3",
-  "rain-on-leaves": "/manus-storage/rain-on-leaves_dcbb5e6e.mp3",
-  "rain": "/manus-storage/rain_a95fdd5c.mp3",
-  "singing-bowl": "/manus-storage/singing-bowl_bcc2a1fa.mp3",
-  "suburban-street": "/manus-storage/suburban-street_5b1cd77e.mp3",
-  "thunder": "/manus-storage/thunder_35ae1fbf.mp3",
-  "train": "/manus-storage/train_71af5798.mp3",
-  "tuning-radio": "/manus-storage/tuning-radio_4941da09.mp3",
-  "underwater": "/manus-storage/underwater_d335ce2d.mp3",
-  "waves": "/manus-storage/waves_543042f8.mp3",
-  "white-noise": "/manus-storage/white-noise_9428706e.mp3",
-  "wind-chimes": "/manus-storage/wind-chimes_3669e9cf.mp3",
-  "winter-morning": "/manus-storage/winter-morning_f5741880.mp3",
-};
-
 const loadBuffer = async (ctx: AudioContext, id: string): Promise<AudioBuffer> => {
   if (bufferCache[id]) return bufferCache[id];
-  const url = AMBIENT_STORAGE_PATHS[id] ?? `/assets/sounds/ambient/${id}.mp3`;
-  const response = await fetch(url);
+  const response = await fetch(`/assets/sounds/ambient/${id}.mp3`);
   if (!response.ok) {
     throw new Error(`Failed to fetch ambient sound ${id}: HTTP status ${response.status}`);
   }

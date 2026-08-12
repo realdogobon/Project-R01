@@ -673,12 +673,76 @@ function EditorContent({
   const commandsRef = useRef<EditorCommands>(commands);
   const readyRef = useRef(false);
 
+  // Custom Smooth Caret state and variables
   const containerRef = useRef<HTMLDivElement>(null);
+  const caretRef = useRef<HTMLDivElement>(null);
+  const [caretFocused, setCaretFocused] = useState(false);
+  const [isCaretIdle, setIsCaretIdle] = useState(true);
+  const caretIdleTimeoutRef = useRef<any>(null);
 
+  // Physics-based Caret Ref
+  const caretPhysicsRef = useRef({
+    current: { x: 0, y: 0, h: 20 },
+    target: { x: 0, y: 0, h: 20 },
+    velocity: { x: 0, y: 0, h: 0 },
+    lastUpdateTime: 0,
+    isActive: false,
+    isVisible: false
+  });
 
+  // Physics animation loop for "The Ultimate Caret"
+  useEffect(() => {
+    let animationFrame: number;
 
-  // OPTION A — custom caret eradicated; the browser's NATIVE caret now runs the
-  // editor (1:1 with LexKit's own approach). Zero custom JS positioning.
+    const update = () => {
+      const p = caretPhysicsRef.current;
+      if (!p.isVisible && !p.isActive) {
+        animationFrame = requestAnimationFrame(update);
+        return;
+      }
+
+      // Spring constants for "Hot Knife Through Butter" feel
+      const stiffness = 0.18; // Feel: How aggressive it snaps to target
+      const damping = 0.72;   // Feel: How much weight/momentum it carries
+
+      // Calculate forces
+      const ax = (p.target.x - p.current.x) * stiffness;
+      const ay = (p.target.y - p.current.y) * stiffness;
+      const ah = (p.target.h - p.current.h) * stiffness;
+
+      // Update velocity
+      p.velocity.x = (p.velocity.x + ax) * damping;
+      p.velocity.y = (p.velocity.y + ay) * damping;
+      p.velocity.h = (p.velocity.h + ah) * damping;
+
+      // Update current position
+      p.current.x += p.velocity.x;
+      p.current.y += p.velocity.y;
+      p.current.h += p.velocity.h;
+
+      // Check if we are close enough to "settle" and stop active processing for CPU efficiency
+      const dist = Math.abs(p.target.x - p.current.x) + Math.abs(p.target.y - p.current.y);
+      if (dist < 0.01 && Math.abs(p.velocity.x) < 0.01) {
+        p.isActive = false;
+      }
+
+      // Apply to DOM
+      if (caretRef.current) {
+        // VELOCITY STRETCHING: Scale the width slightly based on horizontal movement speed
+        const stretch = 1 + Math.min(Math.abs(p.velocity.x) * 0.08, 1.2);
+        const rotation = p.velocity.x * 0.15; // Subtle lean into the direction of motion
+
+        caretRef.current.style.transform = `translate3d(${p.current.x}px, ${p.current.y}px, 0) scaleX(${stretch}) rotate(${rotation}deg)`;
+        caretRef.current.style.height = `${p.current.h}px`;
+        caretRef.current.style.opacity = p.isVisible ? "1" : "0";
+      }
+
+      animationFrame = requestAnimationFrame(update);
+    };
+
+    animationFrame = requestAnimationFrame(update);
+    return () => cancelAnimationFrame(animationFrame);
+  }, []);
 
   // Custom Scrollbar States
   const [scrollProgress, setScrollProgress] = useState(0);
@@ -721,21 +785,201 @@ function EditorContent({
     }
   }, []);
 
-  // Native caret needs nothing: Lexical + the DOM keep it in perfect sync.
-  // We only keep listeners for the custom virtualized scrollbar.
+  const updateCaretPosition = useCallback(() => {
+    if (!containerRef.current) return;
+
+    // Find contentEditable element
+    const editableEl = containerRef.current.querySelector(".lexkit-content-editable") as HTMLElement;
+    if (!editableEl) return;
+
+    // Check focus state — also treat selection-inside-editor as focused,
+    // because click fires before document.activeElement updates in some browsers.
+    const activeEl = document.activeElement;
+    const isDocFocused = document.hasFocus();
+    const nativeFocus = !!(activeEl && (editableEl.contains(activeEl) || activeEl === editableEl) && isDocFocused);
+    const selectionInsideEditor = (() => {
+      try {
+        const s = window.getSelection();
+        if (!s || s.rangeCount === 0) return false;
+        const r = s.getRangeAt(0);
+        return editableEl === r.commonAncestorContainer || editableEl.contains(r.commonAncestorContainer);
+      } catch { return false; }
+    })();
+    const hasFocus = nativeFocus || selectionInsideEditor;
+    setCaretFocused(hasFocus);
+
+    if (!caretRef.current) return;
+
+    if (!hasFocus || activeStates.imageSelected) {
+      caretRef.current.style.display = "none";
+      return;
+    }
+
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) {
+      caretRef.current.style.display = "none";
+      return;
+    }
+
+    const range = selection.getRangeAt(0);
+
+    // Make sure selection is part of our editable wrapper
+    if (!editableEl.contains(range.commonAncestorContainer)) {
+      caretRef.current.style.display = "none";
+      return;
+    }
+
+    // Get client rect of user's typing insertion point
+    let rect = range.getBoundingClientRect();
+    const containerRect = containerRef.current.getBoundingClientRect();
+
+    let left = 0;
+    let top = 0;
+    let height = 0;
+    let fontSize = 16;
+
+    // Handle collapsed range on extremely empty lines, fallback elegantly
+    if (rect.left === 0 && rect.top === 0) {
+      const node = selection.anchorNode;
+      if (node) {
+        let el = node.nodeType === Node.ELEMENT_NODE ? (node as HTMLElement) : node.parentElement;
+        if (el) {
+          const elRect = el.getBoundingClientRect();
+          left = elRect.left - containerRect.left;
+          top = elRect.top - containerRect.top;
+
+          const style = window.getComputedStyle(el);
+          const parsedLineHeight = parseFloat(style.lineHeight);
+          fontSize = parseFloat(style.fontSize) || 16;
+          height = isNaN(parsedLineHeight) ? fontSize * 1.2 : parsedLineHeight;
+        }
+      }
+    } else {
+      left = rect.left - containerRect.left;
+      top = rect.top - containerRect.top;
+      height = rect.height;
+
+      // Extract font size of the active container text block to calculate proportional caret size
+      const node = selection.anchorNode;
+      if (node) {
+        let el = node.nodeType === Node.ELEMENT_NODE ? (node as HTMLElement) : node.parentElement;
+        if (el) {
+          const style = window.getComputedStyle(el);
+          fontSize = parseFloat(style.fontSize) || 16;
+        }
+      }
+    }
+
+    if (height <= 0 || height > 120) {
+      height = 20; // Safe default height
+    }
+
+    /**
+     * [WINDOWS NATIVE WPF MIGRATION NOTE: CARET PROPORTIONAL CENTERING ALGORITHM]
+     * When porting to C# / WPF / DirectX, native line-height rendering will cause standard caret boxes
+     * to span the full line height (leading to uncentered and overly tall cursors).
+     * Solution: Calculate the target font's visual cap height (roughly 1.12 to 1.15 times the font size),
+     * and center it vertically inside the larger line-height bounding rectangle.
+     * Math formulas:
+     *   visualHeightMap = fontSize * 1.12
+     *   verticalOffset  = (renderedLineBoxHeight - visualHeightMap) / 2
+     *   caretTop        = baseLineBoxTop + verticalOffset
+     */
+    const visualHeight = fontSize * 1.12;
+    if (height > visualHeight) {
+      const offsetY = (height - visualHeight) / 2;
+      top = top + offsetY;
+      height = visualHeight;
+    }
+
+    // Direct Physics Update
+    const p = caretPhysicsRef.current;
+    if (caretRef.current) {
+      if (!hasFocus || !selection || selection.rangeCount === 0 || !editableEl.contains(range.commonAncestorContainer)) {
+        p.isVisible = false;
+        caretRef.current.style.display = "none";
+        return;
+      }
+
+      // If this is the first jump or a long-distance jump, snap instantly, then glide
+      const jumpDist = Math.abs(p.target.x - left) + Math.abs(p.target.y - top);
+      if (!p.isVisible || jumpDist > 200) {
+        p.current = { x: left, y: top, h: height };
+        p.velocity = { x: 0, y: 0, h: 0 };
+      }
+
+      p.target = { x: left, y: top, h: height };
+      p.isVisible = true;
+      p.isActive = true;
+      caretRef.current.style.display = "block";
+    }
+
+    // Trigger non-idle state (smooth solid style) for active typing moments
+    setIsCaretIdle(false);
+    if (caretIdleTimeoutRef.current) {
+      clearTimeout(caretIdleTimeoutRef.current);
+    }
+    caretIdleTimeoutRef.current = setTimeout(() => {
+      setIsCaretIdle(true);
+    }, 550); // Blink state is restored when idle for 550ms
+  }, []);
+
+  const handleEvents = useCallback(() => {
+    updateCaretPosition();
+    updateScrollStats();
+  }, [updateCaretPosition, updateScrollStats]);
+
   useEffect(() => {
+    // Register selection and resize handles globally
+    document.addEventListener("selectionchange", handleEvents);
+    window.addEventListener("resize", handleEvents);
+
     const editable = containerRef.current?.querySelector(".lexkit-content-editable");
     if (editable) {
-      editable.addEventListener("scroll", updateScrollStats);
+      editable.addEventListener("scroll", handleEvents);
+      editable.addEventListener("focus", handleEvents);
+      editable.addEventListener("blur", handleEvents);
+      editable.addEventListener("keyup", handleEvents);
+      editable.addEventListener("keydown", handleEvents);
+      editable.addEventListener("click", handleEvents);
+      editable.addEventListener("mouseup", handleEvents);
+      editable.addEventListener("pointerup", handleEvents);
     }
-    const onResize = () => updateScrollStats();
-    window.addEventListener("resize", onResize);
-    updateScrollStats();
-    return () => {
-      if (editable) editable.removeEventListener("scroll", updateScrollStats);
-      window.removeEventListener("resize", onResize);
+
+    // Hide caret when clicking outside the editor container
+    const onDocMouseDown = (e: MouseEvent) => {
+      if (!containerRef.current) return;
+      const target = e.target as Node;
+      if (!containerRef.current.contains(target)) {
+        if (caretRef.current) caretRef.current.style.display = "none";
+        setCaretFocused(false);
+      }
     };
-  }, [updateScrollStats]);
+    document.addEventListener("mousedown", onDocMouseDown);
+
+    // Capture initial positions
+    const timeoutId = setTimeout(handleEvents, 80);
+
+    return () => {
+      document.removeEventListener("selectionchange", handleEvents);
+      document.removeEventListener("mousedown", onDocMouseDown);
+      window.removeEventListener("resize", handleEvents);
+      if (editable) {
+        editable.removeEventListener("scroll", handleEvents);
+        editable.removeEventListener("focus", handleEvents);
+        editable.removeEventListener("blur", handleEvents);
+        editable.removeEventListener("keyup", handleEvents);
+        editable.removeEventListener("keydown", handleEvents);
+        editable.removeEventListener("click", handleEvents);
+        editable.removeEventListener("mouseup", handleEvents);
+        editable.removeEventListener("pointerup", handleEvents);
+      }
+      clearTimeout(timeoutId);
+      if (caretIdleTimeoutRef.current) {
+        clearTimeout(caretIdleTimeoutRef.current);
+      }
+    };
+  }, [handleEvents]);
 
   const onThumbMouseDown = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -898,13 +1142,13 @@ function EditorContent({
 
   useEffect(() => {
     if (!editor) return;
-    // OPTION A: no caret JS — Lexical's update listener only notifies onChange.
     return editor.registerUpdateListener(({ dirtyElements, dirtyLeaves }) => {
       if (dirtyElements.size > 0 || dirtyLeaves.size > 0) {
         if (onChange) onChange();
+        updateCaretPosition();
       }
     });
-  }, [editor, onChange]);
+  }, [editor, onChange, updateCaretPosition]);
 
   useEffect(() => {
     if (!editor) return;
@@ -1013,6 +1257,12 @@ function EditorContent({
           />
           <FloatingToolbarRenderer setShowLinkDialog={setShowLinkDialog} onEditCaption={handleEditCaptionClick} />
         </div>
+
+        {/* Buttery Smooth Custom Gliding Caret */}
+        <div
+          ref={caretRef}
+          className={`custom-smooth-caret ${isCaretIdle ? "animate-caret-blink" : ""}`}
+        />
 
         {/* Custom Virtualized Scrollbar Overlay */}
         {thumbHeight > 0 && (
