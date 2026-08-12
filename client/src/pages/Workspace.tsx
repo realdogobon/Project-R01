@@ -495,8 +495,24 @@ export default function Workspace() {
     };
     measure();
     window.addEventListener("resize", measure);
-    return () => window.removeEventListener("resize", measure);
+    // Keep the glow geometry pinned to the tab's true box even when the label
+    // changes, fonts finish loading, or any layout reflow happens — a stale
+    // viewBox is what made the tube's corner arcs "break" and misalign.
+    const ro = new ResizeObserver(measure);
+    const el = activeTabElRef.current;
+    if (el) ro.observe(el);
+    return () => {
+      window.removeEventListener("resize", measure);
+      ro.disconnect();
+    };
   }, [activeTabId]);
+
+  // The close animation runs on the CLOSING tab, but its SVG is currently built
+  // from the ACTIVE tab's measured box — wrong geometry whenever the two differ
+  // (different label lengths, first-tab flush edges). Snapshot the closing tab's
+  // own real box so the retreating trail follows the exact outline it belongs to.
+  const [closingTabBox, setClosingTabBox] = useState<{ width: number; height: number } | null>(null);
+  const tabElsRef = useRef<Map<string, HTMLDivElement>>(new Map());
   const pendingCloseTabIdRef = useRef<string | null>(null);
   const activeTab = tabs.find(t => t.id === activeTabId);
   const isExamSealed = !!activeTab?.examSealed;
@@ -582,6 +598,17 @@ export default function Workspace() {
       setPendingAction(`animatedCloseTab:${tabId}`);
       setIsUnsavedPopupOpen(true);
       return;
+    }
+    // Snapshot the closing tab's own real box before the layout shifts, so the
+    // retreating trail follows the exact outline of the tab that is being closed.
+    const closingEl = tabElsRef.current.get(tabId);
+    if (closingEl) {
+      const rect = closingEl.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        setClosingTabBox({ width: rect.width, height: rect.height });
+      }
+    } else {
+      setClosingTabBox(null);
     }
     pendingCloseTabIdRef.current = tabId;
     setClosingTabId(tabId);
@@ -3706,8 +3733,8 @@ export default function Workspace() {
           {/* Main Area */}
           <div className="flex-1 flex flex-col bg-white dark:bg-[#1a1a1a] relative overflow-hidden transition-colors shadow-[-10px_0_15px_-10px_rgba(0,0,0,0.05)] z-0">
             {mode === "Write" && (
-              <div className="h-10 bg-neutral-100 dark:bg-[#161616] flex items-center justify-between pr-3 shrink-0 select-none">
-                <div className="flex items-center gap-1 overflow-x-auto no-scrollbar scroll-smooth flex-1 h-full pt-1.5">
+              <div className="h-10 bg-neutral-100 dark:bg-[#161616] flex items-end justify-between pr-3 shrink-0 select-none">
+                <div className="flex items-end gap-1 overflow-x-auto no-scrollbar scroll-smooth flex-1 h-full">
                 {tabs.map((tab, tabIndex) => {
                   const isActive = tab.id === activeTabId;
                   const examLockedUI = (examStatus === "running" || examStatus === "countdown") && !isActive;
@@ -3715,7 +3742,15 @@ export default function Workspace() {
                   return (
                     <div
                       key={tab.id}
-                      ref={isActive ? activeTabElRef : undefined}
+                      ref={(el) => {
+                        if (el) {
+                          tabElsRef.current.set(tab.id, el);
+                          if (isActive) activeTabElRef.current = el;
+                        } else {
+                          tabElsRef.current.delete(tab.id);
+                          if (activeTabElRef.current === el) activeTabElRef.current = null;
+                        }
+                      }}
                       onClick={() => !examLockedUI && switchTab(tab.id)}
                       onDoubleClick={(e) => {
                          e.preventDefault();
@@ -3744,7 +3779,7 @@ export default function Workspace() {
                       title={examLockedUI ? "Locked while an exam is in progress" : undefined}
                       className={`group relative h-full w-44 ${
                         isFirstTab ? "rounded-tr-lg border-r" : "rounded-t-lg border-x"
-                      } border-b-0 px-3 flex items-center justify-between gap-2.5 transition-all text-[12.5px] font-sans ${
+                      } border-b-0 border-t-2 px-3 flex items-center justify-between gap-2.5 transition-all text-[12.5px] font-sans ${
                         examLockedUI ? "opacity-40 grayscale-[40%] cursor-not-allowed pointer-events-none" : "cursor-pointer"
                       } ${
                         isActive
@@ -3813,11 +3848,12 @@ export default function Workspace() {
                           glow, played in reverse — the lit trail retreats back to the wall
                           and vanishes, at the same duration the old flat close-drain used. */}
                       {closingTabId === tab.id && (() => {
-                        const closePath = buildTabAccentPath(activeTabBox.width, activeTabBox.height, isFirstTab);
+                        const closeBox = closingTabBox || activeTabBox;
+                        const closePath = buildTabAccentPath(closeBox.width, closeBox.height, isFirstTab);
                         return (
                           <svg
                             className="absolute inset-0 w-full h-full overflow-visible pointer-events-none"
-                            viewBox={`0 0 ${activeTabBox.width} ${activeTabBox.height}`}
+                            viewBox={`0 0 ${closeBox.width} ${closeBox.height}`}
                           >
                             <path
                               d={closePath}
