@@ -3733,8 +3733,8 @@ export default function Workspace() {
           {/* Main Area */}
           <div className="flex-1 flex flex-col bg-white dark:bg-[#1a1a1a] relative overflow-hidden transition-colors shadow-[-10px_0_15px_-10px_rgba(0,0,0,0.05)] z-0">
             {mode === "Write" && (
-              <div className="h-10 bg-neutral-100 dark:bg-[#161616] flex items-end justify-between pr-3 shrink-0 select-none">
-                <div className="flex items-end gap-1 overflow-x-auto no-scrollbar scroll-smooth flex-1 h-full">
+              <div className="h-10 bg-neutral-100 dark:bg-[#161616] flex items-center justify-between pr-3 shrink-0 select-none">
+                <div className="flex items-center gap-1 overflow-x-auto no-scrollbar scroll-smooth flex-1 h-full pt-1.5">
                 {tabs.map((tab, tabIndex) => {
                   const isActive = tab.id === activeTabId;
                   const examLockedUI = (examStatus === "running" || examStatus === "countdown") && !isActive;
@@ -3779,12 +3779,12 @@ export default function Workspace() {
                       title={examLockedUI ? "Locked while an exam is in progress" : undefined}
                       className={`group relative h-full w-44 ${
                         isFirstTab ? "rounded-tr-lg border-r" : "rounded-t-lg border-x"
-                      } border-b-0 border-t border-neutral-200/70 dark:border-white/[0.06] px-3 flex items-center justify-between gap-2.5 transition-all text-[12.5px] font-sans ${
+                      } border-b-0 px-3 flex items-center justify-between gap-2.5 transition-all text-[12.5px] font-sans ${
                         examLockedUI ? "opacity-40 grayscale-[40%] cursor-not-allowed pointer-events-none" : "cursor-pointer"
                       } ${
                         isActive
                           ? "bg-white dark:bg-[#1a1a1a] border-transparent dark:border-transparent text-neutral-800 dark:text-neutral-100 font-semibold"
-                          : "bg-neutral-50/50 dark:bg-[#1c1c1c] text-neutral-400 dark:text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300 hover:bg-neutral-200/50 dark:hover:bg-white/[0.02]"
+                          : "bg-neutral-50/50 dark:bg-[#1c1c1c] border-transparent text-neutral-400 dark:text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300 hover:bg-neutral-200/50 dark:hover:bg-white/[0.02]"
                       }`}
                     >
                       {/* Accent glow: neon tube traced around the tab's full outer outline
