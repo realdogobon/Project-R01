@@ -37,24 +37,7 @@ if (typeof WeakMap !== 'undefined' && !('getOrInsertComputed' in WeakMap.prototy
 import App from './App.tsx';
 import './index.css';
 
-class ErrorBoundary extends Component<{children: ReactNode}, {hasError: boolean, error: any}> {
-  state = { hasError: false, error: null };
-  static getDerivedStateFromError(error: any) {
-    return { hasError: true, error };
-  }
-  render() {
-    if (this.state.hasError) {
-      return (
-        <div style={{ color: 'red', padding: 20 }}>
-          <h1>Error Occurred</h1>
-          <pre>{this.state.error?.toString()}</pre>
-          <pre>{this.state.error?.stack}</pre>
-        </div>
-      );
-    }
-    return (this as any).props.children;
-  }
-}
+import { ErrorBoundary } from "./components/ErrorBoundary";
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
