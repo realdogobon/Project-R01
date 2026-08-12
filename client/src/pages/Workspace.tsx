@@ -3779,12 +3779,12 @@ export default function Workspace() {
                       title={examLockedUI ? "Locked while an exam is in progress" : undefined}
                       className={`group relative h-full w-44 ${
                         isFirstTab ? "rounded-tr-lg border-r" : "rounded-t-lg border-x"
-                      } border-b-0 border-t-2 px-3 flex items-center justify-between gap-2.5 transition-all text-[12.5px] font-sans ${
+                      } border-b-0 border-t border-neutral-200/70 dark:border-white/[0.06] px-3 flex items-center justify-between gap-2.5 transition-all text-[12.5px] font-sans ${
                         examLockedUI ? "opacity-40 grayscale-[40%] cursor-not-allowed pointer-events-none" : "cursor-pointer"
                       } ${
                         isActive
-                          ? "bg-white dark:bg-[#1a1a1a] border-neutral-200 dark:border-white/10 text-neutral-800 dark:text-neutral-100 font-semibold"
-                          : "bg-neutral-50/50 dark:bg-[#1c1c1c] border-transparent text-neutral-400 dark:text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300 hover:bg-neutral-200/50 dark:hover:bg-white/[0.02]"
+                          ? "bg-white dark:bg-[#1a1a1a] border-neutral-200 dark:border-white/10 border-t-transparent text-neutral-800 dark:text-neutral-100 font-semibold"
+                          : "bg-neutral-50/50 dark:bg-[#1c1c1c] text-neutral-400 dark:text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300 hover:bg-neutral-200/50 dark:hover:bg-white/[0.02]"
                       }`}
                     >
                       {/* Accent glow: neon tube traced around the tab's full outer outline
