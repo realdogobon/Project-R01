@@ -1,0 +1,38 @@
+export const defaultTheme = {
+  ltr: 'ltr',
+  rtl: 'rtl',
+  paragraph: 'lexkit-paragraph',
+  quote: 'lexkit-quote',
+  heading: {
+    h1: 'lexkit-heading-h1',
+    h2: 'lexkit-heading-h2',
+    h3: 'lexkit-heading-h3',
+    h4: 'lexkit-heading-h4',
+    h5: 'lexkit-heading-h5',
+    h6: 'lexkit-heading-h6',
+  },
+  list: {
+    nested: {
+      listitem: 'lexkit-nested-listitem',
+    },
+    ol: 'lexkit-list-ol',
+    ul: 'lexkit-list-ul',
+    listitem: 'lexkit-list-li',
+  },
+  image: 'lexical-image',
+  link: 'lexkit-link',
+  text: {
+    bold: 'lexkit-text-bold',
+    italic: 'lexkit-text-italic',
+    overflowed: 'lexkit-text-overflowed',
+    hashtag: 'lexkit-text-hashtag',
+    underline: 'lexkit-text-underline',
+    strikethrough: 'lexkit-text-strikethrough',
+    underlineStrikethrough: 'lexkit-text-underlineStrikethrough',
+    code: 'lexkit-text-code',
+  },
+  code: 'lexkit-code-block',
+  table: 'lexkit-table',
+  tableCell: 'lexkit-table-cell',
+  tableCellHeader: 'lexkit-table-cell-header',
+};
