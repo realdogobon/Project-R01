@@ -1181,6 +1181,8 @@ export default function Workspace() {
   }, [ocrResult, scannerFile]);
   const [scannerPreviewUrl, setScannerPreviewUrl] = useState<string>("");
   const [scannerPreviewUrl2, setScannerPreviewUrl2] = useState<string>("");
+  const [scannerRawPreviewUrl, setScannerRawPreviewUrl] = useState<string>("");
+  const [scannerRawPreviewUrl2, setScannerRawPreviewUrl2] = useState<string>("");
   const [scannerZoom, setScannerZoom] = useState(1.0);
   const [scannerPage, setScannerPage] = useState(1);
   const [scannerTotalPages, setScannerTotalPages] = useState(3);
@@ -1189,8 +1191,9 @@ export default function Workspace() {
   const [scannerPdfDoc, setScannerPdfDoc] = useState<any>(null);
   const [isScannerDocumentLoading, setIsScannerDocumentLoading] = useState(false);
   const [scannerStitchedUrl, setScannerStitchedUrl] = useState<string>("");
+  const [scannerRawStitchedUrl, setScannerRawStitchedUrl] = useState<string>("");
   const [scannerCrop, setScannerCrop] = useState<Crop>();
-  const [cropQueue, setCropQueue] = useState<Array<{ id: string; page: number; crop: Crop; imgUrl: string; base64Data: string }>>([]);
+  const [cropQueue, setCropQueue] = useState<Array<{ id: string; page: number; crop: Crop; imgUrl: string; base64Data: string; rawBase64Data: string; isFullPage?: boolean }>>([]);
   const [scannerProgress, setScannerProgress] = useState<{ currentIndex: number, total: number, status: 'idle' | 'preflight' | 'scanning' | 'stopping' | 'success' | 'error' }>({ currentIndex: 0, total: 0, status: 'idle' });
   const [scannerRunState, setScannerRunState] = useState<'idle' | 'preflight' | 'scanning' | 'stopping'>('idle');
   const scannerImgRef = useRef<HTMLImageElement>(null);
@@ -1284,10 +1287,13 @@ export default function Workspace() {
             ctx.imageSmoothingEnabled = true;
             ctx.imageSmoothingQuality = 'high';
             ctx.drawImage(img, 0, 0, width, height);
+            const rawDataUrl = canvas.toDataURL('image/jpeg', 0.95);
             const purifiedCanvas = globalScannerEngine.purifyCanvas(canvas, selectedColourMode);
             const dataUrl = purifiedCanvas.toDataURL('image/jpeg', 0.85);
             setScannerPreviewUrl(dataUrl);
             setScannerStitchedUrl(dataUrl);
+            setScannerRawPreviewUrl(rawDataUrl);
+            setScannerRawStitchedUrl(rawDataUrl);
           }
         };
         img.src = resultUrl;
@@ -1478,6 +1484,7 @@ export default function Workspace() {
     );
 
 
+    const rawBase64Crop = canvas.toDataURL('image/jpeg', 0.95).split(',')[1];
     const purifiedCanvas = globalScannerEngine.purifyCanvas(canvas, selectedColourMode);
     const base64Crop = purifiedCanvas.toDataURL('image/jpeg', 0.9);
 
@@ -1487,6 +1494,7 @@ export default function Workspace() {
       crop: activeCrop,
       imgUrl: base64Crop,
       base64Data: base64Crop.split(',')[1],
+      rawBase64Data: rawBase64Crop,
       isFullPage: isFullPage
     }]);
     setScannerCrop(undefined);
@@ -1497,7 +1505,7 @@ export default function Workspace() {
    * key is configured; otherwise (or on any cloud failure) falls back to
    * the local Tesseract engine so scans never dead-end.
    */
-  const recognizeOneImage = async (base64Data: string, signal: AbortSignal): Promise<string> => {
+  const recognizeOneImage = async (base64Data: string, signal: AbortSignal, localBase64Data = base64Data, pageSegMode = "3"): Promise<string> => {
     if (signal.aborted) throw createScanAbortError();
     const useCloud = hasApiKeyFor(selectedScanner);
     if (useCloud) {
@@ -1510,7 +1518,7 @@ export default function Workspace() {
         console.error(cloudErr);
       }
     }
-    return recognizeImage(base64Data, { signal });
+    return recognizeImage(localBase64Data, { signal, pageSegMode });
   };
 
   const stopExtraction = () => {
@@ -1564,7 +1572,12 @@ export default function Workspace() {
 
            try {
              setScannerLogs(prev => [...prev, `Transcribing page ${cropItem.page}...`]);
-             const text = await recognizeOneImage(cropItem.base64Data, signal);
+             const text = await recognizeOneImage(
+               cropItem.base64Data,
+               signal,
+               cropItem.rawBase64Data,
+               cropItem.isFullPage ? "3" : "6",
+             );
              if (signal.aborted) throw createScanAbortError();
              results.push({ index: i, page: cropItem.page, text: text });
            } catch (e: any) {
@@ -1603,7 +1616,10 @@ export default function Workspace() {
         }
 
 
-        let base64Data = (scannerStitchedUrl || scannerPreviewUrl).split(",")[1];
+        const displaySourceUrl = scannerStitchedUrl || scannerPreviewUrl;
+        const localSourceUrl = scannerRawStitchedUrl || scannerRawPreviewUrl || displaySourceUrl;
+        let base64Data = displaySourceUrl.split(",")[1];
+        let localBase64Data = localSourceUrl.split(",")[1];
 
 
         try {
@@ -1614,7 +1630,13 @@ export default function Workspace() {
           await new Promise<void>((resolve, reject) => {
             tempImg.onload = () => resolve();
             tempImg.onerror = () => reject(new Error("Failed to load image for scanning bake"));
-            tempImg.src = scannerStitchedUrl || scannerPreviewUrl;
+            tempImg.src = displaySourceUrl;
+          });
+          const localTempImg = new Image();
+          await new Promise<void>((resolve, reject) => {
+            localTempImg.onload = () => resolve();
+            localTempImg.onerror = () => reject(new Error("Failed to load raw image for local OCR"));
+            localTempImg.src = localSourceUrl;
           });
           if (signal.aborted) throw createScanAbortError();
 
@@ -1647,6 +1669,19 @@ export default function Workspace() {
 
             const purified = globalScannerEngine.purifyCanvas(tempCanvas, selectedColourMode);
             base64Data = purified.toDataURL("image/jpeg", 0.9).split(",")[1];
+
+            const rawCanvas = document.createElement("canvas");
+            rawCanvas.width = canvasW;
+            rawCanvas.height = canvasH;
+            const rawCtx = rawCanvas.getContext("2d");
+            if (rawCtx) {
+              rawCtx.scale(dpiScale, dpiScale);
+              rawCtx.translate(rawW / 2, rawH / 2);
+              rawCtx.rotate((scannerRotation * Math.PI) / 180);
+              rawCtx.scale(scannerScaleX, scannerScaleY);
+              rawCtx.drawImage(localTempImg, -localTempImg.naturalWidth / 2, -localTempImg.naturalHeight / 2);
+              localBase64Data = rawCanvas.toDataURL("image/jpeg", 0.95).split(",")[1];
+            }
           }
         } catch (bakeErr: any) {
           console.error("Resolution Resampling & Mode baking failed:", bakeErr);
@@ -1654,7 +1689,7 @@ export default function Workspace() {
         }
 
         setScannerLogs(prev => [...prev, "Transcribing document..."]);
-        const text = await recognizeOneImage(base64Data, signal);
+        const text = await recognizeOneImage(base64Data, signal, localBase64Data, "3");
         if (signal.aborted) throw createScanAbortError();
         combinedText = cleanOcrText(text);
       }
@@ -1728,6 +1763,9 @@ export default function Workspace() {
               setScannerPreviewUrl(dataUrl);
               setScannerPreviewUrl2("");
               setScannerStitchedUrl(dataUrl);
+              setScannerRawPreviewUrl(dataUrl);
+              setScannerRawPreviewUrl2("");
+              setScannerRawStitchedUrl(dataUrl);
             } finally {
               pageResult.release();
             }
@@ -1773,9 +1811,13 @@ export default function Workspace() {
                  finalCtx.drawImage(cRight, wLeft, 0);
              }
 
+            const stitchedDataUrl = finalCanvas.toDataURL('image/jpeg', 0.85);
             setScannerPreviewUrl(leftDataUrl);
             setScannerPreviewUrl2(rightDataUrl);
-            setScannerStitchedUrl(finalCanvas.toDataURL('image/jpeg', 0.85));
+            setScannerStitchedUrl(stitchedDataUrl);
+            setScannerRawPreviewUrl(leftDataUrl);
+            setScannerRawPreviewUrl2(rightDataUrl);
+            setScannerRawStitchedUrl(stitchedDataUrl);
            }
          } finally {
            leftResult?.release();
@@ -1805,6 +1847,12 @@ export default function Workspace() {
     setScannerLogs(["Loading document..."]);
     setScannerCrop(undefined);
     setScannerPdfDoc(null);
+    setScannerPreviewUrl("");
+    setScannerPreviewUrl2("");
+    setScannerRawPreviewUrl("");
+    setScannerRawPreviewUrl2("");
+    setScannerStitchedUrl("");
+    setScannerRawStitchedUrl("");
     setScannerRotation(0);
     setScannerScaleX(1);
     setScannerScaleY(1);
@@ -1845,13 +1893,18 @@ export default function Workspace() {
           const ctx = canvas.getContext('2d');
           if (ctx) {
             ctx.drawImage(img, 0, 0);
+            const rawDataUrl = canvas.toDataURL('image/jpeg', 0.95);
             const purifiedCanvas = globalScannerEngine.purifyCanvas(canvas, selectedColourMode);
             const dataUrl = purifiedCanvas.toDataURL('image/jpeg', 0.85);
             setScannerPreviewUrl(dataUrl);
             setScannerStitchedUrl(dataUrl);
+            setScannerRawPreviewUrl(rawDataUrl);
+            setScannerRawStitchedUrl(rawDataUrl);
           } else {
             setScannerPreviewUrl(resultUrl);
             setScannerStitchedUrl(resultUrl);
+            setScannerRawPreviewUrl(resultUrl);
+            setScannerRawStitchedUrl(resultUrl);
           }
           setScannerLogs(prev => [...prev, "Image loaded and purified perfectly. Ready to extract text or crop areas."]);
           setIsScannerDocumentLoading(false);
@@ -1864,7 +1917,11 @@ export default function Workspace() {
       setIsScannerDocumentLoading(false);
 
       setScannerPreviewUrl("");
+      setScannerPreviewUrl2("");
+      setScannerRawPreviewUrl("");
+      setScannerRawPreviewUrl2("");
       setScannerStitchedUrl("");
+      setScannerRawStitchedUrl("");
       setIsOcrLoading(true);
 
       const plaintextExtensions = ["txt", "md", "html", "htm", "css", "json", "js", "ts", "csv", "xml", "yaml", "yml"];
@@ -4052,11 +4109,14 @@ export default function Workspace() {
             setSelectedDestinationFolder={setSelectedDestinationFolder}
             onDiscardCurrentDocument={() => {
               if (isOcrLoading) stopExtraction();
-              setScannerFile(null);
-              setScannerPreviewUrl("");
-              setScannerPreviewUrl2("");
-              setScannerPdfDoc(null);
-              setScannerStitchedUrl("");
+               setScannerFile(null);
+               setScannerPreviewUrl("");
+               setScannerPreviewUrl2("");
+               setScannerRawPreviewUrl("");
+               setScannerRawPreviewUrl2("");
+               setScannerPdfDoc(null);
+               setScannerStitchedUrl("");
+               setScannerRawStitchedUrl("");
               setScannerTotalPages(1);
               setScannerPage(1);
               setScannerProgress({ currentIndex: 0, total: 0, status: 'idle' });

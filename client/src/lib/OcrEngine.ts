@@ -93,6 +93,7 @@ export interface OcrOptions {
   language?: string;
   onProgress?: (progress: number) => void;
   signal?: AbortSignal;
+  pageSegMode?: string;
 }
 
 /**
@@ -106,11 +107,17 @@ export async function recognizeImage(
   if (options.signal?.aborted) {
     throw createAbortError();
   }
+
   const w = await raceWithAbort(getWorker(language), options.signal);
 
   if (options.signal?.aborted) {
     throw createAbortError();
   }
+
+  await w.setParameters({
+    tessedit_pageseg_mode: (options.pageSegMode || "3") as any,
+    preserve_interword_spaces: "0",
+  });
 
   const binary = Uint8Array.from(atob(base64Jpeg), (c) => c.charCodeAt(0));
   const blob = new Blob([binary], { type: "image/jpeg" });
