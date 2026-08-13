@@ -203,7 +203,43 @@ function vitePluginStorageProxy(): Plugin {
   };
 }
 
-const plugins = [react(), tailwindcss(), jsxLocPlugin(), vitePluginManusRuntime(), vitePluginManusDebugCollector(), vitePluginStorageProxy()];
+const plugins = [react(), tailwindcss(), jsxLocPlugin(), vitePluginManusRuntime(), vitePluginManusDebugCollector(), vitePluginStorageProxy(), reactNamedExportsPlugin()];
+
+// Dev-only shim: Vite can pre-bundle React as a default CJS export while
+// application source imports named hooks. Expose those named properties from
+// the same shared React object so dependency bundles cannot create a second
+// hook dispatcher.
+function reactNamedExportsPlugin(): Plugin {
+  const re = /node_modules\/\.vite\/deps\/react(_jsx-dev-runtime|_jsx-runtime|_dom_client)?\.js(?:\?.*)?$/;
+  return {
+    name: "react-named-exports",
+    enforce: "post",
+    transform(code: string, id: string) {
+      if (!re.test(id) || code.includes("// react-named-exports-shim")) return;
+      const namedExports = id.includes("react_jsx-dev-runtime")
+        ? ["Fragment", "jsxDEV"]
+        : id.includes("react_jsx-runtime")
+          ? ["Fragment", "jsx", "jsxs"]
+          : [
+              "Children", "Component", "Fragment", "Profiler", "PureComponent", "StrictMode", "Suspense",
+              "cloneElement", "createContext", "createElement", "createFactory", "createRef", "forwardRef",
+              "isValidElement", "lazy", "memo", "startTransition", "unstable_Activity", "unstable_DebugTracingMode",
+              "unstable_SuspenseList", "unstable_cacheSignal", "unstable_getCacheForType", "unstable_useCacheRefresh",
+              "use", "useActionState", "useCallback", "useContext", "useDebugValue", "useDeferredValue", "useEffect",
+              "useEffectEvent", "useId", "useImperativeHandle", "useInsertionEffect", "useLayoutEffect", "useMemo",
+              "useOptimistic", "useReducer", "useRef", "useState", "useSyncExternalStore", "useTransition", "version",
+            ];
+      const patched = code.replace(
+        /export default require_react\(\);/,
+        "const __vite_react_default = require_react();\nexport default __vite_react_default;\n" +
+          namedExports.map((name) => `export const ${name} = __vite_react_default.${name};`).join("\n") +
+          "\n// react-named-exports-shim",
+      );
+      if (patched === code) return;
+      return { code: patched, map: null };
+    },
+  };
+}
 
 export default defineConfig({
   plugins,
@@ -228,6 +264,7 @@ export default defineConfig({
       "lucide-react",
       "react-image-crop",
     ],
+    dedupe: ["react", "react-dom", "react-dom/client"],
   },
   resolve: {
     // React is a peer of the editor, motion, and Lexical packages. Explicit

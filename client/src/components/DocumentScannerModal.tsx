@@ -1,6 +1,5 @@
-import React, { useState, useEffect } from "react";
-import ReactCrop, { Crop } from "react-image-crop";
-import "react-image-crop/dist/ReactCrop.css";
+import React, { useState, useEffect, useLayoutEffect } from "react";
+import type { Crop } from "react-image-crop";
 import { motion, AnimatePresence } from "motion/react";
 import { useResizable } from "../hooks/useResizable";
 import {
@@ -153,6 +152,18 @@ const visualCropToSource = (crop: Crop, props: ScannerCropSurfaceProps): Crop =>
   };
 };
 
+type CropDragMode = "create" | "move" | "nw" | "n" | "ne" | "e" | "se" | "s" | "sw" | "w";
+
+interface CropPointerState {
+  pointerId: number;
+  mode: CropDragMode;
+  startX: number;
+  startY: number;
+  origin: Crop;
+}
+
+const cropClamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+
 const ScannerCropSurface = React.memo(({
   crop: committedCrop,
   onCommit,
@@ -170,26 +181,151 @@ const ScannerCropSurface = React.memo(({
   imageStyle,
   alt,
 }: ScannerCropSurfaceProps) => {
-  const transformProps = { sourceWidth, sourceHeight, visualWidth, visualHeight, rotation, scaleX, scaleY };
-  const [crop, setCrop] = useState<Crop | undefined>(() => sourceCropToVisual(committedCrop, { ...transformProps } as ScannerCropSurfaceProps));
+  const transformProps = { sourceWidth, sourceHeight, visualWidth, visualHeight, rotation, scaleX, scaleY } as ScannerCropSurfaceProps;
+  const surfaceRef = React.useRef<HTMLDivElement>(null);
+  const pointerRef = React.useRef<CropPointerState | null>(null);
+  const [crop, setCrop] = useState<Crop | undefined>(() => sourceCropToVisual(committedCrop, transformProps));
 
   useEffect(() => {
-    setCrop(sourceCropToVisual(committedCrop, { ...transformProps } as ScannerCropSurfaceProps));
+    if (!pointerRef.current) setCrop(sourceCropToVisual(committedCrop, transformProps));
   }, [committedCrop, sourceWidth, sourceHeight, visualWidth, visualHeight, rotation, scaleX, scaleY]);
 
-  const handleChange = (nextCrop: Crop) => {
-    setCrop(nextCrop);
+  const getPoint = (event: { clientX: number; clientY: number }) => {
+    const rect = surfaceRef.current?.getBoundingClientRect();
+    if (!rect) return { x: 0, y: 0 };
+    return {
+      x: cropClamp(event.clientX - rect.left, 0, visualWidth),
+      y: cropClamp(event.clientY - rect.top, 0, visualHeight),
+    };
   };
 
-  const handleComplete = (nextCrop: Crop) => {
-    setCrop(nextCrop);
-    onCommit(visualCropToSource(nextCrop, { ...transformProps } as ScannerCropSurfaceProps));
+  const updateCrop = (point: { x: number; y: number }) => {
+    const active = pointerRef.current;
+    if (!active) return crop;
+    const dx = point.x - active.startX;
+    const dy = point.y - active.startY;
+    const origin = active.origin;
+    let next: Crop = { ...origin, unit: "px" };
+
+    if (active.mode === "create") {
+      next = {
+        unit: "px",
+        x: Math.min(active.startX, point.x),
+        y: Math.min(active.startY, point.y),
+        width: Math.abs(point.x - active.startX),
+        height: Math.abs(point.y - active.startY),
+      };
+    } else if (active.mode === "move") {
+      next.x = cropClamp(origin.x + dx, 0, visualWidth - origin.width);
+      next.y = cropClamp(origin.y + dy, 0, visualHeight - origin.height);
+    } else {
+      const right = origin.x + origin.width;
+      const bottom = origin.y + origin.height;
+      let left = origin.x;
+      let top = origin.y;
+      let nextRight = right;
+      let nextBottom = bottom;
+      if (active.mode.includes("w")) left = cropClamp(origin.x + dx, 0, right - 2);
+      if (active.mode.includes("e")) nextRight = cropClamp(right + dx, left + 2, visualWidth);
+      if (active.mode.includes("n")) top = cropClamp(origin.y + dy, 0, bottom - 2);
+      if (active.mode.includes("s")) nextBottom = cropClamp(bottom + dy, top + 2, visualHeight);
+      next = { unit: "px", x: left, y: top, width: nextRight - left, height: nextBottom - top };
+    }
+
+    setCrop(next);
+    return next;
   };
+
+  const finishPointer = (event: React.PointerEvent<HTMLDivElement>) => {
+    const active = pointerRef.current;
+    if (!active || active.pointerId !== event.pointerId) return;
+    const finalCrop = updateCrop(getPoint(event));
+    pointerRef.current = null;
+    if (surfaceRef.current?.hasPointerCapture(event.pointerId)) surfaceRef.current.releasePointerCapture(event.pointerId);
+    if (finalCrop && finalCrop.width > 2 && finalCrop.height > 2) {
+      onCommit(visualCropToSource(finalCrop, transformProps));
+    }
+  };
+
+  const startPointer = (event: React.PointerEvent<HTMLElement>, mode: CropDragMode) => {
+    if (event.button !== 0 || !surfaceRef.current) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const point = getPoint(event);
+    const origin = mode === "create"
+      ? { unit: "px" as const, x: point.x, y: point.y, width: 0, height: 0 }
+      : (crop || { unit: "px" as const, x: point.x, y: point.y, width: 0, height: 0 });
+    pointerRef.current = { pointerId: event.pointerId, mode, startX: point.x, startY: point.y, origin };
+    surfaceRef.current.setPointerCapture(event.pointerId);
+    if (mode === "create") setCrop(origin);
+  };
+
+  const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!pointerRef.current || pointerRef.current.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    updateCrop(getPoint(event));
+  };
+
+  const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    const target = event.target as HTMLElement;
+    if (target.closest("[data-crop-selection]")) return;
+    startPointer(event, "create");
+  };
+
+  const handleStyle = (mode: Exclude<CropDragMode, "create" | "move">): React.CSSProperties => {
+    const common: React.CSSProperties = {
+      position: "absolute",
+      width: 12,
+      height: 12,
+      background: "#fff",
+      border: "1px solid rgba(32, 32, 32, 0.65)",
+      borderRadius: 2,
+      zIndex: 3,
+    };
+    const positions: Record<typeof mode, React.CSSProperties> = {
+      nw: { left: 0, top: 0, cursor: "nwse-resize", transform: "translate(-50%, -50%)" },
+      n: { left: "50%", top: 0, cursor: "ns-resize", transform: "translate(-50%, -50%)" },
+      ne: { right: 0, top: 0, cursor: "nesw-resize", transform: "translate(50%, -50%)" },
+      e: { right: 0, top: "50%", cursor: "ew-resize", transform: "translate(50%, -50%)" },
+      se: { right: 0, bottom: 0, cursor: "nwse-resize", transform: "translate(50%, 50%)" },
+      s: { left: "50%", bottom: 0, cursor: "ns-resize", transform: "translate(-50%, 50%)" },
+      sw: { left: 0, bottom: 0, cursor: "nesw-resize", transform: "translate(-50%, 50%)" },
+      w: { left: 0, top: "50%", cursor: "ew-resize", transform: "translate(-50%, -50%)" },
+    };
+    return { ...common, ...positions[mode] };
+  };
+
+  const handles: Array<Exclude<CropDragMode, "create" | "move">> = ["nw", "n", "ne", "e", "se", "s", "sw", "w"];
 
   return (
-    <ReactCrop crop={crop} onChange={handleChange} onComplete={handleComplete} className={className} style={style}>
-      <img src={src} className={imageClassName} style={{ ...imageStyle, width: `${visualWidth}px`, height: `${visualHeight}px`, objectFit: 'fill' }} alt={alt} />
-    </ReactCrop>
+    <div
+      ref={surfaceRef}
+      className={className}
+      style={{ ...style, position: "relative", width: `${visualWidth}px`, height: `${visualHeight}px`, touchAction: "none", userSelect: "none", cursor: crop ? "default" : "crosshair" }}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={finishPointer}
+      onPointerCancel={finishPointer}
+    >
+      <img src={src} className={imageClassName} style={{ ...imageStyle, width: `${visualWidth}px`, height: `${visualHeight}px`, objectFit: "fill" }} alt={alt} draggable={false} />
+      {crop && crop.width > 0 && crop.height > 0 && (
+        <div
+          data-crop-selection
+          className="absolute border border-white/90 bg-[#0a84ff]/10 shadow-[0_0_0_9999px_rgba(0,0,0,0.28)]"
+          style={{ left: crop.x, top: crop.y, width: crop.width, height: crop.height, cursor: "move", touchAction: "none" }}
+          onPointerDown={(event) => startPointer(event, "move")}
+        >
+          {handles.map((mode) => (
+            <span
+              key={mode}
+              data-crop-handle={mode}
+              style={handleStyle(mode)}
+              onPointerDown={(event) => startPointer(event, mode)}
+            />
+          ))}
+        </div>
+      )}
+    </div>
   );
 });
 
@@ -359,6 +495,18 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
   const cropIsQuarterTurned = normalizeQuarterTurn(scannerRotation) === 90 || normalizeQuarterTurn(scannerRotation) === 270;
   const cropVisualWidth = cropIsQuarterTurned ? cropSourceHeight : cropSourceWidth;
   const cropVisualHeight = cropIsQuarterTurned ? cropSourceWidth : cropSourceHeight;
+  // Keep one screen-space document box for both the visible transformed page and the crop surface.
+  // The previous layout sized the outer box in source orientation, then rotated only its child;
+  // that made scroll ranges and pointer coordinates disagree at quarter-turns and high zoom.
+  const renderedDocumentWidth = cropIsQuarterTurned ? cropVisualWidth : documentWidth;
+  const renderedDocumentHeight = cropIsQuarterTurned ? cropVisualHeight : pageHeight;
+  const stagePadding = isNarrowPreview ? 24 : 64;
+  const documentStageWidth = hasDocumentLoaded
+    ? Math.max(viewportSize.width || previewWidth, renderedDocumentWidth + stagePadding)
+    : undefined;
+  const documentStageHeight = hasDocumentLoaded
+    ? Math.max(viewportSize.height || previewHeight, renderedDocumentHeight + stagePadding)
+    : undefined;
 
   useEffect(() => {
     if (!isScannerOpen) {
@@ -540,6 +688,65 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
 
   const viewportRef = React.useRef<HTMLDivElement>(null);
   const dragRef = React.useRef({ isDragging: false, startX: 0, startY: 0, scrollL: 0, scrollT: 0 });
+  const zoomAnchorRef = React.useRef<{ clientX: number; clientY: number; u: number; v: number } | null>(null);
+
+  const getZoomAnchorPoint = (point?: { clientX: number; clientY: number }) => {
+    const viewport = viewportRef.current;
+    const rect = viewport?.getBoundingClientRect();
+    if (!rect) return point || null;
+    return point || { clientX: rect.left + rect.width / 2, clientY: rect.top + rect.height / 2 };
+  };
+
+  const changeScannerZoom = (
+    updater: React.SetStateAction<number>,
+    point?: { clientX: number; clientY: number },
+  ) => {
+    const viewport = viewportRef.current;
+    const surface = viewport?.querySelector<HTMLElement>('[data-scanner-document-surface]');
+    const anchorPoint = getZoomAnchorPoint(point);
+    if (viewport && surface && anchorPoint) {
+      const rect = surface.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        zoomAnchorRef.current = {
+          clientX: anchorPoint.clientX,
+          clientY: anchorPoint.clientY,
+          u: cropClamp((anchorPoint.clientX - rect.left) / rect.width, 0, 1),
+          v: cropClamp((anchorPoint.clientY - rect.top) / rect.height, 0, 1),
+        };
+      }
+    }
+    setScannerZoom(updater);
+  };
+
+  useLayoutEffect(() => {
+    const anchor = zoomAnchorRef.current;
+    if (!anchor) return;
+    const viewport = viewportRef.current;
+    const surface = viewport?.querySelector<HTMLElement>('[data-scanner-document-surface]');
+    if (!viewport || !surface) return;
+    const rect = surface.getBoundingClientRect();
+    const nextLeft = rect.left + anchor.u * rect.width - anchor.clientX;
+    const nextTop = rect.top + anchor.v * rect.height - anchor.clientY;
+    viewport.scrollLeft = cropClamp(viewport.scrollLeft + nextLeft, 0, Math.max(0, viewport.scrollWidth - viewport.clientWidth));
+    viewport.scrollTop = cropClamp(viewport.scrollTop + nextTop, 0, Math.max(0, viewport.scrollHeight - viewport.clientHeight));
+    zoomAnchorRef.current = null;
+  }, [scannerZoom, renderedDocumentWidth, renderedDocumentHeight, viewportSize.width, viewportSize.height]);
+
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    const handleWheelZoom = (event: WheelEvent) => {
+      if (!(event.ctrlKey || event.metaKey || event.altKey)) return;
+      event.preventDefault();
+      changeScannerZoom(
+        z => Math.min(Math.max(0.2, z - (event.deltaY > 0 ? 0.05 : -0.05)), 4.0),
+        { clientX: event.clientX, clientY: event.clientY },
+      );
+    };
+    viewport.addEventListener("wheel", handleWheelZoom, { passive: false });
+    return () => viewport.removeEventListener("wheel", handleWheelZoom);
+  }, [scannerZoom]);
+
   const beginViewportPan = (e: React.PointerEvent) => {
     const target = e.target as HTMLElement;
     if (target.closest("button") || target.closest("input") || target.closest("label") || target.closest("a")) {
@@ -1056,12 +1263,6 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                onPointerCancel={onPointerUp}
                onPointerLeave={onPointerUp}
                className={`flex-1 min-h-0 w-full overflow-auto custom-scrollbar relative bg-[#F9F9F9] dark:bg-[#1A1A22] ${isSpacePressed ? (dragRef.current?.isDragging ? "cursor-grabbing" : "cursor-grab") : isCropEnabled ? "cursor-crosshair" : dragRef.current?.isDragging ? "cursor-grabbing" : "cursor-grab"}`}
-               onWheel={(e) => {
-                  if (e.ctrlKey || e.metaKey || e.altKey) {
-                     e.preventDefault();
-                     setScannerZoom(z => Math.min(Math.max(0.2, z - (e.deltaY > 0 ? 0.05 : -0.05)), 4.0));
-                  }
-               }}
             >
                {isDocumentLoading && (
                  <div className="absolute inset-0 z-[80] flex items-center justify-center bg-[#F9F9F9]/90 dark:bg-[#1A1A22]/90 backdrop-blur-[2px]">
@@ -1071,7 +1272,16 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                    </div>
                  </div>
                )}
-               <div className="w-full min-h-full flex items-center justify-center p-3 sm:p-8 transition-all duration-200">
+               <div
+                 data-scanner-stage
+                 className="relative flex items-center justify-center p-3 sm:p-8 transition-all duration-200"
+                 style={hasDocumentLoaded ? {
+                   width: `${documentStageWidth}px`,
+                   height: `${documentStageHeight}px`,
+                   minWidth: `${documentStageWidth}px`,
+                   minHeight: `${documentStageHeight}px`,
+                 } : undefined}
+               >
                   <div
                     className="m-auto relative"
                     style={isCropEnabled && hasDocumentLoaded ? { width: `${cropVisualWidth}px`, height: `${cropVisualHeight}px` } : undefined}
@@ -1233,18 +1443,27 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                   ) : scannerTotalPages > 1 ? (
                     // Book Spread Layout & Single Cover System
                     <>
-                    <div className={`relative flex items-stretch drop-shadow-2xl bg-transparent transition-transform duration-300 ease-in-out ${isCropEnabled ? 'absolute left-1/2 top-1/2' : ''}`}
+                    <div data-scanner-document-surface className={`relative flex items-stretch drop-shadow-2xl bg-transparent ${isCropEnabled ? 'absolute left-1/2 top-1/2' : 'transition-transform duration-300 ease-in-out'}`}
                          style={{
-                            transform: `${isCropEnabled ? 'translate(-50%, -50%) ' : ''}rotate(${scannerRotation}deg) scaleX(${scannerScaleX}) scaleY(${scannerScaleY})`,
+                            transform: isCropEnabled ? 'translate(-50%, -50%)' : undefined,
                             transformOrigin: 'center center',
-                            height: `${pageHeight}px`,
-                            width: `${documentWidth}px`,
+                            height: `${renderedDocumentHeight}px`,
+                            width: `${renderedDocumentWidth}px`,
                             aspectRatio: 'auto',
                             maxWidth: !isCropEnabled && scannerZoom <= 1 ? '100%' : undefined,
                             maxHeight: !isCropEnabled && scannerZoom <= 1 ? '100%' : undefined
                          }}
                          onContextMenu={handleContextMenu}
                     >
+                      <div
+                        className="absolute left-1/2 top-1/2"
+                        style={{
+                          width: `${documentWidth}px`,
+                          height: `${pageHeight}px`,
+                          transform: `translate(-50%, -50%) rotate(${scannerRotation}deg) scaleX(${scannerScaleX}) scaleY(${scannerScaleY})`,
+                          transformOrigin: 'center center',
+                        }}
+                      >
                       {/* Hidden Image for HandleAddToQueue computation using Unified Stitched Canvas */}
                       <img ref={scannerImgRef} src={scannerStitchedUrl || scannerPreviewUrl || undefined} className="absolute inset-0 w-full h-full opacity-0 pointer-events-none" style={{ objectFit: 'fill' }} alt="" />
 
@@ -1304,7 +1523,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                           </>
                         );
                       })()}
-                    </div>
+                      </div>
                     {isCropEnabled ? (
                       <div onPointerDownCapture={onCropPointerDownCapture} className={`absolute inset-0 z-20 pointer-events-auto ${isSpacePressed ? "pointer-events-none" : ""}`}>
                         <ScannerCropSurface
@@ -1326,20 +1545,30 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                         />
                       </div>
                     ) : null}
+                    </div>
                     </>
                   ) : (
                     // Single Page Layout (Seamlessly fit without scroll when 100%)
                     <>
-                    <div
-                      className={`relative shadow-2xl bg-white dark:bg-[#f6f6f6] rounded-sm transition-transform duration-300 ${isCropEnabled ? 'absolute left-1/2 top-1/2' : ''}`}
-                      style={{
-                        transform: `${isCropEnabled ? 'translate(-50%, -50%) ' : ''}rotate(${scannerRotation}deg) scaleX(${scannerScaleX}) scaleY(${scannerScaleY})`,
-                        transformOrigin: 'center center',
-                        width: `${pageWidth}px`,
-                        height: `${pageHeight}px`,
+                    <div data-scanner-document-surface
+                      className={`relative shadow-2xl bg-white dark:bg-[#f6f6f6] rounded-sm ${isCropEnabled ? 'absolute left-1/2 top-1/2' : 'transition-transform duration-300'}`}
+                        style={{
+                          transform: isCropEnabled ? 'translate(-50%, -50%)' : undefined,
+                          transformOrigin: 'center center',
+                          width: `${renderedDocumentWidth}px`,
+                          height: `${renderedDocumentHeight}px`,
                         maxWidth: !isCropEnabled && scannerZoom <= 1 ? '100%' : undefined,
                         maxHeight: !isCropEnabled && scannerZoom <= 1 ? '100%' : undefined
                       }}>
+                       <div
+                         className="absolute left-1/2 top-1/2"
+                         style={{
+                           width: `${pageWidth}px`,
+                           height: `${pageHeight}px`,
+                           transform: `translate(-50%, -50%) rotate(${scannerRotation}deg) scaleX(${scannerScaleX}) scaleY(${scannerScaleY})`,
+                           transformOrigin: 'center center',
+                         }}
+                       >
                        <img
                          ref={scannerImgRef}
                          src={scannerStitchedUrl || scannerPreviewUrl || undefined}
@@ -1471,7 +1700,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                              </div>
                           </div>
                        )}
-                    </div>
+                       </div>
                     {isCropEnabled ? (
                       <div
                         onPointerDownCapture={onCropPointerDownCapture}
@@ -1496,6 +1725,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                         />
                       </div>
                     ) : null}
+                    </div>
                     </>
                   )}
                   </div>
@@ -1526,19 +1756,19 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                {/* Center Tools (Zoom, Rotate, Move) merged here */}
                <div className="flex max-w-full overflow-x-auto custom-scrollbar items-center justify-center gap-1.5 bg-[#F9F9F9] dark:bg-[#2A2A35] px-3 py-1.5 rounded-full border border-black/5 dark:border-white/10 shadow-sm shrink-0 min-w-max">
                  <div className="flex gap-1">
-                   <button onClick={() => setScannerZoom(z => Math.max(0.2, z - 0.1))} className="hover:bg-black/5 dark:hover:bg-white/10 p-1.5 rounded-md transition-colors"><ZoomOut className="w-4 h-4 text-gray-700 dark:text-gray-300"/></button>
+                    <button onClick={() => changeScannerZoom(z => Math.max(0.2, z - 0.1))} className="hover:bg-black/5 dark:hover:bg-white/10 p-1.5 rounded-md transition-colors"><ZoomOut className="w-4 h-4 text-gray-700 dark:text-gray-300"/></button>
                    <div className="flex items-center gap-1 bg-black/5 dark:bg-white/10 px-1 py-0.5 rounded h-7">
                      <span className="text-[12px] font-mono text-gray-600 dark:text-gray-300 w-10 text-center select-none">{Math.round(scannerZoom * 100)}%</span>
                      <div className="flex flex-col justify-center items-center h-full -space-y-1">
                        <button
-                         onClick={() => setScannerZoom(z => Math.min(4.0, z + 0.05))}
+                          onClick={() => changeScannerZoom(z => Math.min(4.0, z + 0.05))}
                          className="hover:bg-black/10 dark:hover:bg-white/10 rounded flex items-center justify-center text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-colors"
                          title="Increase Zoom (+5%)"
                        >
                          <ChevronUp className="w-3.5 h-3.5 stroke-[2.5]" />
                        </button>
                        <button
-                         onClick={() => setScannerZoom(z => Math.max(0.2, z - 0.05))}
+                          onClick={() => changeScannerZoom(z => Math.max(0.2, z - 0.05))}
                          className="hover:bg-black/10 dark:hover:bg-white/10 rounded flex items-center justify-center text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-colors"
                          title="Decrease Zoom (-5%)"
                        >
@@ -1546,7 +1776,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                        </button>
                      </div>
                    </div>
-                   <button onClick={() => setScannerZoom(z => Math.min(4.0, z + 0.1))} className="hover:bg-black/5 dark:hover:bg-white/10 p-1.5 rounded-md transition-colors"><ZoomIn className="w-4 h-4 text-gray-700 dark:text-gray-300"/></button>
+                    <button onClick={() => changeScannerZoom(z => Math.min(4.0, z + 0.1))} className="hover:bg-black/5 dark:hover:bg-white/10 p-1.5 rounded-md transition-colors"><ZoomIn className="w-4 h-4 text-gray-700 dark:text-gray-300"/></button>
                  </div>
 
                  <div className="w-[1px] h-4 bg-gray-300 dark:bg-white/10 mx-1"></div>
