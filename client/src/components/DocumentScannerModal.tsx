@@ -39,6 +39,7 @@ const TopScannerIcon = ({ className }: { className?: string }) => (
 interface ScannerCropSurfaceProps {
   crop?: Crop;
   onCommit: (crop: Crop) => void;
+  viewportRef: React.RefObject<HTMLDivElement | null>;
   src?: string;
   sourceWidth: number;
   sourceHeight: number;
@@ -167,6 +168,7 @@ const cropClamp = (value: number, min: number, max: number) => Math.max(min, Mat
 const ScannerCropSurface = React.memo(({
   crop: committedCrop,
   onCommit,
+  viewportRef,
   src,
   sourceWidth,
   sourceHeight,
@@ -184,6 +186,12 @@ const ScannerCropSurface = React.memo(({
   const transformProps = { sourceWidth, sourceHeight, visualWidth, visualHeight, rotation, scaleX, scaleY } as ScannerCropSurfaceProps;
   const surfaceRef = React.useRef<HTMLDivElement>(null);
   const pointerRef = React.useRef<CropPointerState | null>(null);
+  const autoPanRef = React.useRef<{ clientX: number; clientY: number; frame: number | null; lastTime: number }>({
+    clientX: 0,
+    clientY: 0,
+    frame: null,
+    lastTime: 0,
+  });
   const [crop, setCrop] = useState<Crop | undefined>(() => sourceCropToVisual(committedCrop, transformProps));
 
   useEffect(() => {
@@ -236,9 +244,87 @@ const ScannerCropSurface = React.memo(({
     return next;
   };
 
+  const stopAutoPan = () => {
+    if (autoPanRef.current.frame !== null) {
+      cancelAnimationFrame(autoPanRef.current.frame);
+      autoPanRef.current.frame = null;
+    }
+    autoPanRef.current.lastTime = 0;
+  };
+
+  const getAutoPanVelocity = (clientX: number, clientY: number) => {
+    const viewport = viewportRef.current;
+    if (!viewport) return { x: 0, y: 0 };
+    const rect = viewport.getBoundingClientRect();
+    const edgeSize = 64;
+    const maxSpeed = 16;
+    const speedFor = (distanceToNearEdge: number, distanceToFarEdge: number) => {
+      if (distanceToNearEdge < edgeSize) {
+        const intensity = 1 - Math.max(0, distanceToNearEdge) / edgeSize;
+        return -maxSpeed * intensity * intensity;
+      }
+      if (distanceToFarEdge < edgeSize) {
+        const intensity = 1 - Math.max(0, distanceToFarEdge) / edgeSize;
+        return maxSpeed * intensity * intensity;
+      }
+      return 0;
+    };
+    let x = speedFor(clientX - rect.left, rect.right - clientX);
+    let y = speedFor(clientY - rect.top, rect.bottom - clientY);
+    const maxScrollLeft = Math.max(0, viewport.scrollWidth - viewport.clientWidth);
+    const maxScrollTop = Math.max(0, viewport.scrollHeight - viewport.clientHeight);
+    if ((x < 0 && viewport.scrollLeft <= 0) || (x > 0 && viewport.scrollLeft >= maxScrollLeft)) x = 0;
+    if ((y < 0 && viewport.scrollTop <= 0) || (y > 0 && viewport.scrollTop >= maxScrollTop)) y = 0;
+    return { x, y };
+  };
+
+  const runAutoPan = (time: number) => {
+    const active = pointerRef.current;
+    const viewport = viewportRef.current;
+    if (!active || !viewport) {
+      stopAutoPan();
+      return;
+    }
+
+    const state = autoPanRef.current;
+    const elapsed = state.lastTime ? Math.min(32, Math.max(8, time - state.lastTime)) : 16.67;
+    state.lastTime = time;
+    const velocity = getAutoPanVelocity(state.clientX, state.clientY);
+    const distanceScale = elapsed / 16.67;
+    const nextLeft = cropClamp(viewport.scrollLeft + velocity.x * distanceScale, 0, Math.max(0, viewport.scrollWidth - viewport.clientWidth));
+    const nextTop = cropClamp(viewport.scrollTop + velocity.y * distanceScale, 0, Math.max(0, viewport.scrollHeight - viewport.clientHeight));
+    const didScroll = nextLeft !== viewport.scrollLeft || nextTop !== viewport.scrollTop;
+    if (didScroll) {
+      viewport.scrollLeft = nextLeft;
+      viewport.scrollTop = nextTop;
+      updateCrop(getPoint({ clientX: state.clientX, clientY: state.clientY }));
+    }
+
+    if (velocity.x !== 0 || velocity.y !== 0) {
+      state.frame = requestAnimationFrame(runAutoPan);
+    } else {
+      state.frame = null;
+      state.lastTime = 0;
+    }
+  };
+
+  const updateAutoPan = (clientX: number, clientY: number) => {
+    autoPanRef.current.clientX = clientX;
+    autoPanRef.current.clientY = clientY;
+    const velocity = getAutoPanVelocity(clientX, clientY);
+    if ((velocity.x === 0 && velocity.y === 0) || autoPanRef.current.frame !== null) return;
+    autoPanRef.current.frame = requestAnimationFrame(runAutoPan);
+  };
+
+  useEffect(() => () => {
+    if (autoPanRef.current.frame !== null) cancelAnimationFrame(autoPanRef.current.frame);
+    autoPanRef.current.frame = null;
+  }, []);
+
   const finishPointer = (event: React.PointerEvent<HTMLDivElement>) => {
     const active = pointerRef.current;
     if (!active || active.pointerId !== event.pointerId) return;
+    stopAutoPan();
     const finalCrop = updateCrop(getPoint(event));
     pointerRef.current = null;
     if (surfaceRef.current?.hasPointerCapture(event.pointerId)) surfaceRef.current.releasePointerCapture(event.pointerId);
@@ -258,12 +344,16 @@ const ScannerCropSurface = React.memo(({
     pointerRef.current = { pointerId: event.pointerId, mode, startX: point.x, startY: point.y, origin };
     surfaceRef.current.setPointerCapture(event.pointerId);
     if (mode === "create") setCrop(origin);
+    autoPanRef.current.clientX = event.clientX;
+    autoPanRef.current.clientY = event.clientY;
+    updateAutoPan(event.clientX, event.clientY);
   };
 
   const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
     if (!pointerRef.current || pointerRef.current.pointerId !== event.pointerId) return;
     event.preventDefault();
     updateCrop(getPoint(event));
+    updateAutoPan(event.clientX, event.clientY);
   };
 
   const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -306,6 +396,7 @@ const ScannerCropSurface = React.memo(({
       onPointerMove={handlePointerMove}
       onPointerUp={finishPointer}
       onPointerCancel={finishPointer}
+      onLostPointerCapture={finishPointer}
     >
       <img src={src} className={imageClassName} style={{ ...imageStyle, width: `${visualWidth}px`, height: `${visualHeight}px`, objectFit: "fill" }} alt={alt} draggable={false} />
       {crop && crop.width > 0 && crop.height > 0 && (
@@ -1529,6 +1620,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                         <ScannerCropSurface
                           crop={scannerCrop}
                           onCommit={setScannerCrop}
+                          viewportRef={viewportRef}
                           src={scannerStitchedUrl || scannerPreviewUrl || undefined}
                           sourceWidth={cropSourceWidth}
                           sourceHeight={cropSourceHeight}
@@ -1709,6 +1801,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                         <ScannerCropSurface
                           crop={scannerCrop}
                           onCommit={setScannerCrop}
+                          viewportRef={viewportRef}
                           src={scannerStitchedUrl || scannerPreviewUrl || undefined}
                           sourceWidth={cropSourceWidth}
                           sourceHeight={cropSourceHeight}
