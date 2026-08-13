@@ -608,6 +608,17 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
     : Math.max(360, Math.min(560, previewHeight - stagePadding * 2));
   const progressDeckMinWidth = isNarrowPreview ? 220 : 320;
   const defaultProgressPresentationRatio = 860 / 650;
+  // The attached 1200×1696 reference image established the visual floor for
+  // non-empty desktop scanner states: a 1078×826 shell, which corresponds to
+  // a 720px content floor after the 310px sidebar and 48px shell allowance.
+  // Smaller screens remain governed by the existing responsive clamps.
+  const referenceFloorShellWidth = 1078;
+  const referenceFloorShellHeight = 826;
+  const scannerSidebarWidth = windowSize.width >= 768 ? 310 : 0;
+  const minimumNonEmptyContentWidth = isNarrowPreview
+    ? 280
+    : Math.max(320, referenceFloorShellWidth - scannerSidebarWidth - 48);
+  const minimumNonEmptyShellHeight = isNarrowPreview ? 420 : referenceFloorShellHeight;
   const isTinyProgressCrop = Boolean(
     activeProgressCrop && (
       Math.min(activeProgressCrop.width, activeProgressCrop.height) < 120
@@ -667,7 +678,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
   useEffect(() => {
     if (!isScannerOpen || windowSize.width < 640) return;
 
-    const sidebarWidth = windowSize.width >= 768 ? 310 : 0;
+    const sidebarWidth = scannerSidebarWidth;
     if (!hasDocumentLoaded) {
       fitToSize(
         Math.min(900, windowSize.width - 24, 860),
@@ -678,16 +689,19 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
 
     const basePageWidth = Math.max(180, Math.round(basePageHeight * pageAspectRatio));
     // Single pages get their own comfortable shell; spreads still reserve room for
-    // both pages. Neither state inherits a fixed aspect ratio from the other.
+    // both pages. Every non-empty state also honors the measured reference floor.
     const spreadComfortWidth = basePageWidth * 2 + 10;
     const fitWidth = isScannerProgressActive
-      ? progressDeckWidth
+      ? Math.max(progressDeckWidth, minimumNonEmptyContentWidth)
       : isSingleBookPage
-        ? Math.max(documentWidth, isNarrowPreview ? 280 : 720)
-        : Math.max(documentWidth, spreadComfortWidth);
-    const fitHeight = isScannerProgressActive
+        ? Math.max(documentWidth, minimumNonEmptyContentWidth)
+        : Math.max(documentWidth, spreadComfortWidth, minimumNonEmptyContentWidth);
+    const fitHeight = Math.max(
+      isScannerProgressActive
       ? progressDeckHeight + stagePadding + 104
-      : basePageHeight + 86;
+      : basePageHeight + 86,
+      minimumNonEmptyShellHeight,
+    );
     fitToSize(
       Math.min(1240, windowSize.width - 24, fitWidth + sidebarWidth + 48),
       Math.min(900, windowSize.height - 24, fitHeight),
@@ -1152,6 +1166,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
         onDoubleClick={(e) => e.stopPropagation()}
         transition={{ duration: 0.25, type: 'spring', damping: 25, stiffness: 200 }}
         style={{ position: window.innerWidth < 640 ? 'fixed' : 'absolute' }}
+        data-scanner-modal-shell
         className="bg-[#FCF5F3] dark:bg-[#20202A] sm:rounded-xl shadow-[0_24px_54px_rgba(0,0,0,0.25)] overflow-hidden border-none sm:border border-black/5 dark:border-white/10 font-sans flex flex-col min-h-0"
       >
         {/* Resize & Drag Handles (Only on Desktop) */}

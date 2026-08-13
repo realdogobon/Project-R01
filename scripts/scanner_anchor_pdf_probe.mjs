@@ -147,7 +147,7 @@ try {
   await page.click('[title="AI Scanner"]');
   await page.waitForSelector("#scanner-viewport", { timeout: 20000 });
   await upload(pdfPath);
-  await page.waitForFunction(() => /1\/4/.test(document.body.innerText), { timeout: 40000 });
+  await page.waitForFunction(() => /\b1\/\d+\b/.test(document.body.innerText), { timeout: 40000 });
   measurements.pdfPage1 = await readGeometry();
   const nextButton = await page.evaluateHandle(() => {
     const counter = [...document.querySelectorAll("span")].find((node) => /^1\/\d+$/.test(node.textContent?.trim() || ""));
@@ -156,7 +156,7 @@ try {
   if (!nextButton) throw new Error("PDF next-page button not found");
   await nextButton.click();
   await sleep(900);
-  await page.waitForFunction(() => /2\/4/.test(document.body.innerText), { timeout: 20000 });
+  await page.waitForFunction(() => /\b2\/\d+\b/.test(document.body.innerText), { timeout: 20000 });
   measurements.pdfPage2 = await readGeometry();
   await clickTitle("Crop Tool");
   const page2Viewport = measurements.pdfPage2.viewport.rect;
