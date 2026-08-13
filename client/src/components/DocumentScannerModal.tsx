@@ -1443,12 +1443,15 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                )}
                <div
                  data-scanner-stage
-                 className="relative flex items-center justify-center p-3 sm:p-8 transition-all duration-200"
+                 className="relative m-auto flex items-center justify-center p-3 sm:p-8 transition-all duration-200"
                  style={hasDocumentLoaded ? {
                    width: `${documentStageWidth}px`,
                    height: `${documentStageHeight}px`,
                    minWidth: `${documentStageWidth}px`,
                    minHeight: `${documentStageHeight}px`,
+                   marginTop: isScannerProgressActive && documentStageHeight
+                     ? `${Math.max(0, Math.round(((viewportSize.height || previewHeight) - documentStageHeight) / 2))}px`
+                     : undefined,
                  } : undefined}
                >
                   <div

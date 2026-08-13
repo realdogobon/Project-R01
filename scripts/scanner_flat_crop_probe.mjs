@@ -14,7 +14,8 @@ page.on("console", (message) => { if (message.type() === "error") errors.push(`c
 const readLayout = async (label) => page.evaluate((snapshotLabel) => {
   const viewport = document.querySelector("#scanner-viewport");
   const stage = viewport?.querySelector("[data-scanner-stage]");
-  const deck = viewport?.querySelector("[class*='h-[380px]'], [class*='h-[480px]']");
+  const deck = viewport?.querySelector("[data-scanner-stage] > div > div.relative.flex.flex-col");
+  const card = deck?.querySelector(":scope > div.absolute");
   const selection = viewport?.querySelector("[data-crop-selection]");
   const rect = (element) => {
     if (!element) return null;
@@ -26,6 +27,7 @@ const readLayout = async (label) => page.evaluate((snapshotLabel) => {
     viewport: viewport ? { rect: rect(viewport), scrollLeft: viewport.scrollLeft, scrollTop: viewport.scrollTop, scrollWidth: viewport.scrollWidth, scrollHeight: viewport.scrollHeight, clientWidth: viewport.clientWidth, clientHeight: viewport.clientHeight } : null,
     stage: rect(stage),
     deck: rect(deck),
+    card: rect(card),
     selection: rect(selection),
     modal: rect(document.querySelector("[data-scanner-modal-shell]")),
     cropQueueCount: document.querySelectorAll("[title='Clip Page']").length,
