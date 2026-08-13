@@ -123,3 +123,9 @@ The code-level zero-credit guarantee is the preflight boundary itself: `recogniz
 ## 10. Final acceptance criteria
 
 The approved implementation criteria are now met in code and in the focused live Stop probe: the retained-queue progress card remains centered in the established stage; Stop during preflight spends no OCR/provider work; post-start Stop cooperatively cancels the active operation; the queue and document remain recoverable; the laser stops; the button returns to `Scan`; empty Scan is guarded without a browser-console error; and the existing PDF/image crop, zoom, page navigation, Send, and OCR flows remain unchanged by the cancellation contract.
+
+## 11. Multi-clip Scan-to-Stop regression
+
+The repository now includes `scripts/scanner_multiclip_stop_probe.mjs`. The harness creates three real clips from `Volume_02.pdf`, confirms the queue contains three items, waits until the status reads `Scanning clip 1 of 3...` with the laser visible, clicks the live `Stop scan` control, and samples the scanner for six seconds after cancellation.
+
+The live run passed with zero page or console errors. Only clip index `1` was observed; no `Scanning clip 2 of 3...` or `Scanning clip 3 of 3...` state appeared. After cancellation, the status was cleared, the laser count was `0`, the action returned to enabled `Scan`, and `Queued Clips (3)` remained intact. This directly verifies that the sequential extraction loop does not begin subsequent queued clips after Stop.
