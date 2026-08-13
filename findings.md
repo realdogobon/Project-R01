@@ -129,3 +129,11 @@ The approved implementation criteria are now met in code and in the focused live
 The repository now includes `scripts/scanner_multiclip_stop_probe.mjs`. The harness creates three real clips from `Volume_02.pdf`, confirms the queue contains three items, waits until the status reads `Scanning clip 1 of 3...` with the laser visible, clicks the live `Stop scan` control, and samples the scanner for six seconds after cancellation.
 
 The live run passed with zero page or console errors. Only clip index `1` was observed; no `Scanning clip 2 of 3...` or `Scanning clip 3 of 3...` state appeared. After cancellation, the status was cleared, the laser count was `0`, the action returned to enabled `Scan`, and `Queued Clips (3)` remained intact. This directly verifies that the sequential extraction loop does not begin subsequent queued clips after Stop.
+
+## 12. Provider-mock preflight assertion and visual refinement
+
+The repository now includes `scripts/scanner_preflight_provider_probe.mjs`. It installs browser-side request interception for the Gemini, Groq, and OpenAI OCR hosts, supplies mock provider keys locally, creates one lightweight image clip, starts a scan, and stops it during the 3.5-second preflight. The probe does not allow a provider request to reach the network: any unexpected request is recorded and answered by the local mock.
+
+The focused live run passed with zero intercepted provider requests and zero browser errors. The Stop action was present and enabled during `Preparing scan...`, the click succeeded, and the action returned to enabled `Scan` after cancellation and after the preflight boundary. This is the requested zero-cloud-request assertion, performed without running a full OCR request or consuming provider bandwidth.
+
+The same validation pass confirmed the requested presentation changes without altering the button footprint or scanner mechanics. Stop now uses a red accent, the queue-count badge is neutral rather than red or blue, and the hand icon is larger with stronger rounded strokes. The progress status caption was lowered slightly to reduce collision risk with lower scanner controls. The three-clip live cancellation probe still passed after these changes; only clip 1 appeared, the laser stopped, and all three queued clips remained available.

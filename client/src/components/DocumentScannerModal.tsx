@@ -1512,8 +1512,8 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                             )
                          })}
 
-                         {/* Typography Status */}
-                         <div className="absolute -bottom-8 left-0 right-0 flex items-center justify-center animate-in fade-in zoom-in duration-300">
+                         {/* Typography Status — keep the caption clear of the lower scanner controls. */}
+                         <div className="absolute -bottom-10 left-0 right-0 flex items-center justify-center animate-in fade-in zoom-in duration-300">
                             {scannerProgress.status === 'success' ? (
                                <div className="text-neutral-700 dark:text-neutral-300 font-medium text-[13px] flex items-center gap-1.5">
                                   <CheckCircle className="w-3.5 h-3.5 text-neutral-600 dark:text-neutral-400" strokeWidth={2.5} />
@@ -2022,7 +2022,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                     title={isOcrLoading ? "Stop scan" : isTextReady ? "Send extracted text" : canScan ? "Scan" : "No document or clips available"}
                     className={`relative px-[24px] py-1.5 rounded-md text-[13px] font-medium transition-all duration-500 ease-out disabled:opacity-50 flex items-center justify-center min-w-[80px] shadow-sm ${
                       isOcrLoading
-                        ? "bg-neutral-950 dark:bg-white text-white dark:text-neutral-950"
+                        ? "bg-[#E81123] hover:bg-[#C8102E] dark:bg-[#E81123] dark:hover:bg-[#C8102E] text-white shadow-md"
                         : isTextReady
                           ? selectedDestinationFolder
                             ? "bg-[#0a84ff] hover:bg-[#0070e0] dark:bg-[#bf00ff] dark:hover:bg-[#a000d6] text-white shadow-md scale-105"
@@ -2031,13 +2031,13 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                     }`}
                  >
                    {!isTextReady && cropQueue.length > 0 && (
-                     <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[10px] w-[18px] h-[18px] flex items-center justify-center rounded-full shadow-md font-bold z-50 transition-opacity">
+                     <span className="absolute -top-1.5 -right-1.5 bg-neutral-600 dark:bg-neutral-300 text-white dark:text-neutral-900 text-[10px] w-[18px] h-[18px] flex items-center justify-center rounded-full shadow-md font-bold z-50 transition-opacity">
                        {cropQueue.length}
                      </span>
                    )}
                    {isOcrLoading ? (
-                     <div className="flex items-center gap-1.5 animate-in fade-in zoom-in duration-300">
-                       <Hand className="w-3.5 h-3.5" strokeWidth={2} />
+                     <div className="flex items-center gap-2 animate-in fade-in zoom-in duration-300">
+                       <Hand className="w-[18px] h-[18px] shrink-0" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
                        <span>{scannerRunState === 'stopping' ? "Stopping" : "Stop"}</span>
                      </div>
                    ) : isTextReady ? (
