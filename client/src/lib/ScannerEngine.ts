@@ -13,6 +13,36 @@ export class ScannerEngine {
     return typeof window.cv !== "undefined" && typeof window.cv.Mat !== "undefined";
   }
 
+  private hasVisibleContent(canvas: HTMLCanvasElement): boolean {
+    if (!canvas.width || !canvas.height) return false;
+
+    const sample = document.createElement("canvas");
+    sample.width = 96;
+    sample.height = 96;
+    const context = sample.getContext("2d", { willReadFrequently: true });
+    if (!context) return true;
+
+    context.fillStyle = "#fff";
+    context.fillRect(0, 0, sample.width, sample.height);
+    context.drawImage(canvas, 0, 0, sample.width, sample.height);
+
+    const pixels = context.getImageData(0, 0, sample.width, sample.height).data;
+    let visiblePixels = 0;
+    let darkest = 255;
+    let lightest = 0;
+
+    for (let index = 0; index < pixels.length; index += 4) {
+      const luminance = (pixels[index] * 0.2126)
+        + (pixels[index + 1] * 0.7152)
+        + (pixels[index + 2] * 0.0722);
+      darkest = Math.min(darkest, luminance);
+      lightest = Math.max(lightest, luminance);
+      if (pixels[index + 3] > 4 && luminance < 247) visiblePixels += 1;
+    }
+
+    return visiblePixels >= 4 || lightest - darkest > 8;
+  }
+
 
   public purifyCanvas(sourceCanvas: HTMLCanvasElement, colourMode: string = "Black and white"): HTMLCanvasElement {
     if (!this.isLoaded()) {
@@ -83,6 +113,11 @@ export class ScannerEngine {
       src.delete();
       dst.delete();
       displayMat.delete();
+
+      if (this.hasVisibleContent(sourceCanvas) && !this.hasVisibleContent(outputCanvas)) {
+        console.warn("Scanner purification produced a blank canvas; preserving the populated source canvas.");
+        return sourceCanvas;
+      }
 
       return outputCanvas;
     } catch (e) {

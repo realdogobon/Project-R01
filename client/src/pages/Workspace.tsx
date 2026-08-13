@@ -78,8 +78,8 @@ import { useAmbientEngine } from "../hooks/useAmbientEngine";
 import { getSharedAudioContext } from "../lib/audioContext";
 import ReactCrop, { Crop } from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
-import * as pdfjsLib from 'pdfjs-dist';
-import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
+import pdfWorkerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url';
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 import { ScannerEngine } from "../lib/ScannerEngine";
 import { recognizeImage, releaseWorker } from "../lib/OcrEngine";
@@ -1622,44 +1622,63 @@ export default function Workspace() {
         canvas.height = viewport.height;
         try {
           await page.render({ canvasContext: ctx, viewport }).promise;
-          if (renderToken !== pdfRenderTokenRef.current) return null;
-          return canvas;
-        } finally {
+          if (renderToken !== pdfRenderTokenRef.current) {
+            page.cleanup();
+            return null;
+          }
+          return {
+            canvas,
+            release: () => page.cleanup(),
+          };
+        } catch (error) {
           page.cleanup();
+          throw error;
         }
       };
 
       if (pdfDoc.numPages <= 1 || pageNum === 1 || (pageNum === pdfDoc.numPages && pageNum % 2 === 0)) {
 
-         const c1 = await getPageCanvas(pageNum);
-         if (c1 && renderToken === pdfRenderTokenRef.current) {
-            const purifiedCanvas = globalScannerEngine.purifyCanvas(c1, selectedColourMode);
-            const dataUrl = purifiedCanvas.toDataURL('image/jpeg', 0.85);
-            setScannerPreviewUrl(dataUrl);
-            setScannerPreviewUrl2("");
-            setScannerStitchedUrl(dataUrl);
+         const pageResult = await getPageCanvas(pageNum);
+         const c1 = pageResult?.canvas;
+         if (pageResult && c1 && renderToken === pdfRenderTokenRef.current) {
+            // Keep the PDF.js render as the preview source. The modal already applies
+            // the selected colour mode as a display filter, while routing the preview
+            // through OpenCV here can turn valid PDF content into an all-white image.
+            try {
+              const dataUrl = c1.toDataURL('image/jpeg', 0.85);
+              setScannerPreviewUrl(dataUrl);
+              setScannerPreviewUrl2("");
+              setScannerStitchedUrl(dataUrl);
+            } finally {
+              pageResult.release();
+            }
+         } else {
+            pageResult?.release();
          }
       } else {
 
          const leftPageNum = pageNum % 2 === 0 ? pageNum : pageNum - 1;
          const rightPageNum = leftPageNum + 1;
 
-         const [cLeft, cRight] = await Promise.all([
+         const [leftResult, rightResult] = await Promise.all([
              getPageCanvas(leftPageNum),
              getPageCanvas(rightPageNum)
          ]);
 
-         if (renderToken !== pdfRenderTokenRef.current) return;
-         const leftDataUrl = cLeft
-           ? globalScannerEngine.purifyCanvas(cLeft, selectedColourMode).toDataURL('image/jpeg', 0.85)
-           : "";
-         const rightDataUrl = cRight
-           ? globalScannerEngine.purifyCanvas(cRight, selectedColourMode).toDataURL('image/jpeg', 0.85)
-           : "";
+         if (renderToken !== pdfRenderTokenRef.current) {
+           leftResult?.release();
+           rightResult?.release();
+           return;
+         }
+         const cLeft = leftResult?.canvas;
+         const cRight = rightResult?.canvas;
+         const leftDataUrl = cLeft ? cLeft.toDataURL('image/jpeg', 0.85) : "";
+         const rightDataUrl = cRight ? cRight.toDataURL('image/jpeg', 0.85) : "";
 
          const finalCanvas = document.createElement('canvas');
          const finalCtx = finalCanvas.getContext('2d');
-         if (finalCtx && (cLeft || cRight) && renderToken === pdfRenderTokenRef.current) {
+         try {
+           if (finalCtx && (cLeft || cRight) && renderToken === pdfRenderTokenRef.current) {
              const wLeft = cLeft ? cLeft.width : 0;
              const hLeft = cLeft ? cLeft.height : 0;
              const wRight = cRight ? cRight.width : 0;
@@ -1675,10 +1694,13 @@ export default function Workspace() {
                  finalCtx.drawImage(cRight, wLeft, 0);
              }
 
-             const purifiedCanvas = globalScannerEngine.purifyCanvas(finalCanvas, selectedColourMode);
-             setScannerPreviewUrl(leftDataUrl);
-             setScannerPreviewUrl2(rightDataUrl);
-             setScannerStitchedUrl(purifiedCanvas.toDataURL('image/jpeg', 0.85));
+            setScannerPreviewUrl(leftDataUrl);
+            setScannerPreviewUrl2(rightDataUrl);
+            setScannerStitchedUrl(finalCanvas.toDataURL('image/jpeg', 0.85));
+           }
+         } finally {
+           leftResult?.release();
+           rightResult?.release();
          }
       }
     } catch (e: any) {
@@ -1714,9 +1736,13 @@ export default function Workspace() {
     if (extension === "pdf" || file.type === "application/pdf") {
        try {
          const arrayBuffer = await file.arrayBuffer();
-         const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+         const pdf = await pdfjsLib.getDocument({
+           data: arrayBuffer,
+           isImageDecoderSupported: false,
+            useWasm: true,
+         }).promise;
          if (uploadToken !== pdfRenderTokenRef.current) return;
-         setScannerPdfDoc(pdf);
+          setScannerPdfDoc(pdf);
          setScannerTotalPages(pdf.numPages);
          await renderPdfPage(pdf, 1);
          setScannerLogs(["Document loaded successfully. Ready to extract text or crop areas."]);
