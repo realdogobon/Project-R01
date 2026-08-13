@@ -256,16 +256,16 @@ const ScannerCropSurface = React.memo(({
     const viewport = viewportRef.current;
     if (!viewport) return { x: 0, y: 0 };
     const rect = viewport.getBoundingClientRect();
-    const edgeSize = 64;
-    const maxSpeed = 16;
+    const edgeSize = 80;
+    const maxSpeed = 12;
     const speedFor = (distanceToNearEdge: number, distanceToFarEdge: number) => {
       if (distanceToNearEdge < edgeSize) {
         const intensity = 1 - Math.max(0, distanceToNearEdge) / edgeSize;
-        return -maxSpeed * intensity * intensity;
+        return -maxSpeed * Math.pow(intensity, 1.6);
       }
       if (distanceToFarEdge < edgeSize) {
         const intensity = 1 - Math.max(0, distanceToFarEdge) / edgeSize;
-        return maxSpeed * intensity * intensity;
+        return maxSpeed * Math.pow(intensity, 1.6);
       }
       return 0;
     };
@@ -570,6 +570,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
   }, [scannerPreviewUrl, scannerPreviewUrl2]);
 
   const isSingleBookPage = scannerTotalPages <= 1 || scannerPage === 1 || (scannerPage === scannerTotalPages && scannerPage % 2 === 0);
+  const isScannerProgressActive = Boolean(scannerProgress && scannerProgress.status !== 'idle' && cropQueue.length > 0);
   const basePageHeight = Math.round(Math.max(280, Math.min(760, windowSize.height - (windowSize.width < 1024 ? 150 : 220))));
   const isNarrowPreview = windowSize.width < 768;
   const previewWidth = viewportSize.width || Math.max(280, windowSize.width - (windowSize.width >= 768 ? 350 : 24));
@@ -592,11 +593,17 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
   const renderedDocumentWidth = cropIsQuarterTurned ? cropVisualWidth : documentWidth;
   const renderedDocumentHeight = cropIsQuarterTurned ? cropVisualHeight : pageHeight;
   const stagePadding = isNarrowPreview ? 24 : 64;
+  const progressDeckWidth = isNarrowPreview ? 280 : 360;
+  const progressDeckHeight = isNarrowPreview ? 380 : 480;
   const documentStageWidth = hasDocumentLoaded
-    ? Math.max(viewportSize.width || previewWidth, renderedDocumentWidth + stagePadding)
+    ? isScannerProgressActive
+      ? progressDeckWidth + stagePadding
+      : Math.max(viewportSize.width || previewWidth, renderedDocumentWidth + stagePadding)
     : undefined;
   const documentStageHeight = hasDocumentLoaded
-    ? Math.max(viewportSize.height || previewHeight, renderedDocumentHeight + stagePadding)
+    ? isScannerProgressActive
+      ? progressDeckHeight + stagePadding
+      : Math.max(viewportSize.height || previewHeight, renderedDocumentHeight + stagePadding)
     : undefined;
 
   useEffect(() => {
@@ -637,12 +644,17 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
     // A cover page still renders as one page, but it should not force the controls
     // into a narrow column while the following spread gets the wider book shell.
     const spreadComfortWidth = basePageWidth * 2 + 10;
-    const fitWidth = Math.max(documentWidth, spreadComfortWidth);
+    const fitWidth = isScannerProgressActive
+      ? progressDeckWidth
+      : Math.max(documentWidth, spreadComfortWidth);
+    const fitHeight = isScannerProgressActive
+      ? progressDeckHeight + stagePadding + 104
+      : basePageHeight + 86;
     fitToSize(
       Math.min(1240, windowSize.width - 24, fitWidth + sidebarWidth + 48),
-      Math.min(900, windowSize.height - 24, basePageHeight + 86),
+      Math.min(900, windowSize.height - 24, fitHeight),
     );
-  }, [basePageHeight, documentWidth, fitToSize, hasDocumentLoaded, isScannerOpen, pageAspectRatio, windowSize.height, windowSize.width]);
+  }, [basePageHeight, documentWidth, fitToSize, hasDocumentLoaded, isScannerOpen, isScannerProgressActive, pageAspectRatio, windowSize.height, windowSize.width]);
 
   // Auto-detected file type from the uploaded file's extension (read-only indicator)
   const detectedFileType = React.useMemo(() => {
@@ -822,6 +834,19 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
     viewport.scrollTop = cropClamp(viewport.scrollTop + nextTop, 0, Math.max(0, viewport.scrollHeight - viewport.clientHeight));
     zoomAnchorRef.current = null;
   }, [scannerZoom, renderedDocumentWidth, renderedDocumentHeight, viewportSize.width, viewportSize.height]);
+
+  useLayoutEffect(() => {
+    if (!isScannerProgressActive) return;
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    viewport.scrollLeft = 0;
+    viewport.scrollTop = 0;
+    const frame = requestAnimationFrame(() => {
+      viewport.scrollLeft = 0;
+      viewport.scrollTop = 0;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [isScannerProgressActive, cropQueue.length, scannerProgress?.status]);
 
   useEffect(() => {
     const viewport = viewportRef.current;
@@ -1375,7 +1400,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                >
                   <div
                     className="m-auto relative"
-                    style={isCropEnabled && hasDocumentLoaded ? { width: `${cropVisualWidth}px`, height: `${cropVisualHeight}px` } : undefined}
+                    style={isCropEnabled && hasDocumentLoaded && !isScannerProgressActive ? { width: `${cropVisualWidth}px`, height: `${cropVisualHeight}px` } : undefined}
                   >
                   {scannerProgress && scannerProgress.status !== 'idle' && cropQueue.length > 0 ? (
                       <div className="relative flex flex-col items-center justify-center w-[280px] sm:w-[360px] h-[380px] sm:h-[480px]">

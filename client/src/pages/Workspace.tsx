@@ -1607,9 +1607,6 @@ export default function Workspace() {
   const renderPdfPage = async (pdfDoc: any, pageNum: number) => {
     const renderToken = ++pdfRenderTokenRef.current;
     setIsScannerDocumentLoading(true);
-    setScannerPreviewUrl("");
-    setScannerPreviewUrl2("");
-    setScannerStitchedUrl("");
 
     try {
       if (!pdfDoc || pageNum < 1 || pageNum > pdfDoc.numPages) return;
@@ -1623,10 +1620,13 @@ export default function Workspace() {
         if (!ctx) return null;
         canvas.width = viewport.width;
         canvas.height = viewport.height;
-        await page.render({ canvasContext: ctx, viewport }).promise;
-        page.cleanup();
-        if (renderToken !== pdfRenderTokenRef.current) return null;
-        return canvas;
+        try {
+          await page.render({ canvasContext: ctx, viewport }).promise;
+          if (renderToken !== pdfRenderTokenRef.current) return null;
+          return canvas;
+        } finally {
+          page.cleanup();
+        }
       };
 
       if (pdfDoc.numPages <= 1 || pageNum === 1 || (pageNum === pdfDoc.numPages && pageNum % 2 === 0)) {
@@ -1650,9 +1650,12 @@ export default function Workspace() {
          ]);
 
          if (renderToken !== pdfRenderTokenRef.current) return;
-         if (cLeft) setScannerPreviewUrl(globalScannerEngine.purifyCanvas(cLeft, selectedColourMode).toDataURL('image/jpeg', 0.85));
-         if (cRight) setScannerPreviewUrl2(globalScannerEngine.purifyCanvas(cRight, selectedColourMode).toDataURL('image/jpeg', 0.85));
-         else setScannerPreviewUrl2("");
+         const leftDataUrl = cLeft
+           ? globalScannerEngine.purifyCanvas(cLeft, selectedColourMode).toDataURL('image/jpeg', 0.85)
+           : "";
+         const rightDataUrl = cRight
+           ? globalScannerEngine.purifyCanvas(cRight, selectedColourMode).toDataURL('image/jpeg', 0.85)
+           : "";
 
          const finalCanvas = document.createElement('canvas');
          const finalCtx = finalCanvas.getContext('2d');
@@ -1673,6 +1676,8 @@ export default function Workspace() {
              }
 
              const purifiedCanvas = globalScannerEngine.purifyCanvas(finalCanvas, selectedColourMode);
+             setScannerPreviewUrl(leftDataUrl);
+             setScannerPreviewUrl2(rightDataUrl);
              setScannerStitchedUrl(purifiedCanvas.toDataURL('image/jpeg', 0.85));
          }
       }
