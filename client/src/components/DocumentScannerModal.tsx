@@ -571,6 +571,13 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
 
   const isSingleBookPage = scannerTotalPages <= 1 || scannerPage === 1 || (scannerPage === scannerTotalPages && scannerPage % 2 === 0);
   const isScannerProgressActive = Boolean(scannerProgress && scannerProgress.status !== 'idle' && cropQueue.length > 0);
+  const activeProgressIndex = scannerProgress?.status === 'success'
+    ? cropQueue.length - 1
+    : Math.min(Math.max(scannerProgress?.currentIndex ?? 0, 0), Math.max(cropQueue.length - 1, 0));
+  const activeProgressCrop = isScannerProgressActive ? cropQueue[activeProgressIndex]?.crop : undefined;
+  const progressContentAspectRatio = activeProgressCrop && activeProgressCrop.width > 0 && activeProgressCrop.height > 0
+    ? activeProgressCrop.width / activeProgressCrop.height
+    : pageAspectRatio;
   const basePageHeight = Math.round(Math.max(280, Math.min(760, windowSize.height - (windowSize.width < 1024 ? 150 : 220))));
   const isNarrowPreview = windowSize.width < 768;
   const previewWidth = viewportSize.width || Math.max(280, windowSize.width - (windowSize.width >= 768 ? 350 : 24));
@@ -593,8 +600,18 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
   const renderedDocumentWidth = cropIsQuarterTurned ? cropVisualWidth : documentWidth;
   const renderedDocumentHeight = cropIsQuarterTurned ? cropVisualHeight : pageHeight;
   const stagePadding = isNarrowPreview ? 24 : 64;
-  const progressDeckWidth = isNarrowPreview ? 280 : 360;
-  const progressDeckHeight = isNarrowPreview ? 380 : 480;
+  const progressDeckMaxWidth = isNarrowPreview
+    ? Math.max(240, Math.min(320, previewWidth - stagePadding * 2))
+    : Math.max(360, Math.min(680, previewWidth - stagePadding * 2));
+  const progressDeckMaxHeight = isNarrowPreview
+    ? Math.max(280, Math.min(420, previewHeight - stagePadding * 2))
+    : Math.max(360, Math.min(560, previewHeight - stagePadding * 2));
+  const progressDeckMinWidth = isNarrowPreview ? 220 : 320;
+  const progressDeckWidth = Math.round(Math.max(
+    progressDeckMinWidth,
+    Math.min(progressDeckMaxWidth, progressDeckMaxHeight * Math.max(progressContentAspectRatio, 0.1)),
+  ));
+  const progressDeckHeight = Math.round(progressDeckWidth / Math.max(progressContentAspectRatio, 0.1));
   const documentStageWidth = hasDocumentLoaded
     ? isScannerProgressActive
       ? progressDeckWidth + stagePadding
@@ -636,17 +653,26 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
   }, [hasDocumentLoaded, isScannerOpen, scannerTotalPages]);
 
   useEffect(() => {
-    if (!isScannerOpen || !hasDocumentLoaded || windowSize.width < 640) return;
+    if (!isScannerOpen || windowSize.width < 640) return;
 
     const sidebarWidth = windowSize.width >= 768 ? 310 : 0;
+    if (!hasDocumentLoaded) {
+      fitToSize(
+        Math.min(900, windowSize.width - 24, 860),
+        Math.min(700, windowSize.height - 24, 650),
+      );
+      return;
+    }
+
     const basePageWidth = Math.max(180, Math.round(basePageHeight * pageAspectRatio));
-    // Keep the shell wide enough for the full scanner toolbar in every PDF state.
-    // A cover page still renders as one page, but it should not force the controls
-    // into a narrow column while the following spread gets the wider book shell.
+    // Single pages get their own comfortable shell; spreads still reserve room for
+    // both pages. Neither state inherits a fixed aspect ratio from the other.
     const spreadComfortWidth = basePageWidth * 2 + 10;
     const fitWidth = isScannerProgressActive
       ? progressDeckWidth
-      : Math.max(documentWidth, spreadComfortWidth);
+      : isSingleBookPage
+        ? Math.max(documentWidth, isNarrowPreview ? 280 : 720)
+        : Math.max(documentWidth, spreadComfortWidth);
     const fitHeight = isScannerProgressActive
       ? progressDeckHeight + stagePadding + 104
       : basePageHeight + 86;
@@ -654,7 +680,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
       Math.min(1240, windowSize.width - 24, fitWidth + sidebarWidth + 48),
       Math.min(900, windowSize.height - 24, fitHeight),
     );
-  }, [basePageHeight, documentWidth, fitToSize, hasDocumentLoaded, isScannerOpen, isScannerProgressActive, pageAspectRatio, windowSize.height, windowSize.width]);
+  }, [basePageHeight, documentWidth, fitToSize, hasDocumentLoaded, isNarrowPreview, isScannerOpen, isScannerProgressActive, isSingleBookPage, pageAspectRatio, progressDeckHeight, progressDeckWidth, stagePadding, windowSize.height, windowSize.width]);
 
   // Auto-detected file type from the uploaded file's extension (read-only indicator)
   const detectedFileType = React.useMemo(() => {
@@ -1403,7 +1429,10 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                     style={isCropEnabled && hasDocumentLoaded && !isScannerProgressActive ? { width: `${cropVisualWidth}px`, height: `${cropVisualHeight}px` } : undefined}
                   >
                   {scannerProgress && scannerProgress.status !== 'idle' && cropQueue.length > 0 ? (
-                      <div className="relative flex flex-col items-center justify-center w-[280px] sm:w-[360px] h-[380px] sm:h-[480px]">
+                      <div
+                        className="relative flex flex-col items-center justify-center"
+                        style={{ width: `${progressDeckWidth}px`, height: `${progressDeckHeight}px` }}
+                      >
                          {/* Swiping Cards Deck */}
                          {cropQueue.map((item, idx) => {
                             const isSuccess = scannerProgress.status === 'success';
