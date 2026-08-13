@@ -607,11 +607,23 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
     ? Math.max(280, Math.min(420, previewHeight - stagePadding * 2))
     : Math.max(360, Math.min(560, previewHeight - stagePadding * 2));
   const progressDeckMinWidth = isNarrowPreview ? 220 : 320;
+  const defaultProgressPresentationRatio = 860 / 650;
+  const isTinyProgressCrop = Boolean(
+    activeProgressCrop && (
+      Math.min(activeProgressCrop.width, activeProgressCrop.height) < 120
+      || progressContentAspectRatio >= 3.4
+    ),
+  );
+  // Very small crops keep a calm default presentation frame. The image itself
+  // remains object-contain inside that frame, so no crop pixels are stretched.
+  const progressPresentationAspectRatio = isTinyProgressCrop
+    ? defaultProgressPresentationRatio
+    : Math.max(progressContentAspectRatio, 0.1);
   const progressDeckWidth = Math.round(Math.max(
     progressDeckMinWidth,
-    Math.min(progressDeckMaxWidth, progressDeckMaxHeight * Math.max(progressContentAspectRatio, 0.1)),
+    Math.min(progressDeckMaxWidth, progressDeckMaxHeight * progressPresentationAspectRatio),
   ));
-  const progressDeckHeight = Math.round(progressDeckWidth / Math.max(progressContentAspectRatio, 0.1));
+  const progressDeckHeight = Math.round(progressDeckWidth / progressPresentationAspectRatio);
   const documentStageWidth = hasDocumentLoaded
     ? isScannerProgressActive
       ? progressDeckWidth + stagePadding
