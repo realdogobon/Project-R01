@@ -20,6 +20,7 @@ export type VisionProvider = "gemini" | "groq" | "openai";
 export interface AiTranscriptionOptions {
   onProgress?: (progress: number) => void;
   timeoutMs?: number;
+  signal?: AbortSignal;
 }
 
 const STORAGE_KEY = "royscript_ai_keys";
@@ -91,20 +92,45 @@ function resolveModelId(modelId: string): string {
 const OCR_SYSTEM_PROMPT =
   "You are a document scanner OCR engine. Transcribe ALL visible text in the image exactly as written, preserving line breaks and layout order. Do not describe the image, do not add commentary, do not fix spelling, output only the raw transcribed text. If there is no readable text, output nothing.";
 
-function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
+function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number, externalSignal?: AbortSignal): Promise<Response> {
   return new Promise((resolve, reject) => {
     const controller = new AbortController();
-    const timer = setTimeout(() => {
+    let settled = false;
+    const cleanup = () => {
+      clearTimeout(timer);
+      externalSignal?.removeEventListener("abort", handleExternalAbort);
+    };
+    const rejectAborted = () => {
+      if (settled) return;
+      settled = true;
       controller.abort();
+      cleanup();
+      reject(new DOMException("The scan was stopped.", "AbortError"));
+    };
+    const handleExternalAbort = () => rejectAborted();
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      controller.abort();
+      cleanup();
       reject(new Error("Request timed out"));
     }, timeoutMs);
+    if (externalSignal?.aborted) {
+      rejectAborted();
+      return;
+    }
+    externalSignal?.addEventListener("abort", handleExternalAbort, { once: true });
     fetch(url, { ...init, signal: controller.signal })
       .then((res) => {
-        clearTimeout(timer);
+        if (settled) return;
+        settled = true;
+        cleanup();
         resolve(res);
       })
       .catch((err) => {
-        clearTimeout(timer);
+        if (settled) return;
+        settled = true;
+        cleanup();
         reject(err);
       });
   });
@@ -140,6 +166,7 @@ async function transcribeGemini(
     url,
     { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) },
     options.timeoutMs ?? 60000,
+    options.signal,
   );
   if (!res.ok) {
     const errText = await res.text().catch(() => "");
@@ -186,6 +213,7 @@ async function transcribeChatCompletion(
       body: JSON.stringify(body),
     },
     options.timeoutMs ?? 90000,
+    options.signal,
   );
   if (!res.ok) {
     const errText = await res.text().catch(() => "");

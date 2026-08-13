@@ -1,18 +1,18 @@
 # RoyScript TSR Scanner — Consolidated Findings
 
 **Author:** Manus AI  
-**Scope:** Read-only live UI/UX and lifecycle audit  
-**Production changes during audit:** None
+**Scope:** Live UI/UX and lifecycle audit plus the approved scanner implementation pass
+**Production changes during audit:** Limited to scanner interaction, cancellation, alignment, sizing, and PDF/OCR lifecycle fixes documented below
 
 ## Executive summary
 
-The scanner’s document-present workflow is visually stable for normal, tiny, flat, and awkward crops. Progress cards remain horizontally centered, the laser is visible during active scanning and stops after completion, the queue badge remains stable, and the action returns to `Send` after completion. The principal confirmed defect is isolated to the **retained-queue-after-document-discard** state: once the active PDF is discarded, the scanner returns to a shorter empty-document shell while queued clips remain, so the scanning card/status group is vertically re-laid out and appears to jump upward. This is a layout-contract mismatch, not a crop-coordinate, PDF-rendering, or laser-animation failure.
+The scanner’s document-present workflow is visually stable for normal, tiny, flat, and awkward crops. Progress cards remain centered, the laser is visible during active scanning and stops after completion, the queue badge remains stable, and the action returns to `Send` after completion. The confirmed **retained-queue-after-document-discard** layout mismatch has been corrected by keeping the progress presentation in the established scanner stage rather than allowing the shorter empty-document shell to pull it upward.
 
-The scanner also has no visible Stop/Cancel control. The current Scan action starts extraction immediately and disables the control while the queue is processed. A visual-only Scan-to-Stop swap would be misleading because the current OCR pipeline does not expose a single safe cancellation contract across provider requests and local recognition. The safest implementation boundary is a short preflight before the first OCR/provider call, followed by cooperative cancellation between queued clips once extraction has begun.
+The scanner now has a real Scan-to-Stop lifecycle. The control changes to a same-footprint `Stop` action during the backend-only preflight and active OCR phases, Stop during preflight clears the timer before any OCR/provider call, and Stop after work begins aborts the active cloud request or local recognition race, prevents subsequent clips from starting, stops the laser, preserves the queue/document, and returns the action to `Scan`.
 
 ## 1. Audit fixtures and method
 
-The live audit used the user-provided PDFs `Volume_02.pdf` and `file-example_PDF_1MB.pdf`. The browser harness performed real uploads, crop gestures, Add Clip actions, PDF page navigation, queue inspection, active-document discard, Scan actions, timed DOM measurements, screenshot capture, and console-error collection. No production source file was modified for the audit.
+The live audit used the user-provided PDFs `Volume_02.pdf` and `file-example_PDF_1MB.pdf`. The browser harness performed real uploads, crop gestures, Add Clip actions, PDF page navigation, queue inspection, active-document discard, Scan actions, timed DOM measurements, screenshot capture, and console-error collection. The subsequent implementation pass was kept scoped to the documented scanner defects and cancellation contract.
 
 The second focused matrix created five crop geometries: a micro crop, a tiny crop, a very flat horizontal crop, a very flat vertical crop, and an awkward rectangular crop. These shapes were tested both while the source PDF remained visible and after the active PDF was discarded while retaining the clips.
 
@@ -69,42 +69,57 @@ The selector limitation for the tiny and vertical-flat cases does not mean the c
 
 ## 5. Empty state behavior
 
-When there is no active document and no queued clip, the Scan action remains enabled. Clicking it produces `No image or document loaded to scan.` and does not start a progress card or laser. This is an existing guard path, but it surfaces as a console error rather than a quiet disabled state or deliberate inline validation state.
+When there is no active document and no queued clip, the Scan action is now disabled with the existing scanner visual language and the title `No document or clips available`. The action cannot start a progress card, laser, OCR call, or console-error path from an empty source state.
 
 The awkward-crop audit also captured `Image too small to scale!! (2x36 vs min width of 3)` and `Line cannot be recognized!!` during low-information OCR attempts. These are recognition-quality warnings rather than layout failures. If cancellation or progress-state work later adds explicit failure states, these should remain distinguishable from user cancellation and from renderer errors.
 
-## 6. Current Scan lifecycle and cancellation boundary
+## 6. Implemented Scan lifecycle and cancellation boundary
 
-The current Scan action starts extraction immediately. During extraction, the Scan control becomes a disabled loading-style control with the queued-count badge. There is no visible Stop or Cancel action. The scanner progress card and laser are visual feedback only; they do not currently expose a cancellation mechanism.
+The Scan action now enters a short `preflight` state before extraction. During both `preflight` and `scanning`, the control is a clickable Stop action with the queued-count badge. The progress card and laser remain the existing visual feedback; Stop explicitly ends the active run and turns the laser off.
 
-The current safe cancellation boundary is before the extraction loop begins. The extraction loop processes queued clips sequentially, but it does not expose a scanner-level abort contract. Provider requests have internal timeout behavior that is not exposed to the scanner, while local Tesseract recognition does not provide a single per-recognition cancellation handle that can be safely wired to a UI button without further pipeline design.
+The scanner owns an `AbortController` for each run. Provider requests receive its signal through the existing timeout wrapper, local Tesseract recognition races its recognition promise against the signal, and worker initialization is also abort-aware. The sequential queue loop checks the signal before each clip and after each result, so Stop prevents subsequent clips from starting. The queue and active document are not discarded by cancellation.
 
-## 7. Approval-only Scan-to-Stop proposal
+## 7. Implemented Scan-to-Stop state machine
 
 The proposed behavior should use an explicit state machine:
 
 | State | User-facing control | Backend behavior |
 |---|---|---|
 | `idle` | Existing `Scan` control | No active work |
-| `preflight` | Same-size `Stop` control with the requested hand SVG | Wait 3–4 seconds before any OCR/provider call |
+| `preflight` | Same-size `Stop` control with the requested hand SVG | Wait 3.5 seconds before any OCR/provider call |
 | `scanning` | Same-size `Stop` control | Process clips; support cooperative cancellation at safe boundaries |
 | `stopping` | Temporary disabled/settling state if needed | Stop laser, prevent the next clip from starting, settle active work honestly |
 | `success` | Existing completion/send state | Preserve current completion behavior |
 | `error` or `cancelled` | Return to `Scan` with truthful status | Preserve queue and document unless the user explicitly discards them |
 
-During `preflight`, Stop must clear the timer, prevent the progress pipeline from starting, preserve the document and queue, and spend zero OCR/provider credits. The visual transition should reuse the current button’s footprint, font, spacing, and icon scale; only the label and SVG should change.
+During `preflight`, Stop clears the timer, prevents the progress pipeline from starting, preserves the document and queue, and makes no OCR/provider call by construction. The visual transition reuses the current button’s footprint, font, spacing, and icon scale; only the label and SVG change.
 
-Once actual extraction has begun, Stop must not falsely claim that an already-started provider request was retroactively cancelled. It should prevent subsequent queued clips from starting, abort any provider/local operation only where a reliable abort handle exists, stop the laser, and return the control to Scan after a truthful cancelled or finishing state. Queue order and clips must remain intact.
+Once actual extraction has begun, Stop does not claim that an already-completed provider request was retroactively cancelled. It prevents subsequent queued clips from starting, aborts the active provider/local operation where the signal is supported, stops the laser, and returns the control to `Scan` after the active run settles. Queue order and clips remain intact.
 
-## 8. Recommended issue-by-issue order
+## 8. Implementation status
 
-The first implementation issue should be the **empty-shell progress-card vertical alignment** because it is a confirmed visual defect with a narrow scope. The correction should establish one stable progress presentation frame for both document-present and retained-queue-after-discard states without changing crop pixels or extraction math.
+The **empty-shell progress-card vertical alignment** was corrected first. The progress presentation now uses one stable stage contract for both document-present and retained-queue-after-discard states without changing crop pixels or extraction math.
 
-The second issue should be the **empty Scan guard presentation**, deciding whether the action should be disabled when there is no document and no queue or whether the existing error should become a quiet, deliberate inline state.
+The **empty Scan guard** is implemented as a disabled action when neither a document nor a queued clip exists.
 
-The third issue should be the **preflight Scan-to-Stop buffer**, implemented only after the button transition, timer ownership, queue preservation, and zero-credit guarantee are agreed. Cooperative post-start cancellation should be handled as a separate backend/OCR contract rather than being implied by the visual button swap.
+The **3.5-second Scan-to-Stop preflight** and the cooperative post-start OCR contract are implemented together. The live probe verifies the button transition, timer cancellation, laser shutdown, queue preservation, and return to `Scan`.
 
-## 9. Approval criteria before implementation
+## 9. Live verification evidence
 
-Implementation should not begin until the user approves the issue order and the Scan-to-Stop semantics. The minimum acceptance criteria are: the retained-queue progress card remains centered in the same visual frame as the document-present flow; Stop during the 3–4 second preflight triggers no OCR/provider request; the queue and document remain recoverable after Stop; the laser stops on cancellation; the button returns to Scan; empty Scan is guarded without a browser-console error; and normal PDF/image crop, zoom, page navigation, Send, and OCR behavior remains unchanged.
+The current live Stop probe was run against the published preview with `Volume_02.pdf`. It completed with an empty browser-error list and verified the following results:
 
+| Scenario | Verified result |
+|---|---|
+| Preflight at 50–1000 ms | `Stop scan` is present, enabled, and reports `Preparing scan...`; laser is off |
+| Stop during preflight | Stop click succeeds; within 100 ms the button is enabled `Scan`, status is gone, laser is off, and the queued clip remains |
+| After the 3.5-second boundary | The cancelled preflight does not restart; the action remains `Scan` and no scanning card/laser appears |
+| Active OCR at 3.6–4.2 s | `Stop scan` is present, enabled, status is `Scanning clip 1 of 1...`, and laser is visible |
+| Stop after OCR starts | Stop click succeeds; within 100 ms the button is enabled `Scan`, status is gone, laser is off, and the queue remains |
+| Empty source | The action is disabled with title `No document or clips available`; no scan state starts |
+| Browser errors | None reported by the probe |
+
+The code-level zero-credit guarantee is the preflight boundary itself: `recognizeOneImage` is not reached until the 3.5-second wait resolves, and an abort rejects that wait before any cloud or local OCR path is entered. The retained-queue alignment, crop, zoom, PDF, sizing, and scan-complete behaviors remain covered by the earlier published regression checkpoints and are included in the final regression matrix before the implementation checkpoint.
+
+## 10. Final acceptance criteria
+
+The approved implementation criteria are now met in code and in the focused live Stop probe: the retained-queue progress card remains centered in the established stage; Stop during preflight spends no OCR/provider work; post-start Stop cooperatively cancels the active operation; the queue and document remain recoverable; the laser stops; the button returns to `Scan`; empty Scan is guarded without a browser-console error; and the existing PDF/image crop, zoom, page navigation, Send, and OCR flows remain unchanged by the cancellation contract.

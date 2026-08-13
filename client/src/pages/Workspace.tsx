@@ -1191,9 +1191,13 @@ export default function Workspace() {
   const [scannerStitchedUrl, setScannerStitchedUrl] = useState<string>("");
   const [scannerCrop, setScannerCrop] = useState<Crop>();
   const [cropQueue, setCropQueue] = useState<Array<{ id: string; page: number; crop: Crop; imgUrl: string; base64Data: string }>>([]);
-  const [scannerProgress, setScannerProgress] = useState<{ currentIndex: number, total: number, status: 'idle' | 'scanning' | 'success' | 'error' }>({ currentIndex: 0, total: 0, status: 'idle' });
+  const [scannerProgress, setScannerProgress] = useState<{ currentIndex: number, total: number, status: 'idle' | 'preflight' | 'scanning' | 'stopping' | 'success' | 'error' }>({ currentIndex: 0, total: 0, status: 'idle' });
+  const [scannerRunState, setScannerRunState] = useState<'idle' | 'preflight' | 'scanning' | 'stopping'>('idle');
   const scannerImgRef = useRef<HTMLImageElement>(null);
   const pdfRenderTokenRef = useRef(0);
+  const scanAbortControllerRef = useRef<AbortController | null>(null);
+  const scanRunIdRef = useRef(0);
+  const scanPreflightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
 
   const [scannerRotation, setScannerRotation] = useState<number>(0);
@@ -1206,6 +1210,32 @@ export default function Workspace() {
   const [selectedColourMode, setSelectedColourMode] = useState("Colour");
   const [selectedResolution, setSelectedResolution] = useState("200 dpi");
   const [selectedDestinationFolder, setSelectedDestinationFolder] = useState("");
+
+  const createScanAbortError = () => new DOMException("The scan was stopped.", "AbortError");
+  const isScanAbortError = (error: unknown) => {
+    return Boolean(error && typeof error === "object" && "name" in error && error.name === "AbortError");
+  };
+  const waitForScanPreflight = (signal: AbortSignal, delayMs: number) => new Promise<void>((resolve, reject) => {
+    const finish = () => {
+      clearTimeout(timer);
+      if (scanPreflightTimerRef.current === timer) scanPreflightTimerRef.current = null;
+      signal.removeEventListener("abort", handleAbort);
+    };
+    const handleAbort = () => {
+      finish();
+      reject(createScanAbortError());
+    };
+    const timer = setTimeout(() => {
+      finish();
+      resolve();
+    }, delayMs);
+    scanPreflightTimerRef.current = timer;
+    if (signal.aborted) {
+      handleAbort();
+      return;
+    }
+    signal.addEventListener("abort", handleAbort, { once: true });
+  });
 
   useEffect(() => {
     if (!isScannerOpen) return;
@@ -1467,29 +1497,60 @@ export default function Workspace() {
    * key is configured; otherwise (or on any cloud failure) falls back to
    * the local Tesseract engine so scans never dead-end.
    */
-  const recognizeOneImage = async (base64Data: string): Promise<string> => {
+  const recognizeOneImage = async (base64Data: string, signal: AbortSignal): Promise<string> => {
+    if (signal.aborted) throw createScanAbortError();
     const useCloud = hasApiKeyFor(selectedScanner);
     if (useCloud) {
       try {
         setScannerLogs(prev => [...prev, `[Pipeline] Routing through ${selectedScanner}...`]);
-        return await transcribeWithModel(selectedScanner, base64Data);
+        return await transcribeWithModel(selectedScanner, base64Data, { signal });
       } catch (cloudErr: any) {
+        if (signal.aborted || isScanAbortError(cloudErr)) throw createScanAbortError();
         setScannerLogs(prev => [...prev, `[Pipeline] Cloud pass unavailable (${getProviderOf(selectedScanner)}); falling back to local transcription...`]);
         console.error(cloudErr);
       }
     }
-    return recognizeImage(base64Data);
+    return recognizeImage(base64Data, { signal });
+  };
+
+  const stopExtraction = () => {
+    const controller = scanAbortControllerRef.current;
+    if (!controller && !isOcrLoading) return;
+    setScannerRunState('stopping');
+    setScannerProgress(prev => prev.total > 0
+      ? { ...prev, status: 'stopping' }
+      : prev
+    );
+    setIsScannerAnimating(false);
+    if (scanPreflightTimerRef.current) {
+      clearTimeout(scanPreflightTimerRef.current);
+      scanPreflightTimerRef.current = null;
+    }
+    controller?.abort();
+    scanAbortControllerRef.current = null;
+    void releaseWorker();
   };
 
   const executeExtraction = async () => {
+    if (scanAbortControllerRef.current) return "";
+    const runId = ++scanRunIdRef.current;
+    const controller = new AbortController();
+    const signal = controller.signal;
+    scanAbortControllerRef.current = controller;
     setIsOcrLoading(true);
     setIsScannerAnimating(true);
     setOcrError("");
     setScannerLogs([]);
+    setScannerRunState('preflight');
+    if (cropQueue.length > 0) {
+      setScannerProgress({ currentIndex: 0, total: cropQueue.length, status: 'preflight' });
+    }
 
     try {
       let combinedText = "";
-
+      await waitForScanPreflight(signal, 3500);
+      if (signal.aborted) throw createScanAbortError();
+      setScannerRunState('scanning');
 
       if (cropQueue.length > 0) {
         setScannerLogs(prev => [...prev, `Starting sequential scan of ${cropQueue.length} clips...`]);
@@ -1497,14 +1558,17 @@ export default function Workspace() {
 
         const results = [];
         for (let i = 0; i < cropQueue.length; i++) {
+           if (signal.aborted) throw createScanAbortError();
            const cropItem = cropQueue[i];
            setScannerProgress({ currentIndex: i, total: cropQueue.length, status: 'scanning' });
 
            try {
              setScannerLogs(prev => [...prev, `Transcribing page ${cropItem.page}...`]);
-             const text = await recognizeOneImage(cropItem.base64Data);
+             const text = await recognizeOneImage(cropItem.base64Data, signal);
+             if (signal.aborted) throw createScanAbortError();
              results.push({ index: i, page: cropItem.page, text: text });
            } catch (e: any) {
+             if (signal.aborted || isScanAbortError(e)) throw createScanAbortError();
              results.push({ index: i, page: cropItem.page, error: e.message });
            }
         }
@@ -1543,6 +1607,7 @@ export default function Workspace() {
 
 
         try {
+          if (signal.aborted) throw createScanAbortError();
           setScannerLogs(prev => [...prev, `Baking scanning sensors (Resolution: ${selectedResolution}, Mode: ${selectedColourMode})...`]);
           const tempCanvas = document.createElement("canvas");
           const tempImg = new Image();
@@ -1551,6 +1616,7 @@ export default function Workspace() {
             tempImg.onerror = () => reject(new Error("Failed to load image for scanning bake"));
             tempImg.src = scannerStitchedUrl || scannerPreviewUrl;
           });
+          if (signal.aborted) throw createScanAbortError();
 
           let dpiScale = 1.0;
           if (selectedResolution === "150 dpi" || selectedResolution === "150dpi") dpiScale = 0.5;
@@ -1588,19 +1654,32 @@ export default function Workspace() {
         }
 
         setScannerLogs(prev => [...prev, "Transcribing document..."]);
-        const text = await recognizeOneImage(base64Data);
+        const text = await recognizeOneImage(base64Data, signal);
+        if (signal.aborted) throw createScanAbortError();
         combinedText = cleanOcrText(text);
       }
 
+      if (signal.aborted) throw createScanAbortError();
       setOcrResult((prev) => (prev ? prev + "\n" + combinedText.trim() : combinedText.trim()));
       return combinedText.trim();
     } catch (err: any) {
+      if (signal.aborted || isScanAbortError(err)) {
+        setScannerLogs(prev => [...prev, "Scan stopped before completion."]);
+        setOcrError("");
+        setScannerProgress({ currentIndex: 0, total: 0, status: 'idle' });
+        return "";
+      }
       console.error(err);
       setOcrError(err.message || "A connection error occurred while transcribing your document.");
       return "";
     } finally {
-      setIsOcrLoading(false);
-      setIsScannerAnimating(false);
+      if (scanRunIdRef.current === runId) {
+        scanAbortControllerRef.current = null;
+        scanPreflightTimerRef.current = null;
+        setIsOcrLoading(false);
+        setIsScannerAnimating(false);
+        setScannerRunState('idle');
+      }
     }
   };
 
@@ -3915,7 +3994,10 @@ export default function Workspace() {
           {/* High-Fidelity Interactive Document Scanner Modal */}
           <DocumentScannerModal
             isScannerOpen={isScannerOpen}
-            onClose={() => setIsScannerOpen(false)}
+            onClose={() => {
+              if (isOcrLoading) stopExtraction();
+              setIsScannerOpen(false);
+            }}
             onFileUpload={processUploadedFile}
             scannerFile={scannerFile}
             scannerPreviewUrl={scannerPreviewUrl}
@@ -3941,6 +4023,8 @@ export default function Workspace() {
             handleAddToQueue={handleAddToQueue}
             handlePageChange={handlePageChange}
             executeExtraction={executeExtraction}
+            onStopScan={stopExtraction}
+            scannerRunState={scannerRunState}
             scannerProgress={scannerProgress}
             ocrResult={ocrResult}
             setOcrResult={setOcrResult}
@@ -3967,6 +4051,7 @@ export default function Workspace() {
             selectedDestinationFolder={selectedDestinationFolder}
             setSelectedDestinationFolder={setSelectedDestinationFolder}
             onDiscardCurrentDocument={() => {
+              if (isOcrLoading) stopExtraction();
               setScannerFile(null);
               setScannerPreviewUrl("");
               setScannerPreviewUrl2("");

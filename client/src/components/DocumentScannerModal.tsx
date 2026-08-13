@@ -26,7 +26,8 @@ import {
   FolderOpen,
   FileText,
   Sparkles,
-  CheckCircle
+  CheckCircle,
+  Hand,
 } from "lucide-react";
 
 const TopScannerIcon = ({ className }: { className?: string }) => (
@@ -448,6 +449,8 @@ export interface DocumentScannerModalProps {
   handleAddToQueue: () => void;
   handlePageChange: (newPage: number) => Promise<void>;
   executeExtraction: () => Promise<string>;
+  onStopScan?: () => void;
+  scannerRunState?: 'idle' | 'preflight' | 'scanning' | 'stopping';
 
   ocrResult: string;
   setOcrResult: React.Dispatch<React.SetStateAction<string>>;
@@ -478,7 +481,7 @@ export interface DocumentScannerModalProps {
   selectedDestinationFolder: string;
   setSelectedDestinationFolder: React.Dispatch<React.SetStateAction<string>>;
   onDiscardCurrentDocument?: () => void;
-  scannerProgress?: { currentIndex: number, total: number, status: 'idle' | 'scanning' | 'success' | 'error' };
+  scannerProgress?: { currentIndex: number, total: number, status: 'idle' | 'preflight' | 'scanning' | 'stopping' | 'success' | 'error' };
 }
 
 export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
@@ -500,6 +503,8 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
   scannerImgRef,
   handlePageChange,
   executeExtraction,
+  onStopScan,
+  scannerRunState = 'idle',
   scannerProgress,
   loadOcrIntoPractice,
   loadOcrIntoEditor,
@@ -635,16 +640,16 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
     Math.min(progressDeckMaxWidth, progressDeckMaxHeight * progressPresentationAspectRatio),
   ));
   const progressDeckHeight = Math.round(progressDeckWidth / progressPresentationAspectRatio);
-  const documentStageWidth = hasDocumentLoaded
-    ? isScannerProgressActive
-      ? progressDeckWidth + stagePadding
-      : Math.max(viewportSize.width || previewWidth, renderedDocumentWidth + stagePadding)
-    : undefined;
-  const documentStageHeight = hasDocumentLoaded
-    ? isScannerProgressActive
-      ? progressDeckHeight + stagePadding
-      : Math.max(viewportSize.height || previewHeight, renderedDocumentHeight + stagePadding)
-    : undefined;
+  const documentStageWidth = isScannerProgressActive
+    ? progressDeckWidth + stagePadding
+    : hasDocumentLoaded
+      ? Math.max(viewportSize.width || previewWidth, renderedDocumentWidth + stagePadding)
+      : undefined;
+  const documentStageHeight = isScannerProgressActive
+    ? progressDeckHeight + stagePadding
+    : hasDocumentLoaded
+      ? Math.max(viewportSize.height || previewHeight, renderedDocumentHeight + stagePadding)
+      : undefined;
 
   useEffect(() => {
     if (!isScannerOpen) {
@@ -679,7 +684,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
     if (!isScannerOpen || windowSize.width < 640) return;
 
     const sidebarWidth = scannerSidebarWidth;
-    if (!hasDocumentLoaded) {
+    if (!hasDocumentLoaded && !isScannerProgressActive) {
       fitToSize(
         Math.min(900, windowSize.width - 24, 860),
         Math.min(700, windowSize.height - 24, 650),
@@ -997,7 +1002,14 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
     }
   };
 
+  const canScan = Boolean(cropQueue.length > 0 || scannerStitchedUrl || scannerPreviewUrl || ocrResult.trim());
+
   const triggerScan = async () => {
+    if (isOcrLoading) {
+      onStopScan?.();
+      return;
+    }
+    if (!canScan) return;
     await executeExtraction();
   };
 
@@ -1444,12 +1456,12 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                <div
                  data-scanner-stage
                  className="relative m-auto flex items-center justify-center p-3 sm:p-8 transition-all duration-200"
-                 style={hasDocumentLoaded ? {
+                 style={documentStageWidth && documentStageHeight ? {
                    width: `${documentStageWidth}px`,
                    height: `${documentStageHeight}px`,
                    minWidth: `${documentStageWidth}px`,
                    minHeight: `${documentStageHeight}px`,
-                   marginTop: isScannerProgressActive && documentStageHeight
+                   marginTop: isScannerProgressActive
                      ? `${Math.max(0, Math.round(((viewportSize.height || previewHeight) - documentStageHeight) / 2))}px`
                      : undefined,
                  } : undefined}
@@ -1506,6 +1518,16 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                                <div className="text-neutral-700 dark:text-neutral-300 font-medium text-[13px] flex items-center gap-1.5">
                                   <CheckCircle className="w-3.5 h-3.5 text-neutral-600 dark:text-neutral-400" strokeWidth={2.5} />
                                   <span>Scan completed</span>
+                               </div>
+                            ) : scannerProgress.status === 'stopping' ? (
+                               <div className="text-gray-800 dark:text-gray-200 font-medium text-[13px] flex items-center gap-2">
+                                  <Hand className="w-3.5 h-3.5" strokeWidth={2} />
+                                  <span>Stopping scan...</span>
+                               </div>
+                            ) : scannerProgress.status === 'preflight' ? (
+                               <div className="text-gray-800 dark:text-gray-200 font-medium text-[13px] flex items-center gap-2">
+                                  <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin opacity-70" />
+                                  <span>Preparing scan...</span>
                                </div>
                             ) : (
                                <div className="text-gray-800 dark:text-gray-200 font-medium text-[13px] flex items-center gap-2">
@@ -1988,13 +2010,16 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
 
                  <button
                     onClick={() => {
-                      if (isTextReady) {
+                      if (isOcrLoading) {
+                        onStopScan?.();
+                      } else if (isTextReady) {
                         handleSendToPath();
                       } else {
                         triggerScan();
                       }
                     }}
-                    disabled={isOcrLoading}
+                    disabled={scannerRunState === 'stopping' || (!isOcrLoading && ((isTextReady && !selectedDestinationFolder) || (!isTextReady && !canScan)))}
+                    title={isOcrLoading ? "Stop scan" : isTextReady ? "Send extracted text" : canScan ? "Scan" : "No document or clips available"}
                     className={`relative px-[24px] py-1.5 rounded-md text-[13px] font-medium transition-all duration-500 ease-out disabled:opacity-50 flex items-center justify-center min-w-[80px] shadow-sm ${
                       isOcrLoading
                         ? "bg-neutral-950 dark:bg-white text-white dark:text-neutral-950"
@@ -2011,7 +2036,10 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                      </span>
                    )}
                    {isOcrLoading ? (
-                     <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                     <div className="flex items-center gap-1.5 animate-in fade-in zoom-in duration-300">
+                       <Hand className="w-3.5 h-3.5" strokeWidth={2} />
+                       <span>{scannerRunState === 'stopping' ? "Stopping" : "Stop"}</span>
+                     </div>
                    ) : isTextReady ? (
                      <div className="flex items-center gap-1.5 animate-in fade-in zoom-in duration-300">
                         <Send className="w-3.5 h-3.5" strokeWidth={2} />
