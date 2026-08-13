@@ -2031,7 +2031,11 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                     }`}
                  >
                    {!isTextReady && cropQueue.length > 0 && (
-                     <span className="absolute -top-1.5 -right-1.5 bg-neutral-600 dark:bg-neutral-300 text-white dark:text-neutral-900 text-[10px] w-[18px] h-[18px] flex items-center justify-center rounded-full shadow-md font-bold z-50 transition-opacity">
+                     <span className={`absolute -top-1.5 -right-1.5 text-[10px] w-[18px] h-[18px] flex items-center justify-center rounded-full shadow-md font-bold z-50 transition-opacity ${
+                       isOcrLoading
+                         ? "bg-neutral-600 dark:bg-neutral-300 text-white dark:text-neutral-900"
+                         : "bg-red-500 dark:bg-red-500 text-white"
+                     }`}>
                        {cropQueue.length}
                      </span>
                    )}

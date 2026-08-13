@@ -73,9 +73,7 @@ const readState = async (label) => page.evaluate((snapshotLabel) => {
     .find((text) => /^(Preparing scan\.\.\.|Stopping scan\.\.\.|Scanning clip \d+ of \d+\.\.\.|Scan completed)$/.test(text)) || null;
   const queueLabel = [...document.querySelectorAll("body *")]
     .find((node) => /^Queued Clips \(\d+\)$/.test(node.textContent?.trim() || ""))?.textContent?.trim() || null;
-  const badge = action?.title === "Stop scan"
-    ? actionNode?.querySelector("span.absolute")
-    : null;
+  const badge = actionNode?.querySelector("span.absolute");
   const hand = action?.title === "Stop scan" ? actionNode?.querySelector("svg") : null;
   const statusNode = statusText
     ? [...document.querySelectorAll("span")].find((node) => node.textContent?.trim() === statusText)
