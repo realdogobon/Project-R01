@@ -189,3 +189,31 @@ The temporary PP-OCR experiment was removed from production after its clean-page
 The real-crop local OCR harness now accepts a destination argument and was run through both supported text destinations using the cached browser profile and the degraded printed Volume_02 crop. The Workspace path queued one clip, scanned it locally, saved the extracted text, and delivered non-empty content into the editor with zero cloud requests and no browser errors. The Practice path queued one clip, scanned it locally, closed the scanner, and reached the populated Practice shell with `Reference Text`, `Start Practice`, and `Configure Session` visible; it also completed with zero cloud requests and no browser errors.
 
 This verifies the local OCR result is not merely present in a scanner preview: it reaches the two primary downstream user flows. The handwriting crop remains a documented model limitation rather than being hidden by a cloud fallback.
+
+The official `microsoft/trocr-base-handwritten` model card describes TrOCR as an image-Transformer encoder plus autoregressive text-Transformer decoder, initialized from BEiT and RoBERTa, and explicitly scopes the raw checkpoint to **single text-line images**. This makes it a handwriting-region specialist, not a whole-page drop-in OCR engine; a layout detector and line/region cropper must precede it, and fine-tuning may be needed for the user’s writing style.
+
+The same model card identifies the checkpoint as a base-sized model fine-tuned on IAM and reports approximately **0.33B parameters**. That is small enough for a local specialist role, but its IAM/single-line training scope is not sufficient evidence for arbitrary handwriting, multi-line notes, stains, or full-page documents.
+
+## 19. Official model research for the next architecture
+
+The current research direction is no longer “find a better Tesseract setting.” The strongest candidate for complex local document parsing is the **PaddleOCR-VL** family: the official materials describe it as a compact document-parsing vision-language model, and the 1.5 paper reports that it remains approximately 0.9B parameters while improving its OmniDocBench score from 92.11% to 93.43% [1] [2]. These are vendor/paper benchmark results, not RoyScript guarantees.
+
+For handwriting-specific recognition, **TrOCR** remains a relevant specialist family. Microsoft describes it as an encoder-decoder Transformer for printed and handwritten text recognition, but a generic handwritten checkpoint should still be treated as a starting point that may require fine-tuning on the user’s document style [3] [4]. A local Qwen-VL-class model is better considered a contextual verifier or difficult-region specialist than an unconditional transcription authority; it must be instructed not to infer characters that are not visibly supported [5].
+
+The architecture decision for the discussion phase is therefore a **role-based ensemble**: PP-OCR for fast printed text, PaddleOCR-VL for layout and complex document parsing, a handwriting-specialist recognizer for handwriting regions, and a local VLM verifier only for disagreement or low-confidence regions. The system should preserve uncertainty instead of silently selecting a plausible hallucination.
+
+### Sources
+
+[1]: [PaddleOCR-VL official model card](https://huggingface.co/PaddlePaddle/PaddleOCR-VL)
+[2]: [PaddleOCR-VL 1.5 paper](https://arxiv.org/abs/2601.21957)
+[3]: [Microsoft TrOCR research page](https://www.microsoft.com/en-us/research/publication/trocr-transformer-based-optical-character-recognition-with-pre-trained-models/)
+[4]: [Microsoft TrOCR handwritten checkpoint](https://huggingface.co/microsoft/trocr-base-handwritten)
+[5]: [Qwen3-VL official announcement](https://qwen.ai/blog?id=99f0335c4ad9ff6153e517418d48535ab6d8afef)
+
+## 20. Offline OCR purge assessment — no deletion approved yet
+
+The offline OCR footprint is currently concentrated in `tesseract.js` and `client/src/lib/OcrEngine.ts`. `Workspace.tsx` imports `recognizeImage` and `releaseWorker`, sends every cloud failure or missing provider key into that local path, and retains raw image/PDF pixels specifically so local recognition can avoid the purified display payload. The cancellation contract also aborts and releases the local worker. The scanner UI itself does not need Tesseract to render, but the current no-key and cloud-failure behavior does.
+
+Removing the local engine immediately would therefore not be a harmless dependency cleanup. It would change the promise that scans do not dead-end when a user has no API key or when a provider request fails. A naive deletion would require either a new visible error state, a silent empty result, or a cloud-only contract; each would be a behavioral change even if the scanner markup remained untouched.
+
+The safe recommendation is to **defer the purge until the cloud-only contract is explicitly approved**. The future removal boundary is clear: delete the `tesseract.js` dependency, `OcrEngine.ts`, worker-release calls, local raw-source preparation that exists only for fallback OCR, fallback log strings, and the no-key/cloud-error route. Before doing so, the app must define what happens with no configured provider and with a failed or aborted provider request. No production source was deleted during this assessment.

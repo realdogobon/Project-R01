@@ -2025,7 +2025,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                         ? "bg-[#E81123] hover:bg-[#C8102E] dark:bg-[#E81123] dark:hover:bg-[#C8102E] text-white shadow-md"
                         : isTextReady
                           ? selectedDestinationFolder
-                            ? "bg-[#0a84ff] hover:bg-[#0070e0] dark:bg-[#bf00ff] dark:hover:bg-[#a000d6] text-white shadow-md scale-105"
+                            ? "bg-[#0a84ff] hover:bg-[#0070e0] dark:bg-[#0a84ff] dark:hover:bg-[#0070e0] text-white shadow-md scale-105"
                             : "bg-neutral-200 dark:bg-neutral-800 text-neutral-500 dark:text-neutral-400 cursor-not-allowed"
                           : "bg-neutral-950 dark:bg-white text-white dark:text-neutral-950 hover:opacity-[0.97]"
                     }`}
