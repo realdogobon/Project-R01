@@ -12,8 +12,7 @@ import {
   Keyboard,
   Trash,
   CheckCircle,
-  Folder,
-  Plus
+  Folder
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { useResizable } from "../../hooks/useResizable";
@@ -34,11 +33,6 @@ interface LibraryHubProps {
   onLoadIntoExam?: (content: string, title: string) => void;
   userName?: string;
   themeAccentColor?: string;
-}
-
-interface CustomFolder {
-  id: string;
-  name: string;
 }
 
 export const LibraryHub: React.FC<LibraryHubProps> = ({
@@ -89,24 +83,6 @@ export const LibraryHub: React.FC<LibraryHubProps> = ({
   });
 
 
-  const [customFolders, setCustomFolders] = useState<CustomFolder[]>(() => {
-    try {
-      const stored = localStorage.getItem("ais_library_folders");
-      return stored ? JSON.parse(stored) : [];
-    } catch {
-      return [];
-    }
-  });
-
-  const [docFolders, setDocFolders] = useState<Record<string, string>>(() => {
-    try {
-      const stored = localStorage.getItem("ais_library_doc_folders");
-      return stored ? JSON.parse(stored) : {};
-    } catch {
-      return {};
-    }
-  });
-
   const [customOrder, setCustomOrder] = useState<string[]>(() => {
     try {
       const stored = localStorage.getItem("ais_library_custom_order");
@@ -143,14 +119,6 @@ export const LibraryHub: React.FC<LibraryHubProps> = ({
   useEffect(() => {
     localStorage.setItem("ais_library_starred_scans", JSON.stringify(starredIds));
   }, [starredIds]);
-
-  useEffect(() => {
-    localStorage.setItem("ais_library_folders", JSON.stringify(customFolders));
-  }, [customFolders]);
-
-  useEffect(() => {
-    localStorage.setItem("ais_library_doc_folders", JSON.stringify(docFolders));
-  }, [docFolders]);
 
   useEffect(() => {
     localStorage.setItem("ais_library_custom_order", JSON.stringify(customOrder));
@@ -202,9 +170,6 @@ export const LibraryHub: React.FC<LibraryHubProps> = ({
       result = scans.filter(s => starredIds.includes(s.id) && !trashScans.some(t => t.id === s.id));
     } else if (selectedCategory === "trash") {
       result = trashScans;
-    } else {
-
-      result = scans.filter(s => docFolders[s.id] === selectedCategory && !trashScans.some(t => t.id === s.id));
     }
 
     if (searchQuery.trim()) {
@@ -226,7 +191,7 @@ export const LibraryHub: React.FC<LibraryHubProps> = ({
     });
 
     return result;
-  }, [scans, selectedCategory, trashScans, starredIds, searchQuery, docFolders, customOrder]);
+  }, [scans, selectedCategory, trashScans, starredIds, searchQuery, customOrder]);
 
 
   useEffect(() => {
@@ -418,23 +383,6 @@ export const LibraryHub: React.FC<LibraryHubProps> = ({
       if (!starredIds.includes(draggedId)) {
         setStarredIds(prev => [...prev, draggedId]);
       }
-    } else if (catId === "all") {
-      setDocFolders(prev => {
-        const next = { ...prev };
-        delete next[draggedId];
-        return next;
-      });
-    } else {
-
-      setDocFolders(prev => ({ ...prev, [draggedId]: catId }));
-    }
-  };
-
-  const createNewFolder = () => {
-    const name = window.prompt("Enter new folder name:");
-    if (name && name.trim()) {
-      const newFolder = { id: `folder_${Date.now()}`, name: name.trim() };
-      setCustomFolders(prev => [...prev, newFolder]);
     }
   };
 
@@ -537,11 +485,6 @@ export const LibraryHub: React.FC<LibraryHubProps> = ({
                 {[
                   { id: "all", label: "All Documents", badge: telemetry.totalFiles },
                   { id: "starred", label: "Starred Documents", badge: telemetry.starredCount },
-                  ...customFolders.map(f => ({
-                    id: f.id,
-                    label: f.name,
-                    badge: Object.values(docFolders).filter(id => id === f.id).length
-                  })),
                   { id: "trash", label: "Trash Bin", badge: telemetry.trashCount }
                 ].map(cat => {
                    const isActive = selectedCategory === cat.id;
@@ -575,13 +518,6 @@ export const LibraryHub: React.FC<LibraryHubProps> = ({
                    );
                 })}
 
-                <button
-                  onClick={createNewFolder}
-                  className="flex items-center gap-2 mt-1 px-1 py-1 text-[13px] text-gray-500 hover:text-gray-800 dark:hover:text-gray-300 font-medium transition-colors"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>New Folder</span>
-                </button>
               </div>
 
               {/* Minimal Search Bar (Dropdown styled in scanner) */}
