@@ -47,6 +47,26 @@ try {
     "Scanner",
   ]);
 
+  await page.evaluate(() => {
+    localStorage.setItem(
+      "royscript_ai_keys",
+      JSON.stringify({ gemini: "probe-key-preserved" }),
+    );
+  });
+
+  assert.equal(
+    await page.$$eval('[data-settings-panel] [data-settings-reset="true"]',
+      (buttons) => buttons.length,
+    ),
+    1,
+  );
+  assert.equal(
+    await page.$$eval('[data-settings-panel] button', (buttons) =>
+      buttons.filter((button) => button.textContent?.includes("Reset Settings")).length,
+    ),
+    0,
+  );
+
   const visibleSectionFor = async (label) => {
     const categoryIds = {
       Appearance: "appearance",
@@ -79,7 +99,35 @@ try {
   assert.match((await visibleSectionFor("Practice")).join(" "), /Gameplay/);
   assert.match((await visibleSectionFor("Ambient Focus")).join(" "), /Ambient Focus/);
   assert.match((await visibleSectionFor("Performance")).join(" "), /Performance/);
-  assert.match((await visibleSectionFor("Scanner")).join(" "), /Scanner/);
+  const scannerText = (await visibleSectionFor("Scanner")).join(" ");
+  assert.match(scannerText, /Scanner/);
+  assert.equal(
+    await page.$$eval('[data-settings-panel] input[aria-label$=" API key"]',
+      (inputs) => inputs.length,
+    ),
+    3,
+  );
+
+  if (process.env.SETTINGS_SCANNER_SCREENSHOT) {
+    await page.screenshot({
+      path: process.env.SETTINGS_SCANNER_SCREENSHOT,
+      fullPage: false,
+    });
+  }
+
+  await page.click('[data-settings-reset="true"]');
+  await new Promise((resolve) => setTimeout(resolve, 80));
+  assert.equal(
+    await page.$eval(
+      '[data-settings-category="appearance"]',
+      (button) => button.getAttribute("aria-current"),
+    ),
+    "page",
+  );
+  assert.deepEqual(
+    await page.evaluate(() => JSON.parse(localStorage.getItem("royscript_ai_keys") || "{}")),
+    { gemini: "probe-key-preserved" },
+  );
 
   await page.evaluate(() => {
     const button = document.querySelector('[data-settings-category="appearance"]');

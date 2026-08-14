@@ -34,7 +34,7 @@ import {
   BarChart3,
   Headphones,
   Gauge,
-  ScanLine,
+  KeyRound,
   Save,
   Trash2,
   Plus,
@@ -142,7 +142,7 @@ const SETTINGS_CATEGORIES: Array<{
   {
     id: "scanner",
     label: "Scanner",
-    Icon: ScanLine,
+    Icon: KeyRound,
   },
 ];
 
@@ -308,6 +308,12 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     FONT_OPTIONS.find((f) => f.id === font) || FONT_OPTIONS[0];
   const accentColor = currentThemeObj.colors[2];
 
+  const handleResetSettings = () => {
+    resetToDefaults();
+    setView("main");
+    setActiveCategory("appearance");
+  };
+
   return (
     <AnimatePresence>
       {isOpen && (
@@ -452,7 +458,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             <div className="flex flex-1 min-h-0 overflow-hidden">
               <nav
                 aria-label="Settings categories"
-                className="w-12 shrink-0 flex flex-col items-center pt-2 pb-3"
+                className="w-14 shrink-0 flex flex-col items-center border-r border-neutral-200/70 dark:border-white/[0.08] bg-neutral-100/40 dark:bg-white/[0.018] pt-4 pb-4"
               >
                 {SETTINGS_CATEGORIES.map(({ id, label, Icon }) => {
                   const selected = activeCategory === id;
@@ -470,14 +476,14 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                         setView("main");
                       }}
                       className={cn(
-                        "group relative flex h-10 w-12 items-center justify-center text-neutral-500 transition-colors duration-150 hover:bg-neutral-500/[0.04] dark:text-neutral-400 dark:hover:bg-white/[0.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-neutral-400 dark:focus-visible:ring-white/40",
+                        "group relative flex h-12 w-14 items-center justify-center text-neutral-500 transition-colors duration-150 hover:bg-neutral-500/[0.05] dark:text-neutral-400 dark:hover:bg-white/[0.055] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-neutral-400 dark:focus-visible:ring-white/40",
                         selected && "bg-neutral-900/[0.04] dark:bg-white/[0.06]",
                       )}
                     >
                       <span
                         aria-hidden="true"
                         className={cn(
-                          "absolute left-0 h-6 w-[6px] bg-current transition-opacity duration-150",
+                          "absolute left-0 h-7 w-[5px] bg-current transition-opacity duration-150",
                           selected ? "opacity-100" : "opacity-0",
                         )}
                         style={selected ? { color: accentColor } : undefined}
@@ -485,21 +491,36 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                       <Icon
                         aria-hidden="true"
                         className={cn(
-                          "size-4 transition-colors duration-150",
+                          "size-[18px] transition-colors duration-150",
                           selected
                             ? "text-neutral-900 dark:text-white"
                             : "text-neutral-500 group-hover:text-neutral-800 dark:text-neutral-400 dark:group-hover:text-white",
                         )}
-                        strokeWidth={1.6}
+                        strokeWidth={1.7}
                       />
                     </button>
                   );
                 })}
+
+                <div className="mt-auto w-full px-2 pt-4">
+                  <div className="mb-3 h-px w-full bg-neutral-200/80 dark:bg-white/[0.09]" />
+                  <button
+                    type="button"
+                    title="Reset settings"
+                    aria-label="Reset settings"
+                    data-settings-reset="true"
+                    onClick={handleResetSettings}
+                    className="group flex h-11 w-full items-center justify-center text-neutral-400 transition-colors duration-150 hover:bg-red-500/[0.08] hover:text-red-500 dark:text-neutral-500 dark:hover:bg-red-400/[0.10] dark:hover:text-red-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-red-400/60"
+                  >
+                    <RotateCcw aria-hidden="true" className="size-[18px]" strokeWidth={1.7} />
+                    <span className="sr-only">Reset settings</span>
+                  </button>
+                </div>
               </nav>
 
               <div
                 ref={scrollRef}
-                className="flex-1 min-w-0 overflow-y-auto custom-scrollbar px-5 pb-10"
+                className="flex-1 min-w-0 overflow-y-auto custom-scrollbar px-7 pb-10"
               >
               <AnimatePresence mode="wait">
                 {view === "main" ? (
@@ -761,17 +782,17 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                       title="Scanner"
                       className={activeCategory !== "scanner" ? "hidden" : undefined}
                     >
-                      <p className="text-[11px] text-neutral-400 dark:text-neutral-500 leading-relaxed -mt-2 mb-3">
-                        AI models only run when a key is saved here. Without a key, scans fall back to the local browser engine. Keys stay on your device.
+                      <p className="mb-5 max-w-[280px] text-[12px] leading-relaxed text-neutral-400 dark:text-neutral-500">
+                        Connect a provider for AI OCR. Keys stay on this device.
                       </p>
-                      <div className="flex flex-col gap-2">
+                      <div className="flex flex-col gap-4">
                         {[
                           { key: "gemini", label: "Google Gemini" },
                           { key: "groq", label: "Groq" },
                           { key: "openai", label: "OpenAI" },
                         ].map(({ key, label }) => (
-                          <label key={key} className="flex flex-col gap-1">
-                            <span className="text-[11px] font-medium text-neutral-500 dark:text-neutral-400 tracking-wide uppercase">{label}</span>
+                          <label key={key} className="flex flex-col gap-2">
+                            <span className="text-[12px] font-medium tracking-tight text-neutral-800 dark:text-neutral-100">{label}</span>
                             <input
                               type="password"
                               defaultValue={loadProviderKeys()[key as keyof ProviderKeys] || ""}
@@ -784,33 +805,14 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                                 }
                                 saveProviderKeys(keys);
                               }}
-                              placeholder={`Paste your ${label} API key`}
-                              className="w-full bg-white dark:bg-black/20 border border-neutral-200 dark:border-white/10 rounded px-2 py-1 text-[12px] text-neutral-700 dark:text-neutral-200 outline-none focus:border-[#C28181] dark:focus:border-[#60C5EA] transition-colors"
+                              placeholder="API key"
+                              aria-label={`${label} API key`}
+                              className="h-10 w-full rounded-lg border border-neutral-200 bg-white/80 px-3 text-[12px] text-neutral-700 outline-none transition-colors placeholder:text-neutral-400 focus:border-[#C28181] dark:border-white/10 dark:bg-black/20 dark:text-neutral-200 dark:placeholder:text-neutral-600 dark:focus:border-[#60C5EA]"
                             />
                           </label>
                         ))}
                       </div>
                     </Section>
-
-                    {/* Reset Button (Tactile and matching original bottom) */}
-                    <div className="pt-4 mt-auto shrink-0 flex items-center justify-between border-t border-neutral-100 dark:border-white/[0.04]">
-                      <button
-                        onClick={resetToDefaults}
-                        className="flex items-center gap-1.5 py-1 px-2.5 rounded text-[10px] text-neutral-400 hover:text-red-500 hover:bg-neutral-100 dark:hover:bg-white/[0.04] transition-colors tracking-wider font-bold uppercase cursor-pointer"
-                        style={{ transform: "none" }}
-                      >
-                        <RotateCcw className="w-3 h-3" />
-                        <span>Reset Settings</span>
-                      </button>
-
-                      <div className="text-[9.5px] text-neutral-350 dark:text-neutral-500 tracking-wide font-normal">
-                        Press{" "}
-                        <kbd className="font-mono px-1 py-0.5 border border-neutral-200 dark:border-neutral-800 rounded bg-neutral-50 dark:bg-black/20 text-neutral-400">
-                          Ctrl+K
-                        </kbd>{" "}
-                        to toggle
-                      </div>
-                    </div>
                   </motion.div>
                 ) : view === "themes" ? (
                   <motion.div
@@ -1562,7 +1564,7 @@ function Section({
 }) {
   return (
     <section className={cn("block text-left shrink-0", className)}>
-      <p className="mt-[15px] mb-[10px] px-0 font-normal text-[14px] text-neutral-900 dark:text-neutral-50 leading-tight">
+      <p className="mt-[25px] mb-[14px] px-0 font-normal text-[15px] text-neutral-900 dark:text-neutral-50 leading-tight tracking-tight">
         {title}
       </p>
       <div className="space-y-0">{children}</div>
@@ -1578,7 +1580,7 @@ function Row({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center justify-between px-0 py-1.5 transition-colors min-h-9 shrink-0">
+    <div className="flex items-center justify-between px-0 py-2.5 transition-colors min-h-11 shrink-0">
       <span className="text-neutral-900 dark:text-neutral-100 text-[13px] font-normal tracking-tight">
         {label}
       </span>
@@ -1599,7 +1601,7 @@ function SubDrawerRow({
   return (
     <button
       onClick={onClick}
-      className="group flex w-full items-center justify-between px-0 py-1.5 transition-colors text-left min-h-9 shrink-0 cursor-pointer border-b border-transparent"
+      className="group flex w-full items-center justify-between px-0 py-2.5 transition-colors text-left min-h-11 shrink-0 cursor-pointer border-b border-transparent"
       style={{ transform: "none" }}
     >
       <span className="text-neutral-900 dark:text-neutral-100 text-[13px] font-normal tracking-tight">
@@ -1635,7 +1637,7 @@ function Toggle({
     <button
       onClick={onToggle}
       type="button"
-      className="flex w-full items-center justify-between px-0 py-1.5 transition-colors text-left min-h-9 shrink-0 cursor-pointer border-b border-transparent"
+      className="flex w-full items-center justify-between px-0 py-2.5 transition-colors text-left min-h-11 shrink-0 cursor-pointer border-b border-transparent"
       style={{ transform: "none" }}
     >
       <div className="flex flex-col gap-1 text-left select-none pr-4">
