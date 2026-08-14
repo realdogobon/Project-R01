@@ -403,12 +403,14 @@ export function PracticeMode({
         }
         setIsAiModalOpen(false);
       } else {
-        setGenerateError("The selected provider returned no usable practice text.");
+        setGenerateError("");
       }
     } catch (err: any) {
       if (!isPracticeAbortError(err) && !controller.signal.aborted) {
-        console.error(err);
-        setGenerateError(err instanceof Error ? err.message : "Generation failed.");
+        // Practice generation deliberately fails silently. The modal returns to
+        // idle, preserves the existing reference text, and leaves no raw
+        // provider or length-enforcement message in the browser console.
+        setGenerateError("");
       }
     } finally {
       if (aiAbortControllerRef.current === controller) {

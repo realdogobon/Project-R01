@@ -335,6 +335,13 @@ function getProviderTokenBudget(targetWords: number): number {
   return Math.min(8192, Math.max(1024, Math.ceil(targetWords * 3 + 512)));
 }
 
+function getLengthRecoveryPasses(targetWords: number): number {
+  // A short 400-word answer often needs one full replacement plus several
+  // focused continuations. Larger answers have much bigger token budgets, so
+  // retain the existing bounded request count unless the model truly stalls.
+  return targetWords <= 500 ? 4 : 2;
+}
+
 function buildPrompt(request: PracticeGenerationRequest, retry?: { previousWordCount: number; remainingWords?: number; continuation?: boolean }): string {
   const category = getPracticeAiCategory(request.categoryId);
   const topic = getPracticeAiTopic(request.categoryId, request.topicId);
@@ -523,40 +530,29 @@ export async function generatePracticeText(request: PracticeGenerationRequest, s
   }
 
   if (wordCount < targetWindow.minimum) {
-    throwIfPracticeAborted(signal);
-    const expansionPrompt = buildPrompt(request, { previousWordCount: wordCount });
-    const expandedRaw = selected.provider === "gemini"
-      ? await requestGemini(apiKey, expansionPrompt, selected.model, maxOutputTokens, signal)
-      : await requestChatCompletion(selected.provider, apiKey, expansionPrompt, selected.model, maxOutputTokens, signal);
-    throwIfPracticeAborted(signal);
-    text = normalizePracticeText(expandedRaw);
-    if (!text) throw new Error(`${selected.label} returned no usable practice text after its length retry. Try again.`);
-    wordCount = countPracticeWords(text);
-    if (wordCount > targetWindow.maximum) {
-      text = trimToSentenceBoundary(text, targetWindow.maximum);
-      wordCount = countPracticeWords(text);
-    }
+    const maxRecoveryPasses = getLengthRecoveryPasses(targetWords);
+    for (let recoveryPass = 0; wordCount < targetWindow.minimum && recoveryPass < maxRecoveryPasses; recoveryPass += 1) {
+      throwIfPracticeAborted(signal);
+      const isReplacementPass = recoveryPass === 0;
+      const recoveryPrompt = isReplacementPass
+        ? buildPrompt(request, { previousWordCount: wordCount })
+        : buildPrompt(request, {
+            previousWordCount: wordCount,
+            remainingWords: Math.max(1, targetWords - wordCount),
+            continuation: true,
+          });
+      const recoveryRaw = selected.provider === "gemini"
+        ? await requestGemini(apiKey, recoveryPrompt, selected.model, maxOutputTokens, signal)
+        : await requestChatCompletion(selected.provider, apiKey, recoveryPrompt, selected.model, maxOutputTokens, signal);
+      throwIfPracticeAborted(signal);
+      const recoveryText = normalizePracticeText(recoveryRaw);
+      if (!recoveryText) continue;
 
-    if (wordCount < targetWindow.minimum) {
-      throwIfPracticeAborted(signal);
-      const remainingWords = Math.max(1, targetWords - wordCount);
-      const continuationPrompt = buildPrompt(request, {
-        previousWordCount: wordCount,
-        remainingWords,
-        continuation: true,
-      });
-      const continuationRaw = selected.provider === "gemini"
-        ? await requestGemini(apiKey, continuationPrompt, selected.model, maxOutputTokens, signal)
-        : await requestChatCompletion(selected.provider, apiKey, continuationPrompt, selected.model, maxOutputTokens, signal);
-      throwIfPracticeAborted(signal);
-      const continuation = normalizePracticeText(continuationRaw);
-      if (continuation) {
-        text = normalizePracticeText(`${text}\n\n${continuation}`);
+      text = isReplacementPass ? recoveryText : normalizePracticeText(`${text}\n\n${recoveryText}`);
+      wordCount = countPracticeWords(text);
+      if (wordCount > targetWindow.maximum) {
+        text = trimToSentenceBoundary(text, targetWindow.maximum);
         wordCount = countPracticeWords(text);
-        if (wordCount > targetWindow.maximum) {
-          text = trimToSentenceBoundary(text, targetWindow.maximum);
-          wordCount = countPracticeWords(text);
-        }
       }
     }
   }

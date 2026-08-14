@@ -178,6 +178,7 @@ try {
       const nativeFetch = window.fetch.bind(window);
       const normalizedCase = "Hello \u2014 world\u2026 \u201cquoted\u201d \u2605 one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen";
       const shortLargeCase = Array.from({ length: 59 }, (_, index) => `short${index}`).join(" ");
+      const shortMediumCase = Array.from({ length: 111 }, (_, index) => `medium${index}${index % 25 === 24 ? "." : ""}`).join(" ");
       const compliantLargeCase = Array.from({ length: 1000 }, (_, index) => `word${index}${index % 25 === 24 ? "." : ""}`).join(" ");
       window.fetch = async (input, init) => {
         const url = typeof input === "string" ? input : input.url;
@@ -187,7 +188,9 @@ try {
         const attempt = (window.__practiceAttempts[target] ?? 0) + 1;
         window.__practiceAttempts[target] = attempt;
         window.__practiceFetches.push({ url, body });
-        const text = target === "1236"
+        const text = target === "400" || target === "500"
+          ? shortMediumCase
+          : target === "1236"
           ? (attempt === 1 ? shortLargeCase : compliantLargeCase)
           : (attempt === 1 ? "Hello \u2014 world\u2026 \u201cquoted\u201d \u2605" : normalizedCase);
         return new Response(JSON.stringify({
@@ -229,6 +232,67 @@ try {
       await page.$eval("textarea", (textarea) => /[^\x09\x0A\x0D\x20-\x7E]/.test(textarea.value)),
       false,
       `${viewport.name}: normalized generated text still contains non-ASCII characters`,
+    );
+
+    await page.click('button[aria-label="Create Practice Text"]');
+    await page.waitForSelector('button[aria-label="Close Practice Text"]');
+    await page.$$eval("select", (nodes) => {
+      const length = nodes[3];
+      if (!length) throw new Error("Missing Length select for medium recovery test");
+      length.value = "medium";
+      length.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await clickButtonWithText(page, "Generate");
+    await page.waitForFunction(
+      () => (document.querySelector("textarea")?.value.match(/[A-Za-z0-9]+(?:['-][A-Za-z0-9]+)*/g)?.length ?? 0) >= 380,
+      { timeout: 5000 },
+    );
+    const mediumResult = await page.$eval("textarea", (textarea) => textarea.value);
+    const mediumWordCount = mediumResult.match(/[A-Za-z0-9]+(?:['-][A-Za-z0-9]+)*/g)?.length ?? 0;
+    assert.ok(mediumWordCount >= 380 && mediumWordCount <= 432, `${viewport.name}: 400-word recovery produced ${mediumWordCount} words`);
+    assert.equal(
+      await page.evaluate(() => window.__practiceAttempts?.["400"] ?? 0),
+      5,
+      `${viewport.name}: 111-word 400-word response did not complete replacement plus three continuations`,
+    );
+
+    await page.click('button[aria-label="Create Practice Text"]');
+    await page.waitForSelector('button[aria-label="Close Practice Text"]');
+    await page.$$eval("select", (nodes) => {
+      const length = nodes[3];
+      if (!length) throw new Error("Missing Length select for exhausted recovery test");
+      length.value = "custom";
+      length.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await page.click('input[aria-label="Custom word count"]');
+    await page.keyboard.down("Control");
+    await page.keyboard.press("A");
+    await page.keyboard.up("Control");
+    await page.type('input[aria-label="Custom word count"]', "500");
+    await clickButtonWithText(page, "Generate");
+    await page.waitForFunction(
+      () => Array.from(document.querySelectorAll("button")).some((button) => button.textContent?.trim() === "Generate" && !button.disabled),
+      { timeout: 5000 },
+    );
+    assert.equal(
+      await page.$eval("textarea", (textarea) => textarea.value),
+      mediumResult,
+      `${viewport.name}: exhausted short-response recovery overwrote existing Practice text`,
+    );
+    assert.equal(
+      await page.evaluate(() => window.__practiceAttempts?.["500"] ?? 0),
+      5,
+      `${viewport.name}: 500-word exhaustion did not stay within the bounded recovery count`,
+    );
+    assert.equal(
+      await page.$eval("body", (body) => body.textContent?.includes("The AI returned 444 words for a 500-word request") ?? false),
+      false,
+      `${viewport.name}: raw short-response error was exposed after bounded recovery`,
+    );
+    await page.click('button[aria-label="Close Practice Text"]');
+    await page.waitForFunction(
+      () => !document.querySelector('button[aria-label="Close Practice Text"]'),
+      { timeout: 1500 },
     );
 
     await page.click('button[aria-label="Create Practice Text"]');
