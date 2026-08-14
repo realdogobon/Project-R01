@@ -1,6 +1,7 @@
 // RoyScript Practice Mode: writing-first, palette-led, and fluid under provider latency.
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
+import { flushSync } from "react-dom";
 import { ArrowLeft, Play, CheckCircle, Clock, NotebookPen, Sparkles, Loader2, Settings2, ArrowRight, RotateCcw, RotateCw, X, Zap, Trophy, FileText, BookOpen, HeartPulse, FastForward, PlaySquare, Lock, Hourglass, SlidersHorizontal, ChevronDown } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { useSoundEngine } from "../hooks/useSoundEngine";
@@ -365,15 +366,16 @@ export function PracticeMode({
       resolve();
       return;
     }
-    window.requestAnimationFrame(() => {
-      window.requestAnimationFrame(() => resolve());
-    });
+    window.requestAnimationFrame(() => resolve());
   });
 
   const handleGenerateAI = async () => {
     if (isGenerating) return;
-    setIsGenerating(true);
-    setGenerateError("");
+    flushSync(() => {
+      setIsGenerating(true);
+      setGenerateError("");
+      setGenerationStage("drafting");
+    });
     await waitForGenerationPaint();
     try {
       const result = await generatePracticeText({
@@ -1703,8 +1705,8 @@ export function PracticeMode({
                                     setGenerateError("");
                                     setIsAiModalOpen(true);
                                   }}
-                                  aria-label="Create practice text"
-                                  title="Create practice text"
+                                  aria-label="Create Practice Text"
+                                  title="Create Practice Text"
                                   style={{ color: themeAccentColor }}
                                   className="p-1.5 hover:opacity-70 transition-opacity rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/20 dark:focus-visible:ring-white/20 active:scale-95"
                                 >
@@ -1741,7 +1743,10 @@ export function PracticeMode({
                                   className="w-full flex-1 min-h-[140px] bg-transparent border border-black/20 dark:border-white/20 rounded-md px-4 py-3 text-[14px] xl:text-[16px] leading-relaxed focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors resize-none"
                                 />
                                 {isGenerating && (
-                                  <div className="absolute inset-0 bg-white/50 dark:bg-black/50 backdrop-blur-[2px] flex items-center justify-center rounded-md border border-transparent z-10 animate-in fade-in">
+                                  <div
+                                    className="absolute inset-0 bg-white/50 dark:bg-black/50 flex items-center justify-center rounded-md border border-transparent z-10"
+                                    style={{ contain: "paint", willChange: "opacity" }}
+                                  >
                                     <Loader2 className="practice-generation-spinner w-6 h-6" style={{ color: themeAccentColor }} />
                                   </div>
                                 )}
@@ -1886,10 +1891,10 @@ export function PracticeMode({
               <div className="h-[38px] flex items-center justify-between pl-4 pr-0 shrink-0 select-none bg-black/5 dark:bg-white/5 border-b border-black/5 dark:border-white/5">
                 <div className="flex items-center gap-2.5">
                   <NotebookPen className="w-4 h-4" style={{ color: themeAccentColor }} />
-                  <span className="text-[12px] font-medium tracking-wide">Practice text</span>
+                  <span className="text-[12px] font-medium tracking-wide">Practice Text</span>
                 </div>
                 <div className="flex items-center h-full">
-                  <button onClick={() => setIsAiModalOpen(false)} aria-label="Close practice text" className="h-full px-4 hover:bg-[#E81123] hover:text-white transition-colors">
+                  <button onClick={() => setIsAiModalOpen(false)} aria-label="Close Practice Text" className="h-full px-4 hover:bg-[#E81123] hover:text-white transition-colors">
                     <X className="w-4 h-4" />
                   </button>
                 </div>

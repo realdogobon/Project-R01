@@ -34,16 +34,18 @@ try {
     });
     await page.reload({ waitUntil: "networkidle2" });
     await page.click('button[title="Start Practice"]');
-    await page.waitForSelector('button[aria-label="Create practice text"]');
-    const triggerColor = await page.$eval('button[aria-label="Create practice text"]', (button) => ({
+    await page.waitForSelector('button[aria-label="Create Practice Text"]');
+    const triggerColor = await page.$eval('button[aria-label="Create Practice Text"]', (button) => ({
       buttonColor: getComputedStyle(button).color,
       iconColor: button.querySelector("svg") ? getComputedStyle(button.querySelector("svg")).color : null,
+      title: button.getAttribute("title"),
     }));
     assert.ok(triggerColor.buttonColor && triggerColor.iconColor, `${viewport.name}: Practice glyph did not inherit a visible color`);
     assert.equal(triggerColor.iconColor, triggerColor.buttonColor, `${viewport.name}: NotebookPen color diverged from its trigger`);
+    assert.equal(triggerColor.title, "Create Practice Text", `${viewport.name}: trigger tooltip casing is incorrect`);
 
-    await page.click('button[aria-label="Create practice text"]');
-    await page.waitForSelector('button[aria-label="Close practice text"]');
+    await page.click('button[aria-label="Create Practice Text"]');
+    await page.waitForSelector('button[aria-label="Close Practice Text"]');
     await page.evaluate(() => {
       const nativeFetch = window.fetch.bind(window);
       window.fetch = async (input, init) => {
@@ -57,13 +59,26 @@ try {
       };
     });
 
-    await page.evaluate(() => {
+    const firstFrameLatencyMs = await page.evaluate(() => {
       const button = [...document.querySelectorAll("button")].find((candidate) => candidate.textContent?.trim() === "Generate");
       if (!button) throw new Error("Missing Generate button");
+      const start = performance.now();
       button.click();
+      return new Promise((resolve) => {
+        const observe = () => {
+          const spinner = document.querySelector(".practice-generation-spinner");
+          if (spinner && getComputedStyle(spinner).animationName === "practice-generation-spin") {
+            resolve(performance.now() - start);
+            return;
+          }
+          requestAnimationFrame(observe);
+        };
+        requestAnimationFrame(observe);
+      });
     });
+    assert.ok(firstFrameLatencyMs <= 50, `${viewport.name}: first loading frame took ${firstFrameLatencyMs.toFixed(1)}ms`);
     await page.waitForFunction(() => {
-      const button = [...document.querySelectorAll("button")].find((candidate) => candidate.textContent?.trim() === "Creating...");
+      const button = [...document.querySelectorAll("button")].find((candidate) => candidate.textContent?.trim() === "Creating..." || candidate.textContent?.trim() === "Checking...");
       return Boolean(button?.disabled);
     }, { timeout: 1000 });
 
@@ -86,11 +101,11 @@ try {
     assert.ok(new Set(animationSample.transforms).size > 1, `${viewport.name}: spinner transform did not advance across animation frames`);
 
     await page.waitForFunction(
-      () => !document.querySelector('button[aria-label="Close practice text"]'),
+      () => !document.querySelector('button[aria-label="Close Practice Text"]'),
       { timeout: 5000 },
     );
     assert.equal(errors.length, 0, `${viewport.name}: unexpected browser errors: ${errors.join(" | ")}`);
-    console.log(`${viewport.name} Practice smoothness passed: ${JSON.stringify({ triggerColor, animationName: animationSample.animationName })}`);
+    console.log(`${viewport.name} Practice smoothness passed: ${JSON.stringify({ triggerColor, firstFrameLatencyMs, animationName: animationSample.animationName })}`);
     await page.close();
   }
 } finally {

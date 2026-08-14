@@ -44,15 +44,15 @@ try {
 
     await page.goto(`${previewUrl}/?from_webdev=1`, { waitUntil: "networkidle2" });
     await page.click('button[title="Start Practice"]');
-    await page.waitForSelector('button[aria-label="Create practice text"]');
+    await page.waitForSelector('button[aria-label="Create Practice Text"]');
 
     assert.equal(
-      await page.$$eval('button[aria-label="Create practice text"]', (buttons) => buttons.length),
+      await page.$$eval('button[aria-label="Create Practice Text"]', (buttons) => buttons.length),
       1,
       `${viewport.name}: expected exactly one standalone AI trigger`,
     );
     assert.equal(
-      await page.$eval('button[aria-label="Create practice text"]', (button) =>
+      await page.$eval('button[aria-label="Create Practice Text"]', (button) =>
         !button.textContent?.includes("AI Generation") &&
         getComputedStyle(button).backgroundColor === "rgba(0, 0, 0, 0)",
       ),
@@ -60,12 +60,12 @@ try {
       `${viewport.name}: AI trigger still appears as a text or filled button`,
     );
 
-    await page.click('button[aria-label="Create practice text"]');
-    await page.waitForSelector('button[aria-label="Close practice text"]');
+    await page.click('button[aria-label="Create Practice Text"]');
+    await page.waitForSelector('button[aria-label="Close Practice Text"]');
     assert.equal(
-      await page.$eval("body", (body) => body.textContent?.includes("Practice text") ?? false),
+      await page.$eval("body", (body) => body.textContent?.includes("Practice Text") ?? false),
       true,
-      `${viewport.name}: Practice text modal did not open`,
+      `${viewport.name}: Practice Text modal did not open`,
     );
     assert.equal(
       await page.$$eval("select", (selects) => selects.length),
@@ -126,9 +126,9 @@ try {
     });
     await page.reload({ waitUntil: "networkidle2" });
     await page.click('button[title="Start Practice"]');
-    await page.waitForSelector('button[aria-label="Create practice text"]');
-    await page.click('button[aria-label="Create practice text"]');
-    await page.waitForSelector('button[aria-label="Close practice text"]');
+    await page.waitForSelector('button[aria-label="Create Practice Text"]');
+    await page.click('button[aria-label="Create Practice Text"]');
+    await page.waitForSelector('button[aria-label="Close Practice Text"]');
     await page.select("select:nth-of-type(1)", "parliament");
     await page.$$eval("select", (nodes) => {
       const topic = nodes[1];
@@ -231,8 +231,8 @@ try {
       `${viewport.name}: normalized generated text still contains non-ASCII characters`,
     );
 
-    await page.click('button[aria-label="Create practice text"]');
-    await page.waitForSelector('button[aria-label="Close practice text"]');
+    await page.click('button[aria-label="Create Practice Text"]');
+    await page.waitForSelector('button[aria-label="Close Practice Text"]');
     await page.$$eval("select", (nodes) => {
       const length = nodes[3];
       if (!length) throw new Error("Missing Length select for large custom test");

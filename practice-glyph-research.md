@@ -30,4 +30,4 @@ The selected glyph replaces the current sparkle in the standalone Practice trigg
 
 ## Verification note
 
-The no-credit browser smoothness probe confirmed on desktop and mobile that the spinner uses the scoped `practice-generation-spin` animation and advances across successive animation frames. It also confirmed that the `NotebookPen` stroke color matches the active theme accent in both viewports. TypeScript, production build, and the deterministic Practice regression probe passed after the change.
+The no-credit browser smoothness probe confirmed on desktop and mobile that the spinner uses the scoped `practice-generation-spin` animation and advances across successive animation frames. After reducing the user-triggered paint yield from two frames to one, measured click-to-first-loading-frame latency was approximately **48 ms** on both desktop and mobile in the live preview. The probe also confirmed that the `NotebookPen` stroke color matches the active theme accent and that the trigger tooltip is exactly **Create Practice Text** in both viewports. TypeScript, production build, and the deterministic Practice regression probe passed after the change.
