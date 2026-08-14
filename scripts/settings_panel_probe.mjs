@@ -35,16 +35,16 @@ try {
   );
 
   const categories = await page.$$eval(
-    '[data-settings-panel="true"] button[aria-pressed]',
-    (buttons) => buttons.map((button) => button.textContent?.replace(/\s+/g, "").trim()),
+    '[data-settings-panel="true"] button[data-settings-category]',
+    (buttons) => buttons.map((button) => button.getAttribute("aria-label")),
   );
   assert.deepEqual(categories, [
-    "AppearanceThemeandfont",
-    "KeyboardKeys&typing",
-    "PracticeFocus&feedback",
-    "AmbientFocusSoundscapes",
-    "PerformanceRendering",
-    "ScannerOCRproviders",
+    "Appearance",
+    "Keyboard & Typing",
+    "Practice",
+    "Ambient Focus",
+    "Performance",
+    "Scanner",
   ]);
 
   const visibleSectionFor = async (label) => {
@@ -60,6 +60,13 @@ try {
     if (!categoryId) throw new Error(`Missing category mapping: ${label}`);
     await page.click(`[data-settings-category="${categoryId}"]`);
     await new Promise((resolve) => setTimeout(resolve, 180));
+    assert.equal(
+      await page.$eval(
+        `[data-settings-category="${categoryId}"]`,
+        (button) => button.getAttribute("aria-current"),
+      ),
+      "page",
+    );
     return page.$$eval('[data-settings-panel] section', (sections) =>
       sections
         .filter((section) => !section.classList.contains("hidden"))
@@ -75,8 +82,7 @@ try {
   assert.match((await visibleSectionFor("Scanner")).join(" "), /Scanner/);
 
   await page.evaluate(() => {
-    const button = [...document.querySelectorAll('[data-settings-panel] button[aria-pressed]')]
-      .find((candidate) => candidate.textContent?.includes("Appearance"));
+    const button = document.querySelector('[data-settings-category="appearance"]');
     if (!button) throw new Error("Missing Appearance category button");
     button.click();
   });
@@ -95,6 +101,7 @@ try {
     if (!button) throw new Error("Missing Themes subview button");
     button.click();
   });
+  await new Promise((resolve) => setTimeout(resolve, 240));
   assert.equal(
     await page.$$eval('[data-settings-panel] button', (buttons) =>
       buttons.filter((button) => button.textContent?.trim() === "Classic").length,

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+/* Faithful Notepads reference shell: compact glyph rail, 60px title row, flat Fluent surfaces, 20px content inset, and a dedicated detail frame. RoyScript setting controls and state behavior remain adapted inside this shell. */
 import {
   X,
   Check,
@@ -111,43 +112,36 @@ type SettingsCategory =
 const SETTINGS_CATEGORIES: Array<{
   id: SettingsCategory;
   label: string;
-  description: string;
   Icon: typeof Palette;
 }> = [
   {
     id: "appearance",
     label: "Appearance",
-    description: "Theme and font",
     Icon: Palette,
   },
   {
     id: "keyboard",
-    label: "Keyboard",
-    description: "Keys & typing",
+    label: "Keyboard & Typing",
     Icon: Keyboard,
   },
   {
     id: "practice",
     label: "Practice",
-    description: "Focus & feedback",
     Icon: BarChart3,
   },
   {
     id: "ambient",
     label: "Ambient Focus",
-    description: "Soundscapes",
     Icon: Headphones,
   },
   {
     id: "performance",
     label: "Performance",
-    description: "Rendering",
     Icon: Gauge,
   },
   {
     id: "scanner",
     label: "Scanner",
-    description: "OCR providers",
     Icon: ScanLine,
   },
 ];
@@ -348,7 +342,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 : { type: "tween", ease: [0.16, 1, 0.3, 1], duration: 0.3 }
             }
             className={cn(
-              "fixed right-3 top-3 bottom-w bottom-3 w-[340px] max-w-[calc(100vw-24px)] h-[calc(100dvh-24px)] flex flex-col z-[105] overflow-hidden rounded-2xl transform-gpu transition-all bg-white dark:bg-[#121214] border border-neutral-200/50 dark:border-white/[0.05] shadow-2xl",
+              "fixed right-0 top-0 bottom-0 w-[430px] max-w-full h-full flex flex-col z-[105] overflow-hidden transform-gpu transition-all bg-[#f5f5f5] dark:bg-[#222222] border-l border-neutral-300 dark:border-white/[0.12] shadow-2xl",
             )}
             style={{
               fontFamily: "var(--app-font-family), monospace",
@@ -391,8 +385,8 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               }}
             />
 
-            {/* Pristine Drawer Header */}
-            <div className="px-5 pt-5 pb-2 flex items-center justify-between shrink-0">
+            {/* Notepads-style title row: compact, flat, and anchored to the content frame. */}
+            <div className="mx-[18px] h-[60px] flex items-end justify-between border-b border-neutral-300/80 dark:border-white/[0.18] shrink-0">
               <AnimatePresence mode="wait">
                 {view === "main" ? (
                   <motion.div
@@ -402,8 +396,8 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                     exit={{ opacity: 0, x: -6 }}
                     transition={{ duration: 0.1 }}
                   >
-                    <span className="font-semibold text-neutral-800 dark:text-neutral-100 text-[13px] tracking-tight">
-                      Settings
+                    <span className="pb-[10px] font-normal text-neutral-900 dark:text-neutral-50 text-[24px] leading-none tracking-tight">
+                      {SETTINGS_CATEGORIES.find((category) => category.id === activeCategory)?.label ?? "Settings"}
                     </span>
                   </motion.div>
                 ) : (
@@ -413,7 +407,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: 6 }}
                     transition={{ duration: 0.1 }}
-                    className="flex items-center gap-1.5"
+                    className="flex items-center gap-1.5 pb-[10px]"
                   >
                     <button
                       onClick={() => {
@@ -427,7 +421,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                     >
                       <ArrowLeft className="w-3.5 h-3.5" />
                     </button>
-                    <span className="font-semibold text-neutral-800 dark:text-neutral-100 text-[13px] tracking-tight">
+                    <span className="font-normal text-neutral-900 dark:text-neutral-50 text-[24px] leading-none tracking-tight">
                       {view === "themes"
                         ? "Themes"
                         : view === "fonts"
@@ -444,85 +438,79 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 )}
               </AnimatePresence>
 
-              {/* DrawerClose button matching bg-foreground/[0.06] size={14} from original */}
+              {/* Close action remains in the title row, without a floating pill. */}
               <button
                 onClick={onClose}
-                className="flex items-center justify-center rounded-full bg-neutral-100 dark:bg-white/[0.06] p-1.5 text-neutral-500 hover:text-neutral-800 dark:text-neutral-300 dark:hover:text-white transition-colors cursor-pointer"
+                aria-label="Close settings"
+                className="mb-[10px] flex items-center justify-center p-1 text-neutral-500 hover:text-neutral-900 dark:text-neutral-300 dark:hover:text-white transition-colors cursor-pointer"
               >
-                <X className="w-3.5 h-3.5" />
+                <X className="w-4 h-4" />
               </button>
             </div>
 
-            {/* Main scrollable grid layout */}
-            <div
-              ref={scrollRef}
-              className="flex-1 overflow-y-auto custom-scrollbar px-5 py-4 flex flex-col min-h-0 space-y-5"
-            >
+            {/* Notepads-style compact navigation rail and independent detail frame */}
+            <div className="flex flex-1 min-h-0 overflow-hidden">
+              <nav
+                aria-label="Settings categories"
+                className="w-12 shrink-0 flex flex-col items-center pt-2 pb-3"
+              >
+                {SETTINGS_CATEGORIES.map(({ id, label, Icon }) => {
+                  const selected = activeCategory === id;
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      title={label}
+                      aria-label={label}
+                      aria-current={selected ? "page" : undefined}
+                      aria-pressed={selected}
+                      data-settings-category={id}
+                      onClick={() => {
+                        setActiveCategory(id);
+                        setView("main");
+                      }}
+                      className={cn(
+                        "group relative flex h-10 w-12 items-center justify-center text-neutral-500 transition-colors duration-150 hover:bg-neutral-500/[0.04] dark:text-neutral-400 dark:hover:bg-white/[0.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-neutral-400 dark:focus-visible:ring-white/40",
+                        selected && "bg-neutral-900/[0.04] dark:bg-white/[0.06]",
+                      )}
+                    >
+                      <span
+                        aria-hidden="true"
+                        className={cn(
+                          "absolute left-0 h-6 w-[6px] bg-current transition-opacity duration-150",
+                          selected ? "opacity-100" : "opacity-0",
+                        )}
+                        style={selected ? { color: accentColor } : undefined}
+                      />
+                      <Icon
+                        aria-hidden="true"
+                        className={cn(
+                          "size-4 transition-colors duration-150",
+                          selected
+                            ? "text-neutral-900 dark:text-white"
+                            : "text-neutral-500 group-hover:text-neutral-800 dark:text-neutral-400 dark:group-hover:text-white",
+                        )}
+                        strokeWidth={1.6}
+                      />
+                    </button>
+                  );
+                })}
+              </nav>
+
+              <div
+                ref={scrollRef}
+                className="flex-1 min-w-0 overflow-y-auto custom-scrollbar px-5 pb-10"
+              >
               <AnimatePresence mode="wait">
                 {view === "main" ? (
                   <motion.div
                     key="main-view"
-                    initial={{ opacity: 0, scale: 0.99 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.99 }}
-                    transition={{ duration: 0.12 }}
-                    className="space-y-5 flex-1 flex flex-col min-h-0"
+                    initial={{ opacity: 0, x: 25 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -10 }}
+                    transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+                    className="flex-1 flex flex-col min-h-0"
                   >
-                    <div className="grid grid-cols-2 gap-1.5 pb-1">
-                      {SETTINGS_CATEGORIES.map(
-                        ({ id, label, description, Icon }) => {
-                          const selected = activeCategory === id;
-                          return (
-                            <button
-                              key={id}
-                              type="button"
-                              aria-pressed={selected}
-                              data-settings-category={id}
-                              onClick={() => {
-                                setActiveCategory(id);
-                                setView("main");
-                              }}
-                              className={cn(
-                                "group flex items-center gap-2.5 rounded-xl px-2.5 py-2.5 text-left transition-colors duration-150 cursor-pointer border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-400/50 dark:focus-visible:ring-white/30",
-                                selected
-                                  ? "bg-neutral-500/[0.07] dark:bg-white/[0.07] border-neutral-200/70 dark:border-white/[0.08]"
-                                  : "bg-transparent border-transparent hover:bg-neutral-500/[0.04] dark:hover:bg-white/[0.035]",
-                              )}
-                            >
-                              <span
-                                className={cn(
-                                  "flex size-7 shrink-0 items-center justify-center rounded-lg transition-colors duration-150",
-                                  selected
-                                    ? "bg-neutral-900/[0.07] text-neutral-800 dark:bg-white/[0.1] dark:text-white"
-                                    : "bg-neutral-500/[0.05] text-neutral-400 group-hover:text-neutral-600 dark:bg-white/[0.04] dark:text-neutral-500 dark:group-hover:text-neutral-300",
-                                )}
-                                style={
-                                  selected ? { color: accentColor } : undefined
-                                }
-                              >
-                                <Icon className="size-3.5" strokeWidth={1.8} />
-                              </span>
-                              <span className="min-w-0">
-                                <span
-                                  className={cn(
-                                    "block truncate text-[11px] font-semibold leading-tight",
-                                    selected
-                                      ? "text-neutral-900 dark:text-neutral-50"
-                                      : "text-neutral-600 dark:text-neutral-300",
-                                  )}
-                                >
-                                  {label}
-                                </span>
-                                <span className="mt-0.5 block truncate text-[9px] leading-tight text-neutral-400 dark:text-neutral-500">
-                                  {description}
-                                </span>
-                              </span>
-                            </button>
-                          );
-                        },
-                      )}
-                    </div>
-
                     {/* SECTION: APPEARANCE */}
                     <Section
                       title="Appearance"
@@ -1402,6 +1390,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 )}
               </AnimatePresence>
             </div>
+            </div>
           </motion.div>
         </div>
       )}
@@ -1572,11 +1561,11 @@ function Section({
   className?: string;
 }) {
   return (
-    <section className={cn("space-y-1 block text-left shrink-0", className)}>
-      <p className="mb-2 px-3 font-semibold text-[10px] text-neutral-400 dark:text-neutral-500 uppercase tracking-widest leading-none">
+    <section className={cn("block text-left shrink-0", className)}>
+      <p className="mt-[15px] mb-[10px] px-0 font-normal text-[14px] text-neutral-900 dark:text-neutral-50 leading-tight">
         {title}
       </p>
-      <div className="space-y-0.5">{children}</div>
+      <div className="space-y-0">{children}</div>
     </section>
   );
 }
@@ -1589,8 +1578,8 @@ function Row({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center justify-between rounded-lg px-3 py-2.5 transition-colors hover:bg-neutral-500/[0.03] dark:hover:bg-white/[0.03] min-h-12 shrink-0">
-      <span className="text-neutral-800 dark:text-neutral-200 text-xs font-medium tracking-tight">
+    <div className="flex items-center justify-between px-0 py-1.5 transition-colors min-h-9 shrink-0">
+      <span className="text-neutral-900 dark:text-neutral-100 text-[13px] font-normal tracking-tight">
         {label}
       </span>
       {children}
@@ -1610,10 +1599,10 @@ function SubDrawerRow({
   return (
     <button
       onClick={onClick}
-      className="group flex w-full items-center justify-between rounded-lg px-3 py-2.5 transition-colors hover:bg-neutral-500/[0.03] dark:hover:bg-white/[0.03] text-left min-h-12 shrink-0 cursor-pointer border border-transparent"
+      className="group flex w-full items-center justify-between px-0 py-1.5 transition-colors text-left min-h-9 shrink-0 cursor-pointer border-b border-transparent"
       style={{ transform: "none" }}
     >
-      <span className="text-neutral-800 dark:text-neutral-200 text-xs font-medium tracking-tight">
+      <span className="text-neutral-900 dark:text-neutral-100 text-[13px] font-normal tracking-tight">
         {label}
       </span>
       <span className="flex items-center gap-1.5 shrink-0">
@@ -1646,15 +1635,15 @@ function Toggle({
     <button
       onClick={onToggle}
       type="button"
-      className="flex w-full items-center justify-between rounded-lg px-3 py-2.5 transition-colors hover:bg-neutral-500/[0.03] dark:hover:bg-white/[0.03] text-left min-h-12 shrink-0 cursor-pointer border border-transparent"
+      className="flex w-full items-center justify-between px-0 py-1.5 transition-colors text-left min-h-9 shrink-0 cursor-pointer border-b border-transparent"
       style={{ transform: "none" }}
     >
-      <div className="flex flex-col gap-0.5 text-left select-none">
-        <span className="text-neutral-800 dark:text-neutral-200 text-xs font-medium tracking-tight">
+      <div className="flex flex-col gap-1 text-left select-none pr-4">
+        <span className="text-neutral-900 dark:text-neutral-100 text-[13px] font-normal tracking-tight">
           {label}
         </span>
         {description && (
-          <span className="text-[10px] text-neutral-400 dark:text-neutral-500 leading-tight">
+          <span className="text-[11px] text-neutral-500 dark:text-neutral-400 leading-[1.35]">
             {description}
           </span>
         )}
