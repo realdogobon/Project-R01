@@ -91,6 +91,10 @@ try {
         "Committees and reports",
         "Budget and finance",
         "Policy and public-interest debates",
+        "Elections and representation",
+        "Governance and public services",
+        "Social welfare and inclusion",
+        "International affairs",
         "Custom topic",
       ],
       `${viewport.name}: parliamentary topic taxonomy did not update correctly`,
@@ -160,35 +164,88 @@ try {
 
     await page.evaluate(() => {
       window.__practiceFetches = [];
+      window.__practiceAttempts = {};
       const nativeFetch = window.fetch.bind(window);
+      const normalizedCase = "Hello \u2014 world\u2026 \u201cquoted\u201d \u2605 one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen";
+      const shortLargeCase = Array.from({ length: 59 }, (_, index) => `short${index}`).join(" ");
+      const compliantLargeCase = Array.from({ length: 1000 }, (_, index) => `word${index}${index % 25 === 24 ? "." : ""}`).join(" ");
       window.fetch = async (input, init) => {
         const url = typeof input === "string" ? input : input.url;
         if (!url.includes("generativelanguage.googleapis.com")) return nativeFetch(input, init);
-        window.__practiceFetches.push({ url, body: init?.body ?? null });
+        const body = String(init?.body ?? "");
+        const target = body.match(/Target length: (\d+) words/)?.[1] ?? "unknown";
+        const attempt = (window.__practiceAttempts[target] ?? 0) + 1;
+        window.__practiceAttempts[target] = attempt;
+        window.__practiceFetches.push({ url, body });
+        const text = target === "1236"
+          ? (attempt === 1 ? shortLargeCase : compliantLargeCase)
+          : (attempt === 1 ? "Hello \u2014 world\u2026 \u201cquoted\u201d \u2605" : normalizedCase);
         return new Response(JSON.stringify({
-          candidates: [{ content: { parts: [{ text: "Hello \u2014 world\u2026 \u201cquoted\u201d \u2605" }] } }],
+          candidates: [{ content: { parts: [{ text }] } }],
         }), { status: 200, headers: { "Content-Type": "application/json" } });
       };
     });
 
     await clickButtonWithText(page, "Generate");
-    await page.waitForFunction(
-      () => document.querySelector("textarea")?.value === 'Hello - world... "quoted"',
-      { timeout: 2500 },
-    );
+    try {
+      await page.waitForFunction(
+        () => document.querySelector("textarea")?.value === 'Hello - world... "quoted" one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen',
+        { timeout: 2500 },
+      );
+    } catch (error) {
+      console.log(JSON.stringify(await page.evaluate(() => ({
+        textarea: document.querySelector("textarea")?.value ?? null,
+        bodyText: document.body.textContent?.slice(-800) ?? "",
+        attempts: window.__practiceAttempts ?? {},
+        fetchCount: window.__practiceFetches?.length ?? 0,
+      }))));
+      throw error;
+    }
     const request = await page.evaluate(() => window.__practiceFetches?.[0] ?? null);
     assert.ok(request, `${viewport.name}: mocked Gemini request was not made`);
+    assert.equal(
+      await page.evaluate(() => window.__practiceAttempts?.["20"] ?? 0),
+      2,
+      `${viewport.name}: short 20-word response did not trigger exactly one corrective retry`,
+    );
     const requestBody = JSON.parse(request.body);
     const promptText = requestBody.contents?.[0]?.parts?.[0]?.text ?? "";
     assert.match(promptText, /Subject: Parliament and public policy/);
     assert.match(promptText, /Topic: Digital rights committee reporting/);
-    assert.match(promptText, /Target length: approximately 20 words/);
+    assert.match(promptText, /Target length: 20 words/);
     assert.match(promptText, /standard English QWERTY keyboard/);
     assert.match(promptText, /Do not use em dashes, en dashes/);
     assert.equal(
       await page.$eval("textarea", (textarea) => /[^\x09\x0A\x0D\x20-\x7E]/.test(textarea.value)),
       false,
       `${viewport.name}: normalized generated text still contains non-ASCII characters`,
+    );
+
+    await page.click('button[aria-label="Open AI practice generator"]');
+    await page.waitForSelector('button[aria-label="Close AI Practice"]');
+    await page.$$eval("select", (nodes) => {
+      const length = nodes[3];
+      if (!length) throw new Error("Missing Length select for large custom test");
+      length.value = "custom";
+      length.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await page.click('input[aria-label="Custom word count"]');
+    await page.keyboard.down("Control");
+    await page.keyboard.press("A");
+    await page.keyboard.up("Control");
+    await page.type('input[aria-label="Custom word count"]', "1236");
+    await clickButtonWithText(page, "Generate");
+    await page.waitForFunction(
+      () => (document.querySelector("textarea")?.value.match(/[A-Za-z0-9]+(?:['-][A-Za-z0-9]+)*/g)?.length ?? 0) >= 988,
+      { timeout: 5000 },
+    );
+    const largeResult = await page.$eval("textarea", (textarea) => textarea.value);
+    const largeWordCount = largeResult.match(/[A-Za-z0-9]+(?:['-][A-Za-z0-9]+)*/g)?.length ?? 0;
+    assert.ok(largeWordCount >= 988 && largeWordCount <= 1385, `${viewport.name}: 1,236-word retry produced ${largeWordCount} words`);
+    assert.equal(
+      await page.evaluate(() => window.__practiceAttempts?.["1236"] ?? 0),
+      3,
+      `${viewport.name}: 59-word response for the 1,236-word request did not trigger replacement plus continuation enforcement`,
     );
 
     const unexpectedErrors = errors.filter(

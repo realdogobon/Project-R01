@@ -227,7 +227,8 @@ async function runViewport(viewport) {
   const errors = [];
   const ignoredWarnings = [];
   const isKnownPreviewResourceWarning = (text) =>
-    text.includes("net::ERR_BLOCKED_BY_RESPONSE.NotSameOrigin");
+    text.includes("net::ERR_BLOCKED_BY_RESPONSE.NotSameOrigin") ||
+    text.includes("net::ERR_CERT_VERIFIER_CHANGED");
   page.on("pageerror", (error) => errors.push(String(error)));
   page.on("console", (message) => {
     if (message.type() !== "error") return;

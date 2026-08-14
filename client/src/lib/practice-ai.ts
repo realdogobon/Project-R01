@@ -35,6 +35,9 @@ export const PRACTICE_AI_CATEGORIES: PracticeAiCategory[] = [
       { id: "labour", label: "Labour and service" },
       { id: "tax", label: "Tax and regulatory" },
       { id: "environmental", label: "Environmental and public interest" },
+      { id: "intellectual-property", label: "Intellectual property" },
+      { id: "cyber-digital", label: "Cyber and digital law" },
+      { id: "evidence-procedure", label: "Evidence and court procedure" },
     ],
   },
   {
@@ -47,6 +50,10 @@ export const PRACTICE_AI_CATEGORIES: PracticeAiCategory[] = [
       { id: "committees", label: "Committees and reports" },
       { id: "budget", label: "Budget and finance" },
       { id: "policy", label: "Policy and public-interest debates" },
+      { id: "elections", label: "Elections and representation" },
+      { id: "governance", label: "Governance and public services" },
+      { id: "welfare", label: "Social welfare and inclusion" },
+      { id: "international", label: "International affairs" },
     ],
   },
   {
@@ -69,6 +76,8 @@ export const PRACTICE_AI_CATEGORIES: PracticeAiCategory[] = [
       { id: "entrepreneurship", label: "Entrepreneurship" },
       { id: "economics-trade", label: "Economics and trade" },
       { id: "accounting-operations", label: "Accounting and operations" },
+      { id: "personal-finance", label: "Personal finance and consumer life" },
+      { id: "entrepreneurial-case", label: "Entrepreneurial case studies" },
     ],
   },
   {
@@ -80,6 +89,8 @@ export const PRACTICE_AI_CATEGORIES: PracticeAiCategory[] = [
       { id: "travel", label: "Travel and places" },
       { id: "everyday", label: "Everyday life" },
       { id: "short-narrative", label: "Short narrative" },
+      { id: "food-hospitality", label: "Food and hospitality" },
+      { id: "sports-fitness", label: "Sports and fitness" },
     ],
   },
   {
@@ -91,6 +102,9 @@ export const PRACTICE_AI_CATEGORIES: PracticeAiCategory[] = [
       { id: "climate-earth", label: "Climate and earth" },
       { id: "space", label: "Space and astronomy" },
       { id: "research-methods", label: "Research methods" },
+      { id: "mathematics-data", label: "Mathematics and data" },
+      { id: "biology-chemistry", label: "Biology and chemistry" },
+      { id: "software-engineering", label: "Software engineering" },
     ],
   },
   {
@@ -102,6 +116,10 @@ export const PRACTICE_AI_CATEGORIES: PracticeAiCategory[] = [
       { id: "anatomy", label: "Anatomy and physiology" },
       { id: "pharmacy", label: "Pharmacy and therapeutics" },
       { id: "mental-health", label: "Mental health and wellbeing" },
+      { id: "nutrition", label: "Nutrition and food health" },
+      { id: "infectious-disease", label: "Infectious disease" },
+      { id: "health-systems", label: "Health systems and access" },
+      { id: "nursing-allied", label: "Nursing and allied health" },
     ],
   },
   {
@@ -113,6 +131,10 @@ export const PRACTICE_AI_CATEGORIES: PracticeAiCategory[] = [
       { id: "study-skills", label: "Study skills" },
       { id: "information-work", label: "Library and information work" },
       { id: "research-communication", label: "Research communication" },
+      { id: "early-childhood", label: "Early childhood learning" },
+      { id: "special-education", label: "Inclusive and special education" },
+      { id: "assessment", label: "Assessment and examinations" },
+      { id: "vocational", label: "Vocational and skills training" },
     ],
   },
   {
@@ -124,6 +146,9 @@ export const PRACTICE_AI_CATEGORIES: PracticeAiCategory[] = [
       { id: "visual-arts", label: "Visual arts" },
       { id: "music-performance", label: "Music and performance" },
       { id: "philosophy-ethics", label: "Philosophy and ethics" },
+      { id: "architecture-design", label: "Architecture and design" },
+      { id: "film-photography", label: "Film and photography" },
+      { id: "heritage", label: "Cultural heritage" },
     ],
   },
   {
@@ -135,6 +160,9 @@ export const PRACTICE_AI_CATEGORIES: PracticeAiCategory[] = [
       { id: "water-energy", label: "Water and energy" },
       { id: "climate-adaptation", label: "Climate adaptation" },
       { id: "sustainable-cities", label: "Sustainable cities" },
+      { id: "biodiversity", label: "Biodiversity and ecosystems" },
+      { id: "pollution", label: "Pollution and public health" },
+      { id: "disaster-resilience", label: "Disaster resilience" },
     ],
   },
   {
@@ -149,6 +177,12 @@ export const PRACTICE_AI_CATEGORIES: PracticeAiCategory[] = [
       { id: "science-news", label: "Science and technology news" },
       { id: "media-literacy", label: "Media literacy" },
       { id: "compare-reports", label: "Compare reported viewpoints" },
+      { id: "elections-governance", label: "Elections and governance" },
+      { id: "health-society", label: "Health and society" },
+      { id: "humanitarian", label: "Humanitarian crises" },
+      { id: "energy-food", label: "Energy and food security" },
+      { id: "technology-regulation", label: "Technology and regulation" },
+      { id: "fact-checking", label: "Fact-checking and verification" },
     ],
   },
   {
@@ -188,6 +222,8 @@ export const PRACTICE_AI_CATEGORIES: PracticeAiCategory[] = [
       { id: "customer-support", label: "Customer support" },
       { id: "applications-resumes", label: "Applications and resumes" },
       { id: "meeting-notes", label: "Meeting notes and presentations" },
+      { id: "technical-documentation", label: "Technical documentation" },
+      { id: "workplace-safety", label: "Workplace safety" },
     ],
   },
 ];
@@ -271,33 +307,81 @@ function getTopicLabel(request: PracticeGenerationRequest, fallback: string): st
   return fallback;
 }
 
-function buildPrompt(request: PracticeGenerationRequest): string {
+const CATEGORY_GUIDANCE: Record<string, string> = {
+  legal: "Explain the selected legal area through a neutral fictional or general-knowledge scenario, define key terms, show more than one viewpoint, and describe process or public impact without giving personal legal advice.",
+  parliament: "Explain the selected parliamentary device or policy issue through its purpose, participants, stages, trade-offs, and public effect; use neutral civic language rather than partisan persuasion.",
+  editorial: "Build a balanced editorial-style explainer with a clear issue, relevant context, competing considerations, and a measured conclusion; distinguish facts, interpretation, and opinion.",
+  business: "Develop a practical business passage with a concrete situation, relevant terminology, decisions, constraints, risks, and outcomes; keep figures illustrative rather than presenting financial advice.",
+  general: "Create a coherent, accessible passage with a clear setting or question, concrete details, logical development, and a satisfying conclusion that remains useful for typing practice.",
+  science: "Explain the selected scientific or technical subject from foundation to application, using accurate plain language, cause and effect, examples, limitations, and responsible uncertainty.",
+  medical: "Write neutral health education that explains concepts, symptoms or systems, prevention or care context, and uncertainty without diagnosing a person or prescribing treatment.",
+  education: "Teach the selected subject with a clear learning goal, ordered explanation, examples, common misunderstandings, and a short synthesis suitable for study or classroom practice.",
+  arts: "Explore the selected art or humanities subject through context, technique or ideas, examples, interpretation, and cultural perspective without reducing it to a list.",
+  environment: "Explain the environmental or agricultural issue through systems, causes, lived effects, trade-offs, and realistic responses while acknowledging regional variation.",
+  "current-affairs": "Create a non-live media-literacy exercise that teaches how to understand, compare, and question reporting about the selected issue without asserting current facts or inventing events.",
+  humanities: "Develop the selected society or humanities topic through historical or social context, multiple perspectives, key concepts, examples, and a balanced synthesis.",
+  "language-literature": "Create a rich language or literature passage with clear vocabulary, natural rhythm, context, interpretation, and varied sentence construction while remaining easy to type.",
+  "professional-writing": "Model a useful professional document or situation with a clear purpose, audience, logical structure, precise wording, and realistic details without including private personal data.",
+};
+
+function getTargetWindow(targetWords: number): { minimum: number; maximum: number } {
+  return {
+    minimum: Math.max(PRACTICE_AI_CUSTOM_MIN_WORDS, Math.ceil(targetWords * 0.95)),
+    maximum: Math.max(targetWords + 1, Math.ceil(targetWords * 1.08)),
+  };
+}
+
+function getProviderTokenBudget(targetWords: number): number {
+  return Math.min(8192, Math.max(1024, Math.ceil(targetWords * 3 + 512)));
+}
+
+function buildPrompt(request: PracticeGenerationRequest, retry?: { previousWordCount: number; remainingWords?: number; continuation?: boolean }): string {
   const category = getPracticeAiCategory(request.categoryId);
   const topic = getPracticeAiTopic(request.categoryId, request.topicId);
   const difficulty = optionLabel(PRACTICE_AI_DIFFICULTIES, request.difficultyId, "Intermediate");
   const targetWords = getTargetWords(request);
+  const targetWindow = getTargetWindow(targetWords);
   const topicLabel = getTopicLabel(request, topic.label);
   const isCurrentAffairs = request.categoryId === "current-affairs";
+  const guidance = CATEGORY_GUIDANCE[request.categoryId] ?? CATEGORY_GUIDANCE.general;
+  const structure = targetWords <= 250
+    ? "Use 2 or 3 connected paragraphs with a clear opening, development, and close."
+    : targetWords <= 800
+      ? "Use 4 to 6 connected paragraphs. Develop the idea with concrete detail instead of repeating the introduction."
+      : "Use at least 6 connected paragraphs. Build the subject in stages, add concrete examples and implications, and reach a real conclusion rather than stopping after a short summary.";
+  const retryInstruction = retry?.continuation
+    ? `The existing draft is ${retry.previousWordCount} words and needs approximately ${retry.remainingWords ?? Math.max(1, targetWords - retry.previousWordCount)} additional words. Write only a coherent continuation segment that develops the same topic, does not repeat the opening, and ends naturally. Return only the continuation text.`
+    : retry
+    ? `The previous draft was only ${retry.previousWordCount} words. Write a complete replacement, not a summary or continuation, and keep developing the selected topic until it reaches the requested length window.`
+    : "Do not stop after a short overview; continue developing the selected topic until the requested length window is reached.";
 
   return [
     "Create one original typing-practice passage.",
     `Subject: ${category.label}.`,
     `Topic: ${topicLabel}.`,
     `Typing level: ${difficulty}.`,
-    `Target length: approximately ${targetWords} words, within a reasonable tolerance.`,
+    `Target length: ${targetWords} words. Aim for ${targetWindow.minimum} to ${targetWindow.maximum} words before returning.`,
+    guidance,
+    structure,
+    retryInstruction,
+    "Use specific nouns, useful detail, varied but natural sentence lengths, and logical transitions. Do not pad with repetition.",
     "Use clear English in a consistent US English or India English style, with natural grammar and spelling.",
     "Use only characters available on a standard English QWERTY keyboard: ASCII letters, digits, spaces, line breaks, and common punctuation such as . , ; : ! ? ' \" ( ) - / %.",
     "Do not use em dashes, en dashes, curly quotes, ellipsis characters, emoji, decorative symbols, non-Latin scripts, Markdown, bullet points, code fences, headings, metadata, citations, disclaimers, or a preamble.",
     isCurrentAffairs
       ? "This is a non-live current-affairs and media-literacy exercise. Do not claim that information is the latest, today’s news, or verified by live sources; do not invent dates, statistics, sources, or breaking events. Present general context, media-literacy skills, or balanced viewpoints without political persuasion."
       : "Keep the passage educational and grounded in the selected subject; do not present it as personalized legal, medical, financial, or professional advice.",
-    "Return only the passage. Make it useful for typing practice, coherent from beginning to end, and appropriate for a general audience.",
+    retry?.continuation
+      ? "Return only the continuation segment. Do not add a heading, preamble, bullet list, citation, or explanation."
+      : "Return only the passage. Make it useful for typing practice, coherent from beginning to end, and appropriate for a general audience.",
   ].join(" ");
 }
 
 const SYSTEM_PROMPT = [
   "You are RoyScript's plain-text typing practice writer.",
   "Follow the user's subject and topic exactly.",
+  "Develop the passage fully instead of stopping once the basic idea has been introduced.",
+  "Respect the requested word-count window; for long requests, use multiple connected paragraphs and concrete detail rather than a short summary.",
   "Never invent legal advice, medical advice, citations, case outcomes, or official statements; write neutral educational practice text instead.",
   "For current-affairs requests, write a non-live educational exercise and never imply live retrieval or up-to-date verification.",
   "Return only one original passage and follow the keyboard-safe character rules in the request.",
@@ -314,9 +398,33 @@ function normalizePracticeText(value: string): string {
     .replace(/```[a-zA-Z]*\n?/g, "")
     .replace(/```/g, "")
     .replace(/[^\x09\x0A\x0D\x20-\x7E]/g, "")
+    .replace(/[ \t]{2,}/g, " ")
     .replace(/[ \t]+\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+}
+
+function countPracticeWords(value: string): number {
+  return value.match(/[A-Za-z0-9]+(?:['-][A-Za-z0-9]+)*/g)?.length ?? 0;
+}
+
+function trimToSentenceBoundary(value: string, maximumWords: number): string {
+  const words = value.split(/\s+/).filter(Boolean);
+  if (words.length <= maximumWords) return value;
+
+  const candidate = words.slice(0, maximumWords).join(" ");
+  const sentenceEnd = Math.max(candidate.lastIndexOf("."), candidate.lastIndexOf("!"), candidate.lastIndexOf("?"));
+  const safeMinimumCharacters = Math.floor(candidate.length * 0.7);
+  return sentenceEnd >= safeMinimumCharacters ? candidate.slice(0, sentenceEnd + 1).trim() : candidate;
+}
+
+function isWithinTargetWindow(wordCount: number, targetWords: number): boolean {
+  const window = getTargetWindow(targetWords);
+  return wordCount >= window.minimum && wordCount <= window.maximum;
+}
+
+function shortResponseError(targetWords: number, wordCount: number): Error {
+  return new Error(`The AI returned ${wordCount} words for a ${targetWords}-word request. Try again or choose a shorter length.`);
 }
 
 function fetchWithTimeout(url: string, init: RequestInit, timeoutMs = 90000): Promise<Response> {
@@ -325,7 +433,7 @@ function fetchWithTimeout(url: string, init: RequestInit, timeoutMs = 90000): Pr
   return fetch(url, { ...init, signal: controller.signal }).finally(() => window.clearTimeout(timer));
 }
 
-async function requestGemini(apiKey: string, prompt: string, model: string): Promise<string> {
+async function requestGemini(apiKey: string, prompt: string, model: string, maxOutputTokens: number): Promise<string> {
   const response = await fetchWithTimeout(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`,
     {
@@ -334,7 +442,7 @@ async function requestGemini(apiKey: string, prompt: string, model: string): Pro
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
         contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.45, maxOutputTokens: 1800 },
+        generationConfig: { temperature: 0.45, maxOutputTokens },
       }),
     },
   );
@@ -343,7 +451,7 @@ async function requestGemini(apiKey: string, prompt: string, model: string): Pro
   return json.candidates?.[0]?.content?.parts?.map((part) => part.text ?? "").join("") ?? "";
 }
 
-async function requestChatCompletion(provider: PracticeAiProvider, apiKey: string, prompt: string, model: string): Promise<string> {
+async function requestChatCompletion(provider: PracticeAiProvider, apiKey: string, prompt: string, model: string, maxOutputTokens: number): Promise<string> {
   const baseUrl = provider === "groq" ? "https://api.groq.com/openai/v1" : "https://api.openai.com/v1";
   const response = await fetchWithTimeout(`${baseUrl}/chat/completions`, {
     method: "POST",
@@ -351,7 +459,7 @@ async function requestChatCompletion(provider: PracticeAiProvider, apiKey: strin
     body: JSON.stringify({
       model,
       temperature: 0.45,
-      max_tokens: 1800,
+      max_tokens: maxOutputTokens,
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
         { role: "user", content: prompt },
@@ -374,12 +482,60 @@ export async function generatePracticeText(request: PracticeGenerationRequest): 
   const apiKey = loadProviderKeys()[selected.provider]?.trim();
   if (!apiKey) throw new Error("The selected AI provider key is not available. Check Settings > AI Setup.");
 
+  const targetWords = getTargetWords(request);
+  const maxOutputTokens = getProviderTokenBudget(targetWords);
   const prompt = buildPrompt(request);
   const raw = selected.provider === "gemini"
-    ? await requestGemini(apiKey, prompt, selected.model)
-    : await requestChatCompletion(selected.provider, apiKey, prompt, selected.model);
-  const text = normalizePracticeText(raw);
+    ? await requestGemini(apiKey, prompt, selected.model, maxOutputTokens)
+    : await requestChatCompletion(selected.provider, apiKey, prompt, selected.model, maxOutputTokens);
+  let text = normalizePracticeText(raw);
   if (!text) throw new Error(`${selected.label} returned no usable practice text. Try again.`);
+
+  let wordCount = countPracticeWords(text);
+  const targetWindow = getTargetWindow(targetWords);
+  if (wordCount > targetWindow.maximum) {
+    text = trimToSentenceBoundary(text, targetWindow.maximum);
+    wordCount = countPracticeWords(text);
+  }
+
+  if (wordCount < targetWindow.minimum) {
+    const expansionPrompt = buildPrompt(request, { previousWordCount: wordCount });
+    const expandedRaw = selected.provider === "gemini"
+      ? await requestGemini(apiKey, expansionPrompt, selected.model, maxOutputTokens)
+      : await requestChatCompletion(selected.provider, apiKey, expansionPrompt, selected.model, maxOutputTokens);
+    text = normalizePracticeText(expandedRaw);
+    if (!text) throw new Error(`${selected.label} returned no usable practice text after its length retry. Try again.`);
+    wordCount = countPracticeWords(text);
+    if (wordCount > targetWindow.maximum) {
+      text = trimToSentenceBoundary(text, targetWindow.maximum);
+      wordCount = countPracticeWords(text);
+    }
+
+    if (wordCount < targetWindow.minimum) {
+      const remainingWords = Math.max(1, targetWords - wordCount);
+      const continuationPrompt = buildPrompt(request, {
+        previousWordCount: wordCount,
+        remainingWords,
+        continuation: true,
+      });
+      const continuationRaw = selected.provider === "gemini"
+        ? await requestGemini(apiKey, continuationPrompt, selected.model, maxOutputTokens)
+        : await requestChatCompletion(selected.provider, apiKey, continuationPrompt, selected.model, maxOutputTokens);
+      const continuation = normalizePracticeText(continuationRaw);
+      if (continuation) {
+        text = normalizePracticeText(`${text}\n\n${continuation}`);
+        wordCount = countPracticeWords(text);
+        if (wordCount > targetWindow.maximum) {
+          text = trimToSentenceBoundary(text, targetWindow.maximum);
+          wordCount = countPracticeWords(text);
+        }
+      }
+    }
+  }
+
+  if (!isWithinTargetWindow(wordCount, targetWords)) {
+    throw shortResponseError(targetWords, wordCount);
+  }
 
   return { text, modelId: selected.id, provider: selected.provider, modelLabel: selected.label };
 }
