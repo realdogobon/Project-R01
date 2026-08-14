@@ -1,0 +1,122 @@
+import assert from "node:assert/strict";
+import { createRequire } from "node:module";
+
+const require = createRequire(import.meta.url);
+const puppeteer = require("/tmp/node_modules/puppeteer-core");
+
+const previewUrl = process.env.PREVIEW_URL || "https://3000-imtbdo58j1lh8wnjamngs-672e8f19.us4.manus.computer";
+const browser = await puppeteer.launch({
+  executablePath: "/usr/bin/chromium",
+  headless: true,
+  args: ["--no-sandbox", "--disable-dev-shm-usage"],
+});
+
+try {
+  const page = await browser.newPage();
+  await page.setViewport({
+    width: Number(process.env.VIEWPORT_WIDTH || 1280),
+    height: Number(process.env.VIEWPORT_HEIGHT || 720),
+  });
+  const errors = [];
+  page.on("pageerror", (error) => errors.push(String(error)));
+  page.on("console", (message) => {
+    if (message.type() === "error") errors.push(message.text());
+  });
+
+  await page.goto(`${previewUrl}/?from_webdev=1`, { waitUntil: "networkidle2" });
+  await page.click('button[title="Settings"]');
+  await page.waitForSelector('[data-settings-panel="true"]');
+  await new Promise((resolve) => setTimeout(resolve, 80));
+  assert.equal(
+    await page.$eval('[data-settings-panel="true"] [role="dialog"]',
+      (dialog) => document.activeElement === dialog,
+    ),
+    true,
+  );
+
+  const categories = await page.$$eval(
+    '[data-settings-panel="true"] button[aria-pressed]',
+    (buttons) => buttons.map((button) => button.textContent?.replace(/\s+/g, "").trim()),
+  );
+  assert.deepEqual(categories, [
+    "AppearanceThemeandfont",
+    "KeyboardKeys&typing",
+    "PracticeFocus&feedback",
+    "AmbientFocusSoundscapes",
+    "PerformanceRendering",
+    "ScannerOCRproviders",
+  ]);
+
+  const visibleSectionFor = async (label) => {
+    const categoryIds = {
+      Appearance: "appearance",
+      Keyboard: "keyboard",
+      Practice: "practice",
+      "Ambient Focus": "ambient",
+      Performance: "performance",
+      Scanner: "scanner",
+    };
+    const categoryId = categoryIds[label];
+    if (!categoryId) throw new Error(`Missing category mapping: ${label}`);
+    await page.click(`[data-settings-category="${categoryId}"]`);
+    await new Promise((resolve) => setTimeout(resolve, 180));
+    return page.$$eval('[data-settings-panel] section', (sections) =>
+      sections
+        .filter((section) => !section.classList.contains("hidden"))
+        .map((section) => section.textContent?.replace(/\s+/g, " ").trim().slice(0, 80)),
+    );
+  };
+
+  assert.match((await visibleSectionFor("Appearance")).join(" "), /Appearance/);
+  assert.match((await visibleSectionFor("Keyboard")).join(" "), /Keyboard/);
+  assert.match((await visibleSectionFor("Practice")).join(" "), /Gameplay/);
+  assert.match((await visibleSectionFor("Ambient Focus")).join(" "), /Ambient Focus/);
+  assert.match((await visibleSectionFor("Performance")).join(" "), /Performance/);
+  assert.match((await visibleSectionFor("Scanner")).join(" "), /Scanner/);
+
+  await page.evaluate(() => {
+    const button = [...document.querySelectorAll('[data-settings-panel] button[aria-pressed]')]
+      .find((candidate) => candidate.textContent?.includes("Appearance"));
+    if (!button) throw new Error("Missing Appearance category button");
+    button.click();
+  });
+  await new Promise((resolve) => setTimeout(resolve, 150));
+
+  if (process.env.SETTINGS_CATEGORY_SCREENSHOT) {
+    await page.screenshot({
+      path: process.env.SETTINGS_CATEGORY_SCREENSHOT,
+      fullPage: false,
+    });
+  }
+
+  await page.evaluate(() => {
+    const button = [...document.querySelectorAll('[data-settings-panel] button')]
+      .find((candidate) => candidate.textContent?.trim().startsWith("Themes"));
+    if (!button) throw new Error("Missing Themes subview button");
+    button.click();
+  });
+  assert.equal(
+    await page.$$eval('[data-settings-panel] button', (buttons) =>
+      buttons.filter((button) => button.textContent?.trim() === "Classic").length,
+    ),
+    1,
+  );
+
+  if (process.env.SETTINGS_PROBE_SCREENSHOT) {
+    await page.screenshot({
+      path: process.env.SETTINGS_PROBE_SCREENSHOT,
+      fullPage: false,
+    });
+  }
+
+  await page.keyboard.press("Escape");
+  const settingsHeadingCount = await page.$$eval('[data-settings-panel] span', (spans) =>
+    spans.filter((span) => span.textContent?.trim() === "Settings").length,
+  );
+  assert.ok(settingsHeadingCount === 0 || settingsHeadingCount === 1);
+
+  assert.deepEqual(errors, []);
+  console.log("Settings categorized navigation probe passed with zero browser errors.");
+} finally {
+  await browser.close();
+}

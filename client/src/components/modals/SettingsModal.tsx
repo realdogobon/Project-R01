@@ -28,6 +28,12 @@ import {
   GlassWater,
   MapPin,
   CloudLightning,
+  Palette,
+  Keyboard,
+  BarChart3,
+  Headphones,
+  Gauge,
+  ScanLine,
   Save,
   Trash2,
   Plus,
@@ -93,6 +99,58 @@ interface ThemeSliderProps {
   onChange: (v: number) => void;
   accentColor: string;
 }
+
+type SettingsCategory =
+  | "appearance"
+  | "keyboard"
+  | "practice"
+  | "ambient"
+  | "performance"
+  | "scanner";
+
+const SETTINGS_CATEGORIES: Array<{
+  id: SettingsCategory;
+  label: string;
+  description: string;
+  Icon: typeof Palette;
+}> = [
+  {
+    id: "appearance",
+    label: "Appearance",
+    description: "Theme and font",
+    Icon: Palette,
+  },
+  {
+    id: "keyboard",
+    label: "Keyboard",
+    description: "Keys & typing",
+    Icon: Keyboard,
+  },
+  {
+    id: "practice",
+    label: "Practice",
+    description: "Focus & feedback",
+    Icon: BarChart3,
+  },
+  {
+    id: "ambient",
+    label: "Ambient Focus",
+    description: "Soundscapes",
+    Icon: Headphones,
+  },
+  {
+    id: "performance",
+    label: "Performance",
+    description: "Rendering",
+    Icon: Gauge,
+  },
+  {
+    id: "scanner",
+    label: "Scanner",
+    description: "OCR providers",
+    Icon: ScanLine,
+  },
+];
 
 export function ThemeSlider({
   value,
@@ -195,9 +253,12 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     | "errorSounds"
     | "soundCentre"
   >("main");
+  const [activeCategory, setActiveCategory] =
+    useState<SettingsCategory>("appearance");
   const [isSavingPreset, setIsSavingPreset] = useState(false);
   const [newPresetName, setNewPresetName] = useState("");
   const scrollRef = React.useRef<HTMLDivElement>(null);
+  const panelRef = React.useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -208,7 +269,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
       }, 150);
       return () => clearTimeout(timer);
     }
-  }, [view, isOpen]);
+  }, [view, activeCategory, isOpen]);
 
   const activeSoundsList = Object.keys(ambientMix).filter(
     (id) => ambientMix[id] > 0,
@@ -237,7 +298,14 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   useEffect(() => {
     if (!isOpen) {
       setView("main");
+      setActiveCategory("appearance");
     }
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const timer = window.setTimeout(() => panelRef.current?.focus(), 0);
+    return () => window.clearTimeout(timer);
   }, [isOpen]);
 
   const currentThemeObj =
@@ -266,6 +334,11 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
           {/* Core settings cabinet drawer panel */}
           <motion.div
+            ref={panelRef}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Settings"
+            tabIndex={-1}
             initial={{ x: "100%", opacity: 0.8 }}
             animate={{ x: 0, opacity: 1 }}
             exit={{ x: "100%", opacity: 0.8 }}
@@ -395,8 +468,66 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                     transition={{ duration: 0.12 }}
                     className="space-y-5 flex-1 flex flex-col min-h-0"
                   >
+                    <div className="grid grid-cols-2 gap-1.5 pb-1">
+                      {SETTINGS_CATEGORIES.map(
+                        ({ id, label, description, Icon }) => {
+                          const selected = activeCategory === id;
+                          return (
+                            <button
+                              key={id}
+                              type="button"
+                              aria-pressed={selected}
+                              data-settings-category={id}
+                              onClick={() => {
+                                setActiveCategory(id);
+                                setView("main");
+                              }}
+                              className={cn(
+                                "group flex items-center gap-2.5 rounded-xl px-2.5 py-2.5 text-left transition-colors duration-150 cursor-pointer border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-400/50 dark:focus-visible:ring-white/30",
+                                selected
+                                  ? "bg-neutral-500/[0.07] dark:bg-white/[0.07] border-neutral-200/70 dark:border-white/[0.08]"
+                                  : "bg-transparent border-transparent hover:bg-neutral-500/[0.04] dark:hover:bg-white/[0.035]",
+                              )}
+                            >
+                              <span
+                                className={cn(
+                                  "flex size-7 shrink-0 items-center justify-center rounded-lg transition-colors duration-150",
+                                  selected
+                                    ? "bg-neutral-900/[0.07] text-neutral-800 dark:bg-white/[0.1] dark:text-white"
+                                    : "bg-neutral-500/[0.05] text-neutral-400 group-hover:text-neutral-600 dark:bg-white/[0.04] dark:text-neutral-500 dark:group-hover:text-neutral-300",
+                                )}
+                                style={
+                                  selected ? { color: accentColor } : undefined
+                                }
+                              >
+                                <Icon className="size-3.5" strokeWidth={1.8} />
+                              </span>
+                              <span className="min-w-0">
+                                <span
+                                  className={cn(
+                                    "block truncate text-[11px] font-semibold leading-tight",
+                                    selected
+                                      ? "text-neutral-900 dark:text-neutral-50"
+                                      : "text-neutral-600 dark:text-neutral-300",
+                                  )}
+                                >
+                                  {label}
+                                </span>
+                                <span className="mt-0.5 block truncate text-[9px] leading-tight text-neutral-400 dark:text-neutral-500">
+                                  {description}
+                                </span>
+                              </span>
+                            </button>
+                          );
+                        },
+                      )}
+                    </div>
+
                     {/* SECTION: APPEARANCE */}
-                    <Section title="Appearance">
+                    <Section
+                      title="Appearance"
+                      className={activeCategory !== "appearance" ? "hidden" : undefined}
+                    >
                       <Row label="Mode">
                         <ThemeSwitcher />
                       </Row>
@@ -437,7 +568,10 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                     </Section>
 
                     {/* SECTION: KEYBOARD */}
-                    <Section title="Keyboard">
+                    <Section
+                      title="Keyboard"
+                      className={activeCategory !== "keyboard" ? "hidden" : undefined}
+                    >
                       <Row label="Keyboard Type">
                         <div className="relative isolate flex h-8 rounded-full border border-neutral-200 dark:border-white/10 bg-neutral-100 dark:bg-white/[0.06] p-1">
                           {[
@@ -550,7 +684,10 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                     </Section>
 
                     {/* SECTION: GAMEPLAY */}
-                    <Section title="Gameplay">
+                    <Section
+                      title="Gameplay"
+                      className={activeCategory !== "practice" ? "hidden" : undefined}
+                    >
                       <Toggle
                         label="Live stats"
                         description="Show WPM and accuracy while typing"
@@ -577,7 +714,10 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                     </Section>
 
                     {/* SECTION: AMBIENT FOCUS */}
-                    <Section title="Ambient Focus">
+                    <Section
+                      title="Ambient Focus"
+                      className={activeCategory !== "ambient" ? "hidden" : undefined}
+                    >
                       <Toggle
                         label="Soundscape"
                         description="Calming constant background atmosphere"
@@ -613,7 +753,10 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                     </Section>
 
                     {/* SECTION: PERFORMANCE */}
-                    <Section title="Performance">
+                    <Section
+                      title="Performance"
+                      className={activeCategory !== "performance" ? "hidden" : undefined}
+                    >
                       <Toggle
                         label="Better Performance"
                         description="Limit high-intensity blurs for maximum FPS"
@@ -626,7 +769,10 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                     </Section>
 
                     {/* SECTION: SCANNER */}
-                    <Section title="Scanner">
+                    <Section
+                      title="Scanner"
+                      className={activeCategory !== "scanner" ? "hidden" : undefined}
+                    >
                       <p className="text-[11px] text-neutral-400 dark:text-neutral-500 leading-relaxed -mt-2 mb-3">
                         AI models only run when a key is saved here. Without a key, scans fall back to the local browser engine. Keys stay on your device.
                       </p>
@@ -1419,12 +1565,14 @@ function FontGroup({
 function Section({
   title,
   children,
+  className,
 }: {
   title: string;
   children: React.ReactNode;
+  className?: string;
 }) {
   return (
-    <section className="space-y-1 block text-left shrink-0">
+    <section className={cn("space-y-1 block text-left shrink-0", className)}>
       <p className="mb-2 px-3 font-semibold text-[10px] text-neutral-400 dark:text-neutral-500 uppercase tracking-widest leading-none">
         {title}
       </p>
