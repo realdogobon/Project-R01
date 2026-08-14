@@ -427,13 +427,31 @@ function shortResponseError(targetWords: number, wordCount: number): Error {
   return new Error(`The AI returned ${wordCount} words for a ${targetWords}-word request. Try again or choose a shorter length.`);
 }
 
-function fetchWithTimeout(url: string, init: RequestInit, timeoutMs = 90000): Promise<Response> {
-  const controller = new AbortController();
-  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
-  return fetch(url, { ...init, signal: controller.signal }).finally(() => window.clearTimeout(timer));
+function createPracticeAbortError(): Error {
+  if (typeof DOMException !== "undefined") return new DOMException("Practice generation was stopped.", "AbortError");
+  const error = new Error("Practice generation was stopped.");
+  error.name = "AbortError";
+  return error;
 }
 
-async function requestGemini(apiKey: string, prompt: string, model: string, maxOutputTokens: number): Promise<string> {
+function throwIfPracticeAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) throw createPracticeAbortError();
+}
+
+function fetchWithTimeout(url: string, init: RequestInit, timeoutMs = 90000, externalSignal?: AbortSignal): Promise<Response> {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+  const handleAbort = () => controller.abort();
+  if (externalSignal?.aborted) controller.abort();
+  else externalSignal?.addEventListener("abort", handleAbort, { once: true });
+  return fetch(url, { ...init, signal: controller.signal }).finally(() => {
+    window.clearTimeout(timer);
+    externalSignal?.removeEventListener("abort", handleAbort);
+  });
+}
+
+async function requestGemini(apiKey: string, prompt: string, model: string, maxOutputTokens: number, signal?: AbortSignal): Promise<string> {
+  throwIfPracticeAborted(signal);
   const response = await fetchWithTimeout(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`,
     {
@@ -445,13 +463,16 @@ async function requestGemini(apiKey: string, prompt: string, model: string, maxO
         generationConfig: { temperature: 0.45, maxOutputTokens },
       }),
     },
+    90000,
+    signal,
   );
   if (!response.ok) throw new Error(`Gemini API error ${response.status}: ${(await response.text()).slice(0, 240)}`);
   const json = await response.json() as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
   return json.candidates?.[0]?.content?.parts?.map((part) => part.text ?? "").join("") ?? "";
 }
 
-async function requestChatCompletion(provider: PracticeAiProvider, apiKey: string, prompt: string, model: string, maxOutputTokens: number): Promise<string> {
+async function requestChatCompletion(provider: PracticeAiProvider, apiKey: string, prompt: string, model: string, maxOutputTokens: number, signal?: AbortSignal): Promise<string> {
+  throwIfPracticeAborted(signal);
   const baseUrl = provider === "groq" ? "https://api.groq.com/openai/v1" : "https://api.openai.com/v1";
   const response = await fetchWithTimeout(`${baseUrl}/chat/completions`, {
     method: "POST",
@@ -465,7 +486,7 @@ async function requestChatCompletion(provider: PracticeAiProvider, apiKey: strin
         { role: "user", content: prompt },
       ],
     }),
-  });
+  }, 90000, signal);
   if (!response.ok) throw new Error(`${provider === "groq" ? "Groq" : "OpenAI"} API error ${response.status}: ${(await response.text()).slice(0, 240)}`);
   const json = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
   return json.choices?.[0]?.message?.content ?? "";
@@ -475,7 +496,8 @@ export function getAvailablePracticeModel(keys: ProviderKeys = loadProviderKeys(
   return MODEL_ORDER.find((model) => Boolean(keys[model.provider]?.trim()));
 }
 
-export async function generatePracticeText(request: PracticeGenerationRequest): Promise<PracticeGenerationResult> {
+export async function generatePracticeText(request: PracticeGenerationRequest, signal?: AbortSignal): Promise<PracticeGenerationResult> {
+  throwIfPracticeAborted(signal);
   const selected = getAvailablePracticeModel();
   if (!selected) throw new Error("Choose a provider in AI Setup to generate practice text.");
 
@@ -485,9 +507,11 @@ export async function generatePracticeText(request: PracticeGenerationRequest): 
   const targetWords = getTargetWords(request);
   const maxOutputTokens = getProviderTokenBudget(targetWords);
   const prompt = buildPrompt(request);
+  throwIfPracticeAborted(signal);
   const raw = selected.provider === "gemini"
-    ? await requestGemini(apiKey, prompt, selected.model, maxOutputTokens)
-    : await requestChatCompletion(selected.provider, apiKey, prompt, selected.model, maxOutputTokens);
+    ? await requestGemini(apiKey, prompt, selected.model, maxOutputTokens, signal)
+    : await requestChatCompletion(selected.provider, apiKey, prompt, selected.model, maxOutputTokens, signal);
+  throwIfPracticeAborted(signal);
   let text = normalizePracticeText(raw);
   if (!text) throw new Error(`${selected.label} returned no usable practice text. Try again.`);
 
@@ -499,10 +523,12 @@ export async function generatePracticeText(request: PracticeGenerationRequest): 
   }
 
   if (wordCount < targetWindow.minimum) {
+    throwIfPracticeAborted(signal);
     const expansionPrompt = buildPrompt(request, { previousWordCount: wordCount });
     const expandedRaw = selected.provider === "gemini"
-      ? await requestGemini(apiKey, expansionPrompt, selected.model, maxOutputTokens)
-      : await requestChatCompletion(selected.provider, apiKey, expansionPrompt, selected.model, maxOutputTokens);
+      ? await requestGemini(apiKey, expansionPrompt, selected.model, maxOutputTokens, signal)
+      : await requestChatCompletion(selected.provider, apiKey, expansionPrompt, selected.model, maxOutputTokens, signal);
+    throwIfPracticeAborted(signal);
     text = normalizePracticeText(expandedRaw);
     if (!text) throw new Error(`${selected.label} returned no usable practice text after its length retry. Try again.`);
     wordCount = countPracticeWords(text);
@@ -512,6 +538,7 @@ export async function generatePracticeText(request: PracticeGenerationRequest): 
     }
 
     if (wordCount < targetWindow.minimum) {
+      throwIfPracticeAborted(signal);
       const remainingWords = Math.max(1, targetWords - wordCount);
       const continuationPrompt = buildPrompt(request, {
         previousWordCount: wordCount,
@@ -519,8 +546,9 @@ export async function generatePracticeText(request: PracticeGenerationRequest): 
         continuation: true,
       });
       const continuationRaw = selected.provider === "gemini"
-        ? await requestGemini(apiKey, continuationPrompt, selected.model, maxOutputTokens)
-        : await requestChatCompletion(selected.provider, apiKey, continuationPrompt, selected.model, maxOutputTokens);
+        ? await requestGemini(apiKey, continuationPrompt, selected.model, maxOutputTokens, signal)
+        : await requestChatCompletion(selected.provider, apiKey, continuationPrompt, selected.model, maxOutputTokens, signal);
+      throwIfPracticeAborted(signal);
       const continuation = normalizePracticeText(continuationRaw);
       if (continuation) {
         text = normalizePracticeText(`${text}\n\n${continuation}`);
@@ -537,5 +565,6 @@ export async function generatePracticeText(request: PracticeGenerationRequest): 
     throw shortResponseError(targetWords, wordCount);
   }
 
+  throwIfPracticeAborted(signal);
   return { text, modelId: selected.id, provider: selected.provider, modelLabel: selected.label };
 }

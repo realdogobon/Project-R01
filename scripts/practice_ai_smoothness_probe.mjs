@@ -77,10 +77,13 @@ try {
       });
     });
     assert.ok(firstFrameLatencyMs <= 50, `${viewport.name}: first loading frame took ${firstFrameLatencyMs.toFixed(1)}ms`);
-    await page.waitForFunction(() => {
-      const button = [...document.querySelectorAll("button")].find((candidate) => candidate.textContent?.trim() === "Creating..." || candidate.textContent?.trim() === "Checking...");
-      return Boolean(button?.disabled);
-    }, { timeout: 1000 });
+    await page.waitForSelector('button[aria-label="Cancel Practice Text generation"]', { timeout: 1000 });
+    const cancelButtonState = await page.$eval('button[aria-label="Cancel Practice Text generation"]', (button) => ({
+      disabled: button.disabled,
+      text: button.textContent?.trim(),
+    }));
+    assert.equal(cancelButtonState.disabled, false, `${viewport.name}: Cancel button became disabled`);
+    assert.equal(cancelButtonState.text, "Cancel", `${viewport.name}: Cancel transition text is incorrect`);
 
     const animationSample = await page.evaluate(async () => {
       const spinner = document.querySelector(".practice-generation-spinner");

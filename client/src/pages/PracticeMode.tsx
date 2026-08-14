@@ -347,16 +347,7 @@ export function PracticeMode({
   const [aiCustomLengthWords, setAiCustomLengthWords] = useState("250");
   const [isGenerating, setIsGenerating] = useState(false);
   const [generateError, setGenerateError] = useState("");
-  const [generationStage, setGenerationStage] = useState<"drafting" | "checking">("drafting");
-
-  useEffect(() => {
-    if (!isGenerating) {
-      setGenerationStage("drafting");
-      return;
-    }
-    const stageTimer = window.setTimeout(() => setGenerationStage("checking"), 2200);
-    return () => window.clearTimeout(stageTimer);
-  }, [isGenerating]);
+  const aiAbortControllerRef = useRef<AbortController | null>(null);
 
   const selectedAiCategory = getPracticeAiCategory(aiCategory);
   const selectedAiTopic = getPracticeAiTopic(aiCategory, aiTopic);
@@ -369,14 +360,29 @@ export function PracticeMode({
     window.requestAnimationFrame(() => resolve());
   });
 
+  const isPracticeAbortError = (error: unknown): boolean => {
+    return Boolean(error && typeof error === "object" && "name" in error && error.name === "AbortError");
+  };
+
+  const cancelPracticeGeneration = () => {
+    const controller = aiAbortControllerRef.current;
+    if (!controller) return;
+    controller.abort();
+    aiAbortControllerRef.current = null;
+    setGenerateError("");
+    setIsGenerating(false);
+  };
+
   const handleGenerateAI = async () => {
     if (isGenerating) return;
+    const controller = new AbortController();
+    aiAbortControllerRef.current = controller;
     flushSync(() => {
       setIsGenerating(true);
       setGenerateError("");
-      setGenerationStage("drafting");
     });
     await waitForGenerationPaint();
+    if (controller.signal.aborted) return;
     try {
       const result = await generatePracticeText({
         categoryId: aiCategory,
@@ -385,7 +391,8 @@ export function PracticeMode({
         lengthId: aiLength,
         customTopic: aiCustomTopic,
         customLengthWords: Number(aiCustomLengthWords),
-      });
+      }, controller.signal);
+      if (controller.signal.aborted) return;
       if (result.text) {
         setText(result.text);
         if (!title.trim() || title === "Demo Test") {
@@ -399,10 +406,15 @@ export function PracticeMode({
         setGenerateError("The selected provider returned no usable practice text.");
       }
     } catch (err: any) {
-      console.error(err);
-      setGenerateError(err instanceof Error ? err.message : "Generation failed.");
+      if (!isPracticeAbortError(err) && !controller.signal.aborted) {
+        console.error(err);
+        setGenerateError(err instanceof Error ? err.message : "Generation failed.");
+      }
     } finally {
-      setIsGenerating(false);
+      if (aiAbortControllerRef.current === controller) {
+        aiAbortControllerRef.current = null;
+        setIsGenerating(false);
+      }
     }
   };
 
@@ -1894,7 +1906,14 @@ export function PracticeMode({
                   <span className="text-[12px] font-medium tracking-wide">Practice Text</span>
                 </div>
                 <div className="flex items-center h-full">
-                  <button onClick={() => setIsAiModalOpen(false)} aria-label="Close Practice Text" className="h-full px-4 hover:bg-[#E81123] hover:text-white transition-colors">
+                  <button
+                    onClick={() => {
+                      if (isGenerating) cancelPracticeGeneration();
+                      setIsAiModalOpen(false);
+                    }}
+                    aria-label="Close Practice Text"
+                    className="h-full px-4 hover:bg-[#E81123] hover:text-white transition-colors"
+                  >
                     <X className="w-4 h-4" />
                   </button>
                 </div>
@@ -1999,20 +2018,26 @@ export function PracticeMode({
                 <div className="flex items-center justify-end gap-3 pt-4 border-t border-black/5 dark:border-white/5">
                   <div className="flex items-center gap-2 shrink-0">
                     <button
-                      onClick={() => setIsAiModalOpen(false)}
+                      onClick={() => {
+                        if (isGenerating) cancelPracticeGeneration();
+                        else setIsAiModalOpen(false);
+                      }}
                       className="px-3 py-1.5 text-[13px] rounded-md hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
                     >
                       Cancel
                     </button>
                     <button
-                      onClick={handleGenerateAI}
-                      disabled={isGenerating}
+                      onClick={() => {
+                        if (isGenerating) cancelPracticeGeneration();
+                        else void handleGenerateAI();
+                      }}
                       aria-busy={isGenerating}
+                      aria-label={isGenerating ? "Cancel Practice Text generation" : "Generate Practice Text"}
                       className="flex items-center justify-center gap-2 px-3 py-1.5 rounded-md text-white text-[13px] transition-all active:scale-95 shadow-sm hover:opacity-90 min-w-[92px]"
-                      style={{ backgroundColor: themeAccentColor }}
+                      style={{ backgroundColor: isGenerating ? "#E81123" : themeAccentColor }}
                     >
-                      {isGenerating && <Loader2 className="practice-generation-spinner w-4 h-4" />}
-                      {isGenerating ? (generationStage === "checking" ? "Checking..." : "Creating...") : "Generate"}
+                      {isGenerating ? <X className="w-4 h-4" /> : null}
+                      {isGenerating ? "Cancel" : "Generate"}
                     </button>
                   </div>
                 </div>
