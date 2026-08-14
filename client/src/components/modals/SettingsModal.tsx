@@ -145,7 +145,9 @@ function reduceSettingsNavigation(
   }
 
   if (intent.kind === "reset") {
-    return { category: "appearance", view: "main" };
+    // Reset preferences, not navigation. Users should remain where they are
+    // so the reset action never pulls them out of the current Settings context.
+    return state;
   }
 
   if (intent.kind === "view") {

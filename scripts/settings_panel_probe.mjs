@@ -127,7 +127,7 @@ try {
   await new Promise((resolve) => setTimeout(resolve, 80));
   assert.equal(
     await page.$eval(
-      '[data-settings-category="appearance"]',
+      '[data-settings-category="scanner"]',
       (button) => button.getAttribute("aria-current"),
     ),
     "page",
