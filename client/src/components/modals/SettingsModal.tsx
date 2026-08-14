@@ -525,7 +525,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                   view !== "main" && "pt-6",
                 )}
               >
-              <AnimatePresence mode="wait">
+              <AnimatePresence>
                 {view === "main" ? (
                   <motion.div
                     key="main-view"
@@ -786,13 +786,13 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                       className={activeCategory !== "scanner" ? "hidden" : undefined}
                     >
                       <p className="mb-5 max-w-[280px] text-[12px] leading-relaxed text-neutral-400 dark:text-neutral-500">
-                        Connect a provider for AI OCR. Keys stay on this device.
+                        Add a key to use cloud scanning. Without one, scans stay on this device.
                       </p>
                       <div className="flex flex-col gap-4">
                         {[
-                          { key: "gemini", label: "Google Gemini" },
-                          { key: "groq", label: "Groq" },
-                          { key: "openai", label: "OpenAI" },
+                          { key: "gemini", label: "Gemini API key" },
+                          { key: "groq", label: "Groq API key" },
+                          { key: "openai", label: "OpenAI API key" },
                         ].map(({ key, label }) => (
                           <label key={key} className="flex flex-col gap-2">
                             <span className="text-[12px] font-medium tracking-tight text-neutral-800 dark:text-neutral-100">{label}</span>
@@ -808,7 +808,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                                 }
                                 saveProviderKeys(keys);
                               }}
-                              placeholder="API key"
+                              placeholder="Paste your key"
                               aria-label={`${label} API key`}
                               className="h-10 w-full rounded-lg border border-neutral-200 bg-white/80 px-3 text-[12px] text-neutral-700 outline-none transition-colors placeholder:text-neutral-400 focus:border-[#C28181] dark:border-white/10 dark:bg-black/20 dark:text-neutral-200 dark:placeholder:text-neutral-600 dark:focus:border-[#60C5EA]"
                             />
@@ -824,7 +824,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: 12 }}
                     transition={{ duration: 0.1 }}
-                    className="flex-1 min-h-0"
+                    className="flex-1 min-h-0 pt-1"
                   >
                     {/* Theme switcher grid matching grid-cols-2 gap-2 px-1 */}
                     <div className="grid grid-cols-2 gap-2">
@@ -895,7 +895,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: 12 }}
                     transition={{ duration: 0.1 }}
-                    className="flex-1 min-h-0 space-y-4"
+                    className="flex-1 min-h-0 space-y-4 pt-1"
                   >
                     <FontGroup
                       active={font}
@@ -921,7 +921,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: 12 }}
                     transition={{ duration: 0.1 }}
-                    className="flex-1 min-h-0 space-y-5"
+                    className="flex-1 min-h-0 space-y-5 pt-1"
                   >
                     <Section title="Sound Options">
                       <SubDrawerRow
@@ -957,7 +957,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: 12 }}
                     transition={{ duration: 0.1 }}
-                    className="flex-1 min-h-0"
+                    className="flex-1 min-h-0 pt-1"
                   >
                     <div className="space-y-4">
                       <div>
@@ -1135,7 +1135,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: 12 }}
                     transition={{ duration: 0.1 }}
-                    className="flex-1 min-h-0"
+                    className="flex-1 min-h-0 pt-1"
                   >
                     <div className="space-y-4">
                       <div>
@@ -1207,7 +1207,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: 12 }}
                     transition={{ duration: 0.1 }}
-                    className="space-y-2 pb-8"
+                    className="space-y-2 pb-8 pt-1"
                   >
                     <div className="flex items-center justify-between px-2 mb-2 pb-2 border-b border-neutral-200 dark:border-neutral-800">
                       <div className="text-[10px] font-bold tracking-wider text-neutral-400 dark:text-neutral-500 uppercase">

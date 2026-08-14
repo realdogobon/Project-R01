@@ -152,7 +152,15 @@ try {
   await new Promise((resolve) => setTimeout(resolve, 240));
   assert.equal(
     await page.$$eval('[data-settings-panel] button', (buttons) =>
-      buttons.filter((button) => button.textContent?.trim() === "Classic").length,
+      buttons.filter((button) => {
+        if (button.textContent?.trim() !== "Classic") return false;
+        let node = button;
+        while (node instanceof HTMLElement) {
+          if (getComputedStyle(node).opacity === "0") return false;
+          node = node.parentElement;
+        }
+        return true;
+      }).length,
     ),
     1,
   );
