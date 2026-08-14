@@ -520,7 +520,10 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
               <div
                 ref={scrollRef}
-                className="flex-1 min-w-0 overflow-y-auto custom-scrollbar px-7 pb-10"
+                className={cn(
+                  "flex-1 min-w-0 overflow-y-auto custom-scrollbar px-7 pb-10",
+                  view !== "main" && "pt-6",
+                )}
               >
               <AnimatePresence mode="wait">
                 {view === "main" ? (
