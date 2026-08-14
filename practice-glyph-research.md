@@ -26,4 +26,8 @@ Google Material Symbols are a credible alternative: Google documents more than 2
 
 ## Implementation boundary
 
-The selected glyph should replace the current sparkle in the standalone Practice trigger and the AI Practice modal title bar. The approved modal structure, fields, controls, and blue accent remain unchanged. No external font or downloaded asset should be added.
+The selected glyph replaces the current sparkle in the standalone Practice trigger and the Practice text modal title bar. The approved modal structure, fields, and controls remain unchanged. The trigger and title glyph now inherit the active RoyScript theme accent rather than a hard-coded blue AI accent; the modal action controls retain their existing theme behavior. No external font or downloaded asset was added.
+
+## Verification note
+
+The no-credit browser smoothness probe confirmed on desktop and mobile that the spinner uses the scoped `practice-generation-spin` animation and advances across successive animation frames. It also confirmed that the `NotebookPen` stroke color matches the active theme accent in both viewports. TypeScript, production build, and the deterministic Practice regression probe passed after the change.

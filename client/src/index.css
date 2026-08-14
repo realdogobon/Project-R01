@@ -1,3 +1,4 @@
+/* RoyScript motion rule: Practice generation feedback stays quiet, compositor-driven, and fluid. */
 @import "tailwindcss";
 
 @custom-variant dark (&:where(.dark, .dark *));
@@ -8,6 +9,22 @@
 }
 
 @layer base {
+  @keyframes practice-generation-spin {
+    to { transform: rotate(360deg); }
+  }
+
+  .practice-generation-spinner {
+    animation: practice-generation-spin 720ms linear infinite;
+    transform-origin: center;
+    will-change: transform;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .practice-generation-spinner {
+      animation-duration: 1200ms;
+    }
+  }
+
   body {
     @apply bg-neutral-100 text-neutral-900 dark:bg-[#111111] dark:text-neutral-100;
     font-family: var(--app-font-family, var(--font-sans));

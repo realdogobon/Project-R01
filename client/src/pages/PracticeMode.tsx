@@ -1,3 +1,4 @@
+// RoyScript Practice Mode: writing-first, palette-led, and fluid under provider latency.
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { ArrowLeft, Play, CheckCircle, Clock, NotebookPen, Sparkles, Loader2, Settings2, ArrowRight, RotateCcw, RotateCw, X, Zap, Trophy, FileText, BookOpen, HeartPulse, FastForward, PlaySquare, Lock, Hourglass, SlidersHorizontal, ChevronDown } from "lucide-react";
@@ -359,17 +360,21 @@ export function PracticeMode({
   const selectedAiCategory = getPracticeAiCategory(aiCategory);
   const selectedAiTopic = getPracticeAiTopic(aiCategory, aiTopic);
 
+  const waitForGenerationPaint = () => new Promise<void>((resolve) => {
+    if (typeof window === "undefined") {
+      resolve();
+      return;
+    }
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => resolve());
+    });
+  });
+
   const handleGenerateAI = async () => {
     if (isGenerating) return;
     setIsGenerating(true);
     setGenerateError("");
-    await new Promise<void>((resolve) => {
-      if (typeof window === "undefined") {
-        resolve();
-        return;
-      }
-      window.requestAnimationFrame(() => resolve());
-    });
+    await waitForGenerationPaint();
     try {
       const result = await generatePracticeText({
         categoryId: aiCategory,
@@ -441,13 +446,7 @@ export function PracticeMode({
     }
     setIsGenerating(true);
     setGenerateError("");
-    await new Promise<void>((resolve) => {
-      if (typeof window === "undefined") {
-        resolve();
-        return;
-      }
-      window.requestAnimationFrame(() => resolve());
-    });
+    await waitForGenerationPaint();
     try {
       if (advMode === "zen") {
         setText("");
@@ -1546,15 +1545,9 @@ export function PracticeMode({
       setAiDifficulty(targetDifficulty);
       setAiLength(targetLength);
 
-      setIsGenerating(true);
-      setGenerateError("");
-      await new Promise<void>((resolve) => {
-        if (typeof window === "undefined") {
-          resolve();
-          return;
-        }
-        window.requestAnimationFrame(() => resolve());
-      });
+       setIsGenerating(true);
+       setGenerateError("");
+       await waitForGenerationPaint();
       try {
         const result = await generatePracticeText({
           categoryId: targetCategory,
@@ -1712,7 +1705,8 @@ export function PracticeMode({
                                   }}
                                   aria-label="Create practice text"
                                   title="Create practice text"
-                                  className="p-1.5 text-blue-500 dark:text-blue-400 hover:text-blue-600 dark:hover:text-blue-300 transition-colors rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 active:scale-95"
+                                  style={{ color: themeAccentColor }}
+                                  className="p-1.5 hover:opacity-70 transition-opacity rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/20 dark:focus-visible:ring-white/20 active:scale-95"
                                 >
                                   <NotebookPen className="w-[18px] h-[18px]" strokeWidth={1.8} />
                                 </button>
@@ -1748,7 +1742,7 @@ export function PracticeMode({
                                 />
                                 {isGenerating && (
                                   <div className="absolute inset-0 bg-white/50 dark:bg-black/50 backdrop-blur-[2px] flex items-center justify-center rounded-md border border-transparent z-10 animate-in fade-in">
-                                    <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
+                                    <Loader2 className="practice-generation-spinner w-6 h-6" style={{ color: themeAccentColor }} />
                                   </div>
                                 )}
                               </div>
@@ -1891,7 +1885,7 @@ export function PracticeMode({
             >
               <div className="h-[38px] flex items-center justify-between pl-4 pr-0 shrink-0 select-none bg-black/5 dark:bg-white/5 border-b border-black/5 dark:border-white/5">
                 <div className="flex items-center gap-2.5">
-                  <NotebookPen className="w-4 h-4 text-blue-500" />
+                  <NotebookPen className="w-4 h-4" style={{ color: themeAccentColor }} />
                   <span className="text-[12px] font-medium tracking-wide">Practice text</span>
                 </div>
                 <div className="flex items-center h-full">
@@ -2012,7 +2006,7 @@ export function PracticeMode({
                       className="flex items-center justify-center gap-2 px-3 py-1.5 rounded-md text-white text-[13px] transition-all active:scale-95 shadow-sm hover:opacity-90 min-w-[92px]"
                       style={{ backgroundColor: themeAccentColor }}
                     >
-                      {isGenerating && <Loader2 className="w-4 h-4 animate-spin" />}
+                      {isGenerating && <Loader2 className="practice-generation-spinner w-4 h-4" />}
                       {isGenerating ? (generationStage === "checking" ? "Checking..." : "Creating...") : "Generate"}
                     </button>
                   </div>
