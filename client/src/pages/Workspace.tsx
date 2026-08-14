@@ -87,6 +87,9 @@ import { transcribeWithModel, hasApiKeyFor, getProviderOf } from "../lib/AiVisio
 import { ExportEngine } from "../lib/ExportEngine";
 import { ingestDocument, searchIntelligence, syncRagIndex, ScanDocument, getAllScans, deleteScan, updateDocument, restoreScan } from "../lib/rag-search";
 const globalScannerEngine = new ScannerEngine();
+const SCANNER_MAX_VISUAL_FILE_BYTES = 20_000_000;
+const SCANNER_MAX_TEXT_FILE_BYTES = 2_000_000;
+const SCANNER_TEXT_EXTENSIONS = ["txt", "md", "html", "htm", "css", "json", "js", "ts", "csv", "xml", "yaml", "yml"];
 
 
 export function cleanOcrText(text: string): string {
@@ -1835,6 +1838,14 @@ export default function Workspace() {
   };
 
   const processUploadedFile = async (file: File) => {
+    const extension = file?.name ? file.name.split(".").pop()?.toLowerCase() : "";
+    const isPlaintext = (file?.type && file.type.startsWith("text/")) || SCANNER_TEXT_EXTENSIONS.includes(extension || "");
+    const maximumBytes = isPlaintext ? SCANNER_MAX_TEXT_FILE_BYTES : SCANNER_MAX_VISUAL_FILE_BYTES;
+    if (file.size > maximumBytes) {
+      setOcrError("");
+      setScannerLogs([`File is larger than the scanner's ${isPlaintext ? "2 MB text" : "20 MB"} per-file limit.`]);
+      return;
+    }
     const uploadToken = ++pdfRenderTokenRef.current;
     setIsScannerDocumentLoading(true);
     setScannerFile(file);
@@ -1857,8 +1868,6 @@ export default function Workspace() {
     setScannerScaleX(1);
     setScannerScaleY(1);
     setScannerProgress({ currentIndex: 0, total: 0, status: 'idle' });
-
-    const extension = file?.name ? file.name.split(".").pop()?.toLowerCase() : "";
 
     if (extension === "pdf" || file.type === "application/pdf") {
        try {
@@ -1924,9 +1933,6 @@ export default function Workspace() {
       setScannerRawStitchedUrl("");
       setIsOcrLoading(true);
 
-      const plaintextExtensions = ["txt", "md", "html", "htm", "css", "json", "js", "ts", "csv", "xml", "yaml", "yml"];
-      const isPlaintext = (file?.type && file.type.startsWith("text/")) || plaintextExtensions.includes(extension || "");
-
       if (isPlaintext) {
         const reader = new FileReader();
         reader.onload = (e) => {
@@ -1961,6 +1967,89 @@ export default function Workspace() {
       await processUploadedFile(file);
     }
     event.target.value = '';
+  };
+
+  const importScannerDocumentFromUrl = async (rawUrl: string) => {
+    try {
+      const source = new URL(rawUrl.trim());
+      if (source.protocol !== "https:" && source.protocol !== "http:") throw new Error("Unsupported URL protocol");
+      const response = await fetch(source.toString());
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const advertisedSize = Number(response.headers.get("content-length") || "0");
+      const sourceLooksLikeText = /\.(?:txt|md|html?|css|json|js|ts|csv|xml|ya?ml)$/i.test(source.pathname)
+        || /^(?:text\/|application\/(?:json|xml))/.test(response.headers.get("content-type") || "");
+      const maximumBytes = sourceLooksLikeText ? SCANNER_MAX_TEXT_FILE_BYTES : SCANNER_MAX_VISUAL_FILE_BYTES;
+      if (Number.isFinite(advertisedSize) && advertisedSize > maximumBytes) throw new Error("File exceeds scanner limit");
+      const blob = await response.blob();
+      if (blob.size > maximumBytes) throw new Error("File exceeds scanner limit");
+
+      const pathName = source.pathname.split("/").filter(Boolean).at(-1) || "linked-document";
+      const contentType = blob.type.split(";")[0].toLowerCase();
+      const extensionByType: Record<string, string> = {
+        "application/pdf": ".pdf",
+        "text/markdown": ".md",
+        "text/html": ".html",
+        "text/plain": ".txt",
+        "image/jpeg": ".jpg",
+        "image/png": ".png",
+        "image/webp": ".webp",
+      };
+      const hasExtension = /\.[a-z0-9]{1,8}$/i.test(pathName);
+      const fileName = hasExtension ? pathName : `${pathName}${extensionByType[contentType] || ".txt"}`;
+      await processUploadedFile(new File([blob], fileName, { type: contentType || blob.type }));
+    } catch {
+      setOcrError("");
+      setScannerLogs(["The document link could not be imported."]);
+    }
+  };
+
+  const importScannerImageSequence = async (files: File[]) => {
+    if (!files.length || files.some((file) => !file.type.startsWith("image/") || file.size > SCANNER_MAX_VISUAL_FILE_BYTES)) {
+      setOcrError("");
+      setScannerLogs(["Image sequence could not be prepared."]);
+      return;
+    }
+
+    try {
+      const pages = await Promise.all(files.map(async (file) => {
+        const dataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onerror = () => reject(new Error("Unable to read image"));
+          reader.onload = () => resolve(String(reader.result || ""));
+          reader.readAsDataURL(file);
+        });
+        const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+          const img = new Image();
+          img.onerror = () => reject(new Error("Unable to decode image"));
+          img.onload = () => resolve(img);
+          img.src = dataUrl;
+        });
+        const longestEdge = 2400;
+        const scale = Math.min(1, longestEdge / Math.max(image.naturalWidth, image.naturalHeight));
+        const width = Math.max(1, Math.round(image.naturalWidth * scale));
+        const height = Math.max(1, Math.round(image.naturalHeight * scale));
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const context = canvas.getContext("2d");
+        if (!context) throw new Error("Canvas unavailable");
+        context.drawImage(image, 0, 0, width, height);
+        return { dataUrl: canvas.toDataURL("image/jpeg", 0.9), width, height };
+      }));
+
+      const first = pages[0];
+      const sequenceDocument = new jsPDF({ orientation: first.width > first.height ? "landscape" : "portrait", unit: "px", format: [first.width, first.height], compress: true });
+      pages.forEach((page, index) => {
+        if (index > 0) sequenceDocument.addPage([page.width, page.height], page.width > page.height ? "landscape" : "portrait");
+        sequenceDocument.addImage(page.dataUrl, "JPEG", 0, 0, page.width, page.height, undefined, "FAST");
+      });
+      const sequencePdf = sequenceDocument.output("blob");
+      if (sequencePdf.size > SCANNER_MAX_VISUAL_FILE_BYTES) throw new Error("Sequence exceeds scanner limit");
+      await processUploadedFile(new File([sequencePdf], "image-sequence.pdf", { type: "application/pdf" }));
+    } catch {
+      setOcrError("");
+      setScannerLogs(["Image sequence could not be prepared."]);
+    }
   };
 
   const handleDrag = (e: React.DragEvent) => {
@@ -4056,6 +4145,8 @@ export default function Workspace() {
               setIsScannerOpen(false);
             }}
             onFileUpload={processUploadedFile}
+            onImportFromUrl={importScannerDocumentFromUrl}
+            onImageSequenceUpload={importScannerImageSequence}
             scannerFile={scannerFile}
             scannerPreviewUrl={scannerPreviewUrl}
             scannerPreviewUrl2={scannerPreviewUrl2}

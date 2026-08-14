@@ -1,0 +1,5 @@
+# Scanner audit external fixture notes
+
+The scanner audit will use no more than one public large-PDF download because the user requested a real remote stress case while also asking that network use remain deliberate. The selected reference is Cartographic Perspectives, Issue 43: <https://cartographicperspectives.org/index.php/journal/article/download/cp43-complete-issue/pdf/2712>. Its publisher page labels the complete issue as a 100 MB PDF, and the response was confirmed as `application/pdf` before download. The host does not advertise byte-range support, so the audit must avoid repeat or partial retries.
+
+Alternative size-fixture pages were assessed but not used as primary evidence: <https://www.examplefile.com/document/pdf/100-mb-pdf> publishes a 100 MB dummy PDF, while <https://lunchboxhands.com/tools/sample-file-generator/100-mb-pdf> describes a browser-generated valid 100,000,000-byte PDF. These links establish only published fixture intent; scanner evidence will be recorded from the actual downloaded file or deterministic local fixtures.

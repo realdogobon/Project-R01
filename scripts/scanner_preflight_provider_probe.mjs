@@ -128,9 +128,9 @@ try {
   await page.click('[title="AI Scanner"]');
   await page.waitForSelector("#scanner-viewport", { timeout: 20000 });
 
-  const inputs = await page.$$('input[type="file"]');
-  if (!inputs.length) throw new Error("No scanner file input found");
-  await inputs.at(-1).uploadFile(fixturePath);
+  const input = await page.$('input[type="file"][accept*=".pdf"]');
+  if (!input) throw new Error("Primary scanner document input not found");
+  await input.uploadFile(fixturePath);
   await page.waitForFunction(
     () => Boolean(document.querySelector('#scanner-viewport img[alt="Scanned Document Paper Element"], #scanner-viewport canvas')),
     { timeout: 30000 },

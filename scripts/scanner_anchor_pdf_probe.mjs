@@ -56,9 +56,9 @@ const clickTitle = async (title) => {
 };
 
 const upload = async (path) => {
-  const inputs = await page.$$('input[type="file"]');
-  if (!inputs.length) throw new Error("No scanner file input found");
-  await inputs.at(-1).uploadFile(path);
+  const input = await page.$('input[type="file"][accept*=".pdf"]');
+  if (!input) throw new Error("Primary scanner document input not found");
+  await input.uploadFile(path);
   await page.waitForFunction(() => Boolean(document.querySelector("#scanner-viewport img, #scanner-viewport canvas")), { timeout: 40000 });
   await sleep(700);
 };

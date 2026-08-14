@@ -27,7 +27,7 @@ import {
   Sparkles,
   CheckCircle,
   Hand,
-  ScanLine,
+  Printer,
 } from "lucide-react";
 
 interface ScannerCropSurfaceProps {
@@ -464,6 +464,8 @@ export interface DocumentScannerModalProps {
   isEnhancementOpen: boolean;
   setIsEnhancementOpen: React.Dispatch<React.SetStateAction<boolean>>;
   onFileUpload?: (file: File) => Promise<void>;
+  onImportFromUrl?: (rawUrl: string) => Promise<void>;
+  onImageSequenceUpload?: (files: File[]) => Promise<void>;
 
   selectedScanner: string;
   setSelectedScanner: React.Dispatch<React.SetStateAction<string>>;
@@ -517,6 +519,8 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
   handleAddToQueue,
   scannerTotalPages: totalPages,
   onFileUpload,
+  onImportFromUrl,
+  onImageSequenceUpload,
   themeAccentColor,
 
   selectedScanner,
@@ -539,6 +543,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
   const [flipDirection, setFlipDirection] = useState<"next" | "prev">("next");
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number } | null>(null);
   const [isSpacePressed, setIsSpacePressed] = useState(false);
+  const imageSequenceInputRef = React.useRef<HTMLInputElement>(null);
   const activeAccent = themeAccentColor || "#C28181";
   const hasDocumentLoaded = !!(scannerPreviewUrl || scannerPreviewUrl2 || scannerStitchedUrl);
   const [windowSize, setWindowSize] = useState(() => ({ width: window.innerWidth, height: window.innerHeight }));
@@ -1227,7 +1232,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
           onMouseDown={(e) => startResize('move', e)}
         >
            <div className="flex items-center gap-2.5 text-[#1E1E1E] dark:text-[#EAEAEA]">
-             <ScanLine className="w-4 h-4" strokeWidth={1.75} />
+              <Printer className="w-4 h-4" strokeWidth={1.75} />
              <span className="text-[12px] font-medium tracking-wide">Scan</span>
            </div>
            <div className="flex items-center h-full">
@@ -1616,10 +1621,10 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                         </div>
 
                         <h3 className="text-gray-800 dark:text-gray-200 font-semibold text-base mb-1 tracking-tight">
-                          PDF / Markdown / HTML / JPEG / WEBP
+                          PDF / Markdown / HTML / TXT / JPEG / PNG / WEBP
                         </h3>
                         <p className="text-gray-400 dark:text-gray-500 text-[12px] mb-8 font-medium">
-                          Max file size: 20 MB each
+                          Images & PDFs: 20 MB per file · Text: 2 MB per file
                         </p>
 
                         <div className="text-gray-600 dark:text-gray-300 text-[15px] font-medium mb-3">
@@ -1647,10 +1652,25 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                         </label>
 
                         <div className="mt-12 flex flex-col gap-2 font-medium items-center">
-                          <button className="text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 underline decoration-gray-300 dark:decoration-gray-700 hover:decoration-gray-400 transition-colors text-[12px]">
+                          <input
+                            ref={imageSequenceInputRef}
+                            type="file"
+                            className="hidden"
+                            accept=".jpeg,.jpg,.png,.webp"
+                            multiple
+                            onChange={(event) => {
+                              const files = Array.from(event.target.files || []);
+                              event.target.value = "";
+                              void onImageSequenceUpload?.(files);
+                            }}
+                          />
+                          <button type="button" onClick={() => {
+                            const rawUrl = window.prompt("Paste a public document link");
+                            if (rawUrl?.trim()) void onImportFromUrl?.(rawUrl);
+                          }} className="text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 underline decoration-gray-300 dark:decoration-gray-700 hover:decoration-gray-400 transition-colors text-[12px]">
                             Upload document from URL
                           </button>
-                          <button className="text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 underline decoration-gray-300 dark:decoration-gray-700 hover:decoration-gray-400 transition-colors text-[12px]">
+                          <button type="button" onClick={() => imageSequenceInputRef.current?.click()} className="text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 underline decoration-gray-300 dark:decoration-gray-700 hover:decoration-gray-400 transition-colors text-[12px]">
                             Extract text from image sequences
                           </button>
                         </div>
@@ -1875,11 +1895,11 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                                 </div>
                              </div>
 
-                             <h3 className="text-gray-800 dark:text-gray-200 font-semibold text-base mb-1 tracking-tight">
-                               PDF / Markdown / HTML / JPEG / WEBP
-                             </h3>
-                             <p className="text-gray-400 dark:text-gray-500 text-[12px] mb-8 font-medium">
-                               Max file size: 20 MB each
+                              <h3 className="text-gray-800 dark:text-gray-200 font-semibold text-base mb-1 tracking-tight">
+                                PDF / Markdown / HTML / TXT / JPEG / PNG / WEBP
+                              </h3>
+                              <p className="text-gray-400 dark:text-gray-500 text-[12px] mb-8 font-medium">
+                                Images & PDFs: 20 MB per file · Text: 2 MB per file
                              </p>
 
                              <div className="text-gray-600 dark:text-gray-300 text-[15px] font-medium mb-3">
@@ -1906,13 +1926,30 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                                />
                              </label>
 
-                             <div className="mt-12 flex flex-col gap-2 font-medium items-center">
-                               <button className="text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 underline decoration-gray-300 dark:decoration-gray-700 hover:decoration-gray-400 transition-colors text-[12px]">
-                                 Upload document from URL
-                               </button>
-                               <button className="text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 underline decoration-gray-300 dark:decoration-gray-700 hover:decoration-gray-400 transition-colors text-[12px]">
-                                 Extract text from image sequences
-                               </button>
+                              <div className="mt-12 flex flex-col gap-2 font-medium items-center">
+                                <input
+                                  type="file"
+                                  className="hidden"
+                                  accept=".jpeg,.jpg,.png,.webp"
+                                  multiple
+                                  onChange={(event) => {
+                                    const files = Array.from(event.target.files || []);
+                                    event.target.value = "";
+                                    void onImageSequenceUpload?.(files);
+                                  }}
+                                />
+                                <button type="button" onClick={() => {
+                                  const rawUrl = window.prompt("Paste a public document link");
+                                  if (rawUrl?.trim()) void onImportFromUrl?.(rawUrl);
+                                }} className="text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 underline decoration-gray-300 dark:decoration-gray-700 hover:decoration-gray-400 transition-colors text-[12px]">
+                                  Upload document from URL
+                                </button>
+                                <button type="button" onClick={(event) => {
+                                  const input = event.currentTarget.parentElement?.querySelector<HTMLInputElement>('input[type="file"]');
+                                  input?.click();
+                                }} className="text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 underline decoration-gray-300 dark:decoration-gray-700 hover:decoration-gray-400 transition-colors text-[12px]">
+                                  Extract text from image sequences
+                                </button>
                              </div>
                           </div>
                        )}
