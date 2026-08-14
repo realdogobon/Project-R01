@@ -141,7 +141,7 @@ const SETTINGS_CATEGORIES: Array<{
   },
   {
     id: "scanner",
-    label: "Scanner",
+    label: "AI Setup",
     Icon: KeyRound,
   },
 ];
@@ -780,19 +780,19 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                       />
                     </Section>
 
-                    {/* SECTION: SCANNER */}
+                    {/* SECTION: AI SETUP */}
                     <Section
-                      title="Scanner"
+                      title="Cloud providers"
                       className={activeCategory !== "scanner" ? "hidden" : undefined}
                     >
                       <p className="mb-5 max-w-[280px] text-[12px] leading-relaxed text-neutral-400 dark:text-neutral-500">
-                        Add a key to use cloud scanning. Without one, scans stay on this device.
+                        Add a key to use online document scanning. Practice text can still be created on this device without one. Keys are saved on this device and used when you choose that provider.
                       </p>
                       <div className="flex flex-col gap-4">
                         {[
-                          { key: "gemini", label: "Gemini API key" },
-                          { key: "groq", label: "Groq API key" },
-                          { key: "openai", label: "OpenAI API key" },
+                          { key: "gemini", label: "Gemini key" },
+                          { key: "groq", label: "Groq key" },
+                          { key: "openai", label: "OpenAI key" },
                         ].map(({ key, label }) => (
                           <label key={key} className="flex flex-col gap-2">
                             <span className="text-[12px] font-medium tracking-tight text-neutral-800 dark:text-neutral-100">{label}</span>
@@ -809,7 +809,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                                 saveProviderKeys(keys);
                               }}
                               placeholder="Paste your key"
-                              aria-label={`${label} API key`}
+                              aria-label={label}
                               className="h-10 w-full rounded-lg border border-neutral-200 bg-white/80 px-3 text-[12px] text-neutral-700 outline-none transition-colors placeholder:text-neutral-400 focus:border-[#C28181] dark:border-white/10 dark:bg-black/20 dark:text-neutral-200 dark:placeholder:text-neutral-600 dark:focus:border-[#60C5EA]"
                             />
                           </label>

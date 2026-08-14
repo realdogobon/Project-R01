@@ -44,7 +44,7 @@ try {
     "Practice",
     "Ambient Focus",
     "Performance",
-    "Scanner",
+    "AI Setup",
   ]);
 
   await page.evaluate(() => {
@@ -74,7 +74,7 @@ try {
       Practice: "practice",
       "Ambient Focus": "ambient",
       Performance: "performance",
-      Scanner: "scanner",
+      "AI Setup": "scanner",
     };
     const categoryId = categoryIds[label];
     if (!categoryId) throw new Error(`Missing category mapping: ${label}`);
@@ -99,10 +99,10 @@ try {
   assert.match((await visibleSectionFor("Practice")).join(" "), /Gameplay/);
   assert.match((await visibleSectionFor("Ambient Focus")).join(" "), /Ambient Focus/);
   assert.match((await visibleSectionFor("Performance")).join(" "), /Performance/);
-  const scannerText = (await visibleSectionFor("Scanner")).join(" ");
-  assert.match(scannerText, /Scanner/);
+  const aiSetupText = (await visibleSectionFor("AI Setup")).join(" ");
+  assert.match(aiSetupText, /Cloud providers|online document scanning|Gemini key/);
   assert.equal(
-    await page.$$eval('[data-settings-panel] input[aria-label$=" API key"]',
+    await page.$$eval('[data-settings-panel] input[aria-label$=" key"]',
       (inputs) => inputs.length,
     ),
     3,
