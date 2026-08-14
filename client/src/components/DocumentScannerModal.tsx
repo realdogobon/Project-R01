@@ -4,7 +4,6 @@ import { motion, AnimatePresence } from "motion/react";
 import { useResizable } from "../hooks/useResizable";
 import {
   getProviderOf,
-  hasApiKeyFor,
   loadProviderKeys,
   saveProviderKeys,
   type ProviderKeys,
@@ -28,14 +27,8 @@ import {
   Sparkles,
   CheckCircle,
   Hand,
+  ScanLine,
 } from "lucide-react";
-
-const TopScannerIcon = ({ className }: { className?: string }) => (
-  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75">
-    <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-    <path strokeLinecap="round" strokeLinejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-  </svg>
-);
 
 interface ScannerCropSurfaceProps {
   crop?: Crop;
@@ -735,12 +728,39 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
   const [keyRefresh, setKeyRefresh] = useState(0);
   const [apiKeyDraft, setApiKeyDraft] = useState("");
 
+  // Scanner selector policy: a provider appears usable only when its existing
+  // browser-local key is configured. This deliberately leaves the key contract
+  // unchanged: one scalar key per provider under `royscript_ai_keys`.
+  const configuredProviders = React.useMemo(() => {
+    const keys = loadProviderKeys();
+    return {
+      gemini: Boolean(keys.gemini?.trim()),
+      groq: Boolean(keys.groq?.trim()),
+      openai: Boolean(keys.openai?.trim()),
+    };
+  }, [keyRefresh]);
+  const hasAnyConfiguredProvider = Object.values(configuredProviders).some(Boolean);
+
+  // If a provider key is removed outside this panel while another provider is
+  // still usable, retain a valid selected route instead of leaving a disabled
+  // option as the active scanner model. With no configured providers, retain
+  // the current choice so the existing Add key flow remains targeted.
+  useEffect(() => {
+    if (!hasAnyConfiguredProvider || configuredProviders[getProviderOf(selectedScanner)]) return;
+    const nextModel = configuredProviders.gemini
+      ? "gemini-3.7-flash"
+      : configuredProviders.groq
+        ? "groq-llama-3.3-70b"
+        : "openai-gpt-4o";
+    setSelectedScanner((current) => current === nextModel ? current : nextModel);
+  }, [configuredProviders.gemini, configuredProviders.groq, configuredProviders.openai, hasAnyConfiguredProvider, selectedScanner, setSelectedScanner]);
+
   const providerLabel = (() => {
     const p = getProviderOf(selectedScanner);
     return p === "gemini" ? "Gemini" : p === "groq" ? "Groq" : "OpenAI";
   })();
 
-  const apiKeyConfigured = hasApiKeyFor(selectedScanner);
+  const apiKeyConfigured = configuredProviders[getProviderOf(selectedScanner)];
 
   const saveApiKey = () => {
     const provider = getProviderOf(selectedScanner);
@@ -1207,7 +1227,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
           onMouseDown={(e) => startResize('move', e)}
         >
            <div className="flex items-center gap-2.5 text-[#1E1E1E] dark:text-[#EAEAEA]">
-             <TopScannerIcon className="w-4 h-4" />
+             <ScanLine className="w-4 h-4" strokeWidth={1.75} />
              <span className="text-[12px] font-medium tracking-wide">Scan</span>
            </div>
            <div className="flex items-center h-full">
@@ -1233,9 +1253,11 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                  <select
                    value={selectedScanner}
                    onChange={e => setSelectedScanner(e.target.value)}
-                   className="w-full appearance-none bg-white dark:bg-[#2A2A35] border border-[#E5DCDA] dark:border-[#1A1A23] rounded-md px-3 py-1.5 text-[13px] text-[#202020] dark:text-[#EAEAEA] outline-none shadow-sm focus:border-[#C28181] dark:focus:border-[#60C5EA]"
+                   disabled={!hasAnyConfiguredProvider}
+                   data-scanner-model-selector
+                   className="w-full appearance-none bg-white dark:bg-[#2A2A35] border border-[#E5DCDA] dark:border-[#1A1A23] rounded-md px-3 py-1.5 text-[13px] text-[#202020] dark:text-[#EAEAEA] outline-none shadow-sm focus:border-[#C28181] dark:focus:border-[#60C5EA] disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                     <optgroup label="Google Gemini">
+                     <optgroup label="Google Gemini" disabled={!configuredProviders.gemini}>
                       <option value="gemini-3.7-flash">Gemini 3.7 Flash</option>
                       <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
                       <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash-Lite</option>
@@ -1243,13 +1265,13 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                       <option value="gemini-2.0-flash-exp">Gemini 2.0 Flash</option>
                       <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
                     </optgroup>
-                    <optgroup label="Groq">
+                    <optgroup label="Groq" disabled={!configuredProviders.groq}>
                       <option value="groq-llama-3.3-70b">Llama 3.3 70B (Groq)</option>
                       <option value="groq-llama-3.1-8b">Llama 3.1 8B (Groq)</option>
                       <option value="groq-mixtral-8x7b">Mixtral 8x7B (Groq)</option>
                       <option value="groq-gemma2-9b">Gemma 2 9B (Groq)</option>
                     </optgroup>
-                    <optgroup label="OpenAI">
+                    <optgroup label="OpenAI" disabled={!configuredProviders.openai}>
                       <option value="openai-gpt-4o">GPT-4o</option>
                       <option value="openai-gpt-4o-mini">GPT-4o mini</option>
                       <option value="openai-gpt-4.1">GPT-4.1</option>
