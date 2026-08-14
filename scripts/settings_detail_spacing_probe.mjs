@@ -20,9 +20,17 @@ try {
     height: Number(process.env.VIEWPORT_HEIGHT || 720),
   });
   const errors = [];
+  const ignoredWarnings = [];
+  const isKnownPreviewResourceWarning = (text) =>
+    text.includes("net::ERR_BLOCKED_BY_RESPONSE.NotSameOrigin");
   page.on("pageerror", (error) => errors.push(String(error)));
   page.on("console", (message) => {
-    if (message.type() === "error") errors.push(message.text());
+    if (message.type() !== "error") return;
+    if (isKnownPreviewResourceWarning(message.text())) {
+      ignoredWarnings.push(message.text());
+      return;
+    }
+    errors.push(message.text());
   });
 
   const openSettings = async () => {
@@ -76,6 +84,7 @@ try {
     passed: true,
     viewport: { width: Number(process.env.VIEWPORT_WIDTH || 1280), height: Number(process.env.VIEWPORT_HEIGHT || 720) },
     screenshots: { keyboardScreenshot, soundscapeScreenshot },
+    ignoredWarnings: ignoredWarnings.length,
   }));
 } finally {
   await browser.close();
