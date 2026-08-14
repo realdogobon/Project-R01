@@ -50,9 +50,9 @@ const clearAndType = async (page, selector, value) => {
 };
 
 const openGenerator = async (page) => {
-  await page.waitForSelector('button[aria-label="Open AI practice generator"]');
-  await page.click('button[aria-label="Open AI practice generator"]');
-  await page.waitForSelector('button[aria-label="Close AI Practice"]');
+  await page.waitForSelector('button[aria-label="Create Practice Text"]');
+  await page.click('button[aria-label="Create Practice Text"]');
+  await page.waitForSelector('button[aria-label="Close Practice Text"]');
 };
 
 const installMockProvider = async (page) => {
@@ -88,7 +88,7 @@ const generateAndMeasure = async (page, cases, label) => {
     beforeRequests,
   );
   await page.waitForFunction(
-    () => !document.querySelector('button[aria-label="Close AI Practice"]'),
+    () => !document.querySelector('button[aria-label="Close Practice Text"]'),
     { timeout: 5000 },
   );
   const result = await page.evaluate(() => ({

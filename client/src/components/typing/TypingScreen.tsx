@@ -809,7 +809,11 @@ export function TypingScreen({
       )}
       style={{
         "--typing-accent": accentColor,
+        // Practice characters stay neutral; accent remains reserved for the
+        // cursor/keyboard, and strict violations remain the standard red.
         "--typing-text-correct": "currentColor",
+        "--typing-text-pending": "currentColor",
+        "--typing-text-error": "#ef4444",
       } as React.CSSProperties}
       onClick={(e) => {
         const target = e.target as HTMLElement;
