@@ -71,6 +71,15 @@ try {
     assert.equal(activeCancel.disabled, false, `${viewport.name}: Cancel button was not actionable`);
     assert.equal(activeCancel.text, "Cancel", `${viewport.name}: Cancel button did not transition cleanly`);
 
+    const creatingAction = await page.$eval('button[aria-label="Creating Practice Text"]', (button) => ({
+      disabled: button.disabled,
+      text: button.textContent?.trim(),
+      spinner: Boolean(button.querySelector(".practice-generation-spinner")),
+    }));
+    assert.equal(creatingAction.disabled, true, `${viewport.name}: Creating action remained actionable during generation`);
+    assert.equal(creatingAction.text, "Creating…", `${viewport.name}: Creating action wording is incorrect`);
+    assert.equal(creatingAction.spinner, true, `${viewport.name}: Creating action did not render its loading spinner`);
+
     await page.click('button[aria-label="Cancel Practice Text generation"]');
     await page.waitForSelector('button[aria-label="Generate Practice Text"]', { timeout: 1000 });
     await new Promise((resolve) => setTimeout(resolve, 250));

@@ -1966,7 +1966,7 @@ export function PracticeMode({
                   )}
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-[0.72fr_1.28fr] gap-4">
                   <div className="flex flex-col gap-1.5">
                     <label className="text-[13px] pl-0.5">Difficulty</label>
                     <div className="relative">
@@ -1992,7 +1992,9 @@ export function PracticeMode({
                         className="w-full appearance-none bg-white dark:bg-[#2A2A35] border border-[#E5DCDA] dark:border-[#1A1A23] rounded-md px-3 py-1.5 text-[13px] outline-none shadow-sm focus:border-[var(--accent-color)]"
                       >
                         {PRACTICE_AI_LENGTHS.map((length) => (
-                          <option key={length.id} value={length.id}>{length.label}</option>
+                          <option key={length.id} value={length.id}>
+                            {length.words ? `${length.label.split(" ")[0]} · ${length.words} words` : length.label}
+                          </option>
                         ))}
                       </select>
                       <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
@@ -2022,22 +2024,28 @@ export function PracticeMode({
                         if (isGenerating) cancelPracticeGeneration();
                         else setIsAiModalOpen(false);
                       }}
-                      className="px-3 py-1.5 text-[13px] rounded-md hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+                      aria-label={isGenerating ? "Cancel Practice Text generation" : "Cancel Practice Text modal"}
+                      className={`flex items-center justify-center gap-2 px-3 py-1.5 text-[13px] rounded-md transition-all active:scale-95 ${isGenerating
+                        ? "shadow-sm hover:brightness-90"
+                        : "hover:bg-black/5 dark:hover:bg-white/5"
+                      }`}
+                      style={isGenerating ? { backgroundColor: "#E81123", color: "#FFFFFF" } : undefined}
                     >
+                      {isGenerating ? <X className="w-4 h-4" /> : null}
                       Cancel
                     </button>
                     <button
                       onClick={() => {
-                        if (isGenerating) cancelPracticeGeneration();
-                        else void handleGenerateAI();
+                        if (!isGenerating) void handleGenerateAI();
                       }}
+                      disabled={isGenerating}
                       aria-busy={isGenerating}
-                      aria-label={isGenerating ? "Cancel Practice Text generation" : "Generate Practice Text"}
-                      className="flex items-center justify-center gap-2 px-3 py-1.5 rounded-md text-white text-[13px] transition-all active:scale-95 shadow-sm hover:opacity-90 min-w-[92px]"
-                      style={{ backgroundColor: isGenerating ? "#E81123" : themeAccentColor }}
+                      aria-label={isGenerating ? "Creating Practice Text" : "Generate Practice Text"}
+                      className="flex items-center justify-center gap-2 px-3 py-1.5 rounded-md text-white text-[13px] transition-all active:scale-95 shadow-sm hover:opacity-90 disabled:cursor-wait disabled:hover:opacity-100 min-w-[118px]"
+                      style={{ backgroundColor: themeAccentColor }}
                     >
-                      {isGenerating ? <X className="w-4 h-4" /> : null}
-                      {isGenerating ? "Cancel" : "Generate"}
+                      {isGenerating ? <Loader2 className="practice-generation-spinner w-4 h-4" /> : null}
+                      {isGenerating ? "Creating…" : "Generate"}
                     </button>
                   </div>
                 </div>
