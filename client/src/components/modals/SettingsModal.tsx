@@ -109,6 +109,65 @@ type SettingsCategory =
   | "performance"
   | "scanner";
 
+type SettingsView =
+  | "main"
+  | "themes"
+  | "fonts"
+  | "profiles"
+  | "atmosphere"
+  | "errorSounds"
+  | "soundCentre";
+
+type NestedSettingsView = Exclude<SettingsView, "main">;
+
+type SettingsNavigationIntent =
+  | { kind: "category"; category: SettingsCategory }
+  | {
+      kind: "view";
+      view: NestedSettingsView;
+      sourceCategory: SettingsCategory;
+      sourceView: SettingsView;
+    }
+  | { kind: "back"; sourceView: NestedSettingsView }
+  | { kind: "reset" };
+
+interface SettingsNavigationState {
+  view: SettingsView;
+  category: SettingsCategory;
+}
+
+function reduceSettingsNavigation(
+  state: SettingsNavigationState,
+  intent: SettingsNavigationIntent,
+): SettingsNavigationState {
+  if (intent.kind === "category") {
+    return { category: intent.category, view: "main" };
+  }
+
+  if (intent.kind === "reset") {
+    return { category: "appearance", view: "main" };
+  }
+
+  if (intent.kind === "view") {
+    if (
+      intent.sourceCategory !== state.category ||
+      intent.sourceView !== state.view
+    ) {
+      return state;
+    }
+    return { ...state, view: intent.view };
+  }
+
+  if (intent.sourceView !== state.view) return state;
+  return {
+    ...state,
+    view:
+      state.view === "profiles" || state.view === "errorSounds"
+        ? "soundCentre"
+        : "main",
+  };
+}
+
 const SETTINGS_CATEGORIES: Array<{
   id: SettingsCategory;
   label: string;
@@ -238,21 +297,96 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     resetToDefaults,
   } = useSettings();
 
-  const [view, setView] = useState<
-    | "main"
-    | "themes"
-    | "fonts"
-    | "profiles"
-    | "atmosphere"
-    | "errorSounds"
-    | "soundCentre"
-  >("main");
+  const [view, setView] = useState<SettingsView>("main");
   const [activeCategory, setActiveCategory] =
     useState<SettingsCategory>("appearance");
   const [isSavingPreset, setIsSavingPreset] = useState(false);
   const [newPresetName, setNewPresetName] = useState("");
   const scrollRef = React.useRef<HTMLDivElement>(null);
   const panelRef = React.useRef<HTMLDivElement>(null);
+  const viewRef = React.useRef<SettingsView>(view);
+  const activeCategoryRef = React.useRef<SettingsCategory>(activeCategory);
+  const navigationQueueRef = React.useRef<SettingsNavigationIntent[]>([]);
+  const navigationFlushScheduledRef = React.useRef(false);
+
+  // Settings navigation is coalesced once per microtask: clicks from one
+  // browser turn become one valid state transition without delaying the next
+  // visible route long enough for the title row or back affordance to lag.
+  viewRef.current = view;
+  activeCategoryRef.current = activeCategory;
+
+  const clearNavigationQueue = () => {
+    navigationFlushScheduledRef.current = false;
+    navigationQueueRef.current = [];
+  };
+
+  const projectNavigationState = (): SettingsNavigationState =>
+    navigationQueueRef.current.reduce(reduceSettingsNavigation, {
+      view: viewRef.current,
+      category: activeCategoryRef.current,
+    });
+
+  const flushNavigationQueue = () => {
+    navigationFlushScheduledRef.current = false;
+    const intents = navigationQueueRef.current.splice(
+      0,
+      navigationQueueRef.current.length,
+    );
+    if (intents.length === 0) return;
+
+    const previousView = viewRef.current;
+    const previousCategory = activeCategoryRef.current;
+    const nextState = intents.reduce(reduceSettingsNavigation, {
+      view: previousView,
+      category: previousCategory,
+    });
+
+    viewRef.current = nextState.view;
+    activeCategoryRef.current = nextState.category;
+    if (nextState.view !== previousView) setView(nextState.view);
+    if (nextState.category !== previousCategory) {
+      setActiveCategory(nextState.category);
+    }
+  };
+
+  const enqueueNavigation = (intent: SettingsNavigationIntent) => {
+    navigationQueueRef.current.push(intent);
+    if (navigationQueueRef.current.length > 32) {
+      navigationQueueRef.current.splice(
+        0,
+        navigationQueueRef.current.length - 32,
+      );
+    }
+    if (!navigationFlushScheduledRef.current) {
+      navigationFlushScheduledRef.current = true;
+      queueMicrotask(flushNavigationQueue);
+    }
+  };
+
+  const navigateToView = (nextView: NestedSettingsView) => {
+    const projected = projectNavigationState();
+    enqueueNavigation({
+      kind: "view",
+      view: nextView,
+      sourceCategory: projected.category,
+      sourceView: projected.view,
+    });
+  };
+
+  const navigateBack = () => {
+    const projected = projectNavigationState();
+    if (projected.view !== "main") {
+      enqueueNavigation({
+        kind: "back",
+        sourceView: projected.view,
+      });
+    }
+  };
+
+  const handleCloseSettings = () => {
+    clearNavigationQueue();
+    onClose();
+  };
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -291,10 +425,17 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
   useEffect(() => {
     if (!isOpen) {
+      clearNavigationQueue();
+      viewRef.current = "main";
+      activeCategoryRef.current = "appearance";
       setView("main");
       setActiveCategory("appearance");
     }
   }, [isOpen]);
+
+  useEffect(() => {
+    return () => clearNavigationQueue();
+  }, []);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -310,8 +451,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
   const handleResetSettings = () => {
     resetToDefaults();
-    setView("main");
-    setActiveCategory("appearance");
+    enqueueNavigation({ kind: "reset" });
   };
 
   return (
@@ -325,7 +465,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            onClick={onClose}
+            onClick={handleCloseSettings}
             className={cn(
               "fixed inset-0 bg-neutral-950/20 dark:bg-black/60 transition-opacity transform-gpu",
               !betterPerformance && "backdrop-blur-[2px]",
@@ -415,14 +555,8 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                     transition={{ duration: 0.1 }}
                     className="flex items-center gap-1.5 pb-[10px]"
                   >
-                    <button
-                      onClick={() => {
-                        if (view === "profiles" || view === "errorSounds") {
-                          setView("soundCentre");
-                        } else {
-                          setView("main");
-                        }
-                      }}
+                <button
+                  onClick={navigateBack}
                       className="p-1 rounded hover:bg-neutral-100 dark:hover:bg-white/[0.05] text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200 transition-colors cursor-pointer"
                     >
                       <ArrowLeft className="w-3.5 h-3.5" />
@@ -446,7 +580,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
               {/* Close action remains in the title row, without a floating pill. */}
               <button
-                onClick={onClose}
+                onClick={handleCloseSettings}
                 aria-label="Close settings"
                 className="mb-[10px] flex items-center justify-center p-1 text-neutral-500 hover:text-neutral-900 dark:text-neutral-300 dark:hover:text-white transition-colors cursor-pointer"
               >
@@ -471,10 +605,9 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                       aria-current={selected ? "page" : undefined}
                       aria-pressed={selected}
                       data-settings-category={id}
-                      onClick={() => {
-                        setActiveCategory(id);
-                        setView("main");
-                      }}
+                      onClick={() =>
+                        enqueueNavigation({ kind: "category", category: id })
+                      }
                       className={cn(
                         "group relative flex h-12 w-14 items-center justify-center text-neutral-500 transition-colors duration-150 hover:bg-neutral-500/[0.05] dark:text-neutral-400 dark:hover:bg-white/[0.055] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-neutral-400 dark:focus-visible:ring-white/40",
                         selected && "bg-neutral-900/[0.04] dark:bg-white/[0.06]",
@@ -546,7 +679,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
                       <SubDrawerRow
                         label="Themes"
-                        onClick={() => setView("themes")}
+                        onClick={() => navigateToView("themes")}
                         preview={
                           <>
                             <span className="flex h-3.5 w-8 overflow-hidden rounded-full ring-1 ring-neutral-200 dark:ring-white/10 shrink-0">
@@ -567,7 +700,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
                       <SubDrawerRow
                         label="Font"
-                        onClick={() => setView("fonts")}
+                        onClick={() => navigateToView("fonts")}
                         preview={
                           <span
                             className="text-[11px] font-medium text-neutral-500 dark:text-neutral-400"
@@ -655,7 +788,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                         <>
                           <SubDrawerRow
                             label="Choose Clicky Sounds"
-                            onClick={() => setView("soundCentre")}
+                            onClick={() => navigateToView("soundCentre")}
                             preview={
                               <span className="text-[11px] font-medium text-neutral-500 dark:text-neutral-400 capitalize max-w-[150px] truncate text-right">
                                 {SOUND_VARIANTS.find(
@@ -742,7 +875,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                         <>
                           <SubDrawerRow
                             label="Atmosphere"
-                            onClick={() => setView("atmosphere")}
+                            onClick={() => navigateToView("atmosphere")}
                             preview={
                               <span className="text-[11px] font-medium text-neutral-500 dark:text-neutral-400 capitalize max-w-[100px] truncate text-right">
                                 {atmosphereLabel}
@@ -926,7 +1059,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                     <Section title="Sound Options">
                       <SubDrawerRow
                         label="Keyboard Sounds"
-                        onClick={() => setView("profiles")}
+                        onClick={() => navigateToView("profiles")}
                         preview={
                           <span className="text-[11px] font-medium text-neutral-500 dark:text-neutral-400 capitalize max-w-[150px] truncate text-right">
                             {SOUND_VARIANTS.find((v) => v.id === activeSwitch)
@@ -936,7 +1069,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                       />
                       <SubDrawerRow
                         label="Error Sounds"
-                        onClick={() => setView("errorSounds")}
+                        onClick={() => navigateToView("errorSounds")}
                         preview={
                           <span className="text-[11px] font-medium text-neutral-500 dark:text-neutral-400 capitalize max-w-[150px] truncate text-right">
                             {errorSoundProfile === "off"

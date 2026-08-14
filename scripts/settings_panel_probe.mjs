@@ -164,7 +164,16 @@ try {
         if (button.textContent?.trim() !== "Classic") return false;
         let node = button;
         while (node instanceof HTMLElement) {
-          if (getComputedStyle(node).opacity === "0") return false;
+          const style = getComputedStyle(node);
+          if (
+            style.display === "none" ||
+            style.visibility === "hidden" ||
+            style.opacity === "0"
+          ) {
+            return false;
+          }
+          const rect = node.getBoundingClientRect();
+          if (rect.width === 0 || rect.height === 0) return false;
           node = node.parentElement;
         }
         return true;

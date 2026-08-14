@@ -106,6 +106,20 @@ async function clickCategory(page, id) {
   }, id);
 }
 
+async function waitForCategory(page, id, timeout = 180) {
+  const started = Date.now();
+  while (Date.now() - started < timeout) {
+    const active = await page.evaluate(() =>
+      document
+        .querySelector('[data-settings-category][aria-current="page"]')
+        ?.getAttribute("data-settings-category"),
+    );
+    if (active === id) return;
+    await delay(4);
+  }
+  throw new Error(`Category did not settle: ${id}`);
+}
+
 async function clickNested(page, label) {
   const clicked = await page.evaluate((nestedLabel) => {
     const candidates = [...document.querySelectorAll('[data-settings-panel] button')];
@@ -118,6 +132,21 @@ async function clickNested(page, label) {
     return true;
   }, label);
   if (!clicked) throw new Error(`Missing nested Settings row: ${label}`);
+}
+
+async function waitForNested(page, label, timeout = 180) {
+  const started = Date.now();
+  while (Date.now() - started < timeout) {
+    const present = await page.evaluate((nestedLabel) =>
+      [...document.querySelectorAll('[data-settings-panel] button')].some(
+        (candidate) =>
+          candidate.querySelector("span")?.textContent?.trim() === nestedLabel,
+      ),
+    label);
+    if (present) return;
+    await delay(4);
+  }
+  throw new Error(`Nested Settings row did not settle: ${label}`);
 }
 
 async function ensureToggleForNested(page, toggleLabel, nestedLabel) {
@@ -148,12 +177,42 @@ async function clickBack(page) {
       '[data-settings-panel="true"] button[aria-label="Close settings"]',
     );
     const titleRow = closeButton?.parentElement;
-    const backButton = titleRow?.querySelector("button");
-    if (!backButton || backButton === closeButton) return false;
+    const backButton = [...(titleRow?.querySelectorAll("button") || [])].find(
+      (candidate) => {
+        if (candidate === closeButton) return false;
+        const rect = candidate.getBoundingClientRect();
+        const style = getComputedStyle(candidate);
+        return rect.width > 0 && rect.height > 0 && Number(style.opacity) > 0.05;
+      },
+    );
+    if (!backButton) return false;
     backButton.click();
     return true;
   });
   return clicked;
+}
+
+async function waitForBack(page, timeout = 180) {
+  const started = Date.now();
+  while (Date.now() - started < timeout) {
+    const present = await page.evaluate(() => {
+      const closeButton = document.querySelector(
+        '[data-settings-panel="true"] button[aria-label="Close settings"]',
+      );
+      const titleRow = closeButton?.parentElement;
+      return [...(titleRow?.querySelectorAll("button") || [])].some(
+        (candidate) => {
+          if (candidate === closeButton) return false;
+          const rect = candidate.getBoundingClientRect();
+          const style = getComputedStyle(candidate);
+          return rect.width > 0 && rect.height > 0 && Number(style.opacity) > 0.05;
+        },
+      );
+    });
+    if (present) return Date.now() - started;
+    await delay(4);
+  }
+  throw new Error("Back button did not settle");
 }
 
 async function runViewport(viewport) {
@@ -204,6 +263,7 @@ async function runViewport(viewport) {
       const samples = [];
       for (const target of viewTargets) {
         await clickCategory(page, target.category);
+        await waitForCategory(page, target.category);
         samples.push(await sample(page, `sweep-${sweep}-${target.category}-immediate`));
         await delay(18);
       }
@@ -223,6 +283,7 @@ async function runViewport(viewport) {
     // Every submenu opened and closed at a normal pace, with geometry sampled during the transition.
     for (const target of viewTargets) {
       await clickCategory(page, target.category);
+      await waitForCategory(page, target.category);
       await delay(220);
       if (target.category === "keyboard") {
         await ensureToggleForNested(page, "Typing Sounds", "Choose Clicky Sounds");
@@ -232,6 +293,7 @@ async function runViewport(viewport) {
       }
       for (const nested of target.nested) {
         const samples = [];
+        await waitForNested(page, nested);
         await clickNested(page, nested);
         samples.push(await sample(page, `${target.category}-${nested}-immediate`));
         await delay(35);
@@ -265,6 +327,7 @@ async function runViewport(viewport) {
               samples: deeperSamples,
               summary: summarizeSamples(deeperSamples),
             });
+            await waitForBack(page);
             if (!(await clickBack(page))) {
               result.interactionIssues.push({
                 kind: "missing-back-button-during-deep-nested-transition",
@@ -297,15 +360,18 @@ async function runViewport(viewport) {
       for (const [category, nested] of nestedSequence) {
         await clickCategory(page, category);
         await delay(12);
+        await waitForCategory(page, category);
         if (category === "keyboard") {
           await ensureToggleForNested(page, "Typing Sounds", "Choose Clicky Sounds");
         }
         if (category === "ambient") {
           await ensureToggleForNested(page, "Soundscape", "Atmosphere");
         }
+        await waitForNested(page, nested);
         await clickNested(page, nested);
         samples.push(await sample(page, `nested-cycle-${cycle}-${category}-${nested}-open`));
         await delay(12);
+        await waitForBack(page);
         const returnedToMain = await clickBack(page);
         if (!returnedToMain) {
           result.interactionIssues.push({
