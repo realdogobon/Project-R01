@@ -521,11 +521,11 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               <div
                 ref={scrollRef}
                 className={cn(
-                  "flex-1 min-w-0 overflow-y-auto custom-scrollbar px-7 pb-10",
+                  "relative flex-1 min-w-0 overflow-y-auto custom-scrollbar px-7 pb-10",
                   view !== "main" && "pt-6",
                 )}
               >
-              <AnimatePresence>
+              <AnimatePresence mode="popLayout">
                 {view === "main" ? (
                   <motion.div
                     key="main-view"
