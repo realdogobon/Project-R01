@@ -1209,7 +1209,7 @@ export default function Workspace() {
   const [isCropEnabled, setIsCropEnabled] = useState<boolean>(false);
   const [isEnhancementOpen, setIsEnhancementOpen] = useState<boolean>(false);
 
-  const [selectedScanner, setSelectedScanner] = useState("gemini-2.5-flash");
+  const [selectedScanner, setSelectedScanner] = useState("gemini-3.7-flash");
   const [selectedColourMode, setSelectedColourMode] = useState("Colour");
   const [selectedResolution, setSelectedResolution] = useState("200 dpi");
   const [selectedDestinationFolder, setSelectedDestinationFolder] = useState("");

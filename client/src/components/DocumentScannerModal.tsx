@@ -1234,8 +1234,9 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                    value={selectedScanner}
                    onChange={e => setSelectedScanner(e.target.value)}
                    className="w-full appearance-none bg-white dark:bg-[#2A2A35] border border-[#E5DCDA] dark:border-[#1A1A23] rounded-md px-3 py-1.5 text-[13px] text-[#202020] dark:text-[#EAEAEA] outline-none shadow-sm focus:border-[#C28181] dark:focus:border-[#60C5EA]"
-                 >
-                    <optgroup label="Google Gemini">
+                  >
+                     <optgroup label="Google Gemini">
+                      <option value="gemini-3.7-flash">Gemini 3.7 Flash</option>
                       <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
                       <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash-Lite</option>
                       <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>

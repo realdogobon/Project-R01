@@ -35,7 +35,7 @@ The response is normalized before it reaches the editor. Unicode normalization c
 
 ## Provider routing
 
-Practice Mode reuses the established `royscript_ai_keys` contract: one local key per provider, no rotation pool, and no load balancing. Generation chooses the first configured provider in deterministic order: Gemini 2.5 Flash, OpenAI GPT-4o mini, then Groq Llama 3.3 70B. The chosen model is returned with the generated text for diagnostics, but provider keys are never persisted anywhere else. If no key is configured, the user receives a direct instruction to add one under **Settings → AI Setup**.
+Practice Mode reuses the established `royscript_ai_keys` contract: one local key per provider, no rotation pool, and no load balancing. Generation chooses the first configured provider in deterministic order: Gemini 3.7 Flash, OpenAI GPT-4o mini, then Groq Llama 3.3 70B. The Gemini default was privately validated against the active account and current browser request contract for keyboard-safe Practice Text and scanner-style image OCR before routing changed. The chosen model is returned with the generated text for diagnostics, but provider keys are never persisted anywhere else. If no key is configured, the user receives a direct instruction to add one under **Settings → AI Setup**.
 
 This client-side path is required because the current static host has no `/api/generate-practice` handler; `aiAwareFetch` intentionally short-circuits that route. The new helper calls the selected provider directly using the same browser-side key model already used by document OCR.
 

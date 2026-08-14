@@ -61,13 +61,14 @@ function apiKeyFor(modelId: string, keys: ProviderKeys): string | undefined {
 function resolveModelId(modelId: string): string {
   if (modelId.startsWith("gemini-")) {
     const map: Record<string, string> = {
+      "gemini-3.7-flash": "gemini-3.7-flash",
       "gemini-2.5-flash": "gemini-2.5-flash",
       "gemini-2.5-flash-lite": "gemini-2.5-flash-lite",
       "gemini-2.5-pro": "gemini-2.5-pro",
       "gemini-2.0-flash-exp": "gemini-2.0-flash",
       "gemini-1.5-flash": "gemini-1.5-flash",
     };
-    return map[modelId] || "gemini-2.5-flash";
+    return map[modelId] || "gemini-3.7-flash";
   }
   if (modelId.startsWith("groq-")) {
     const map: Record<string, string> = {

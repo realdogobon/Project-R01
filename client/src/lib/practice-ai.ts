@@ -246,7 +246,7 @@ export const PRACTICE_AI_LENGTHS: Array<PracticeAiOption & { words?: number }> =
 ];
 
 const MODEL_ORDER: Array<{ id: string; provider: PracticeAiProvider; model: string; label: string }> = [
-  { id: "gemini-2.5-flash", provider: "gemini", model: "gemini-2.5-flash", label: "Gemini 2.5 Flash" },
+  { id: "gemini-3.7-flash", provider: "gemini", model: "gemini-3.7-flash", label: "Gemini 3.7 Flash" },
   { id: "openai-gpt-4o-mini", provider: "openai", model: "gpt-4o-mini", label: "OpenAI GPT-4o mini" },
   { id: "groq-llama-3.3-70b", provider: "groq", model: "llama-3.3-70b-versatile", label: "Groq Llama 3.3 70B" },
 ];
