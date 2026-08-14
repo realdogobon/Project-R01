@@ -1752,12 +1752,15 @@ export function PracticeMode({
                                 <textarea                                   value={text}
                                   onChange={(e) => setText(e.target.value)}
                                   placeholder="Paste the text you want to use for practice..."
+                                  aria-busy={isGenerating}
                                   className="w-full flex-1 min-h-[140px] bg-transparent border border-black/20 dark:border-white/20 rounded-md px-4 py-3 text-[14px] xl:text-[16px] leading-relaxed focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors resize-none"
                                 />
                                 {isGenerating && (
                                   <div
                                     className="absolute inset-0 bg-white/50 dark:bg-black/50 flex items-center justify-center rounded-md border border-transparent z-10"
                                     style={{ contain: "paint", willChange: "opacity" }}
+                                    role="status"
+                                    aria-label="Creating Practice Text"
                                   >
                                     <Loader2 className="practice-generation-spinner w-6 h-6" style={{ color: themeAccentColor }} />
                                   </div>
@@ -1907,10 +1910,7 @@ export function PracticeMode({
                 </div>
                 <div className="flex items-center h-full">
                   <button
-                    onClick={() => {
-                      if (isGenerating) cancelPracticeGeneration();
-                      setIsAiModalOpen(false);
-                    }}
+                    onClick={() => setIsAiModalOpen(false)}
                     aria-label="Close Practice Text"
                     className="h-full px-4 hover:bg-[#E81123] hover:text-white transition-colors"
                   >
