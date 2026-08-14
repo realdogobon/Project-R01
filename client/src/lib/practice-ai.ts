@@ -18,6 +18,8 @@ export interface PracticeAiCategory extends PracticeAiOption {
   topics: PracticeAiOption[];
 }
 
+const CUSTOM_TOPIC: PracticeAiOption = { id: "custom-topic", label: "Custom topic" };
+
 export const PRACTICE_AI_CATEGORIES: PracticeAiCategory[] = [
   {
     id: "legal",
@@ -135,6 +137,59 @@ export const PRACTICE_AI_CATEGORIES: PracticeAiCategory[] = [
       { id: "sustainable-cities", label: "Sustainable cities" },
     ],
   },
+  {
+    id: "current-affairs",
+    label: "Current affairs and media",
+    topics: [
+      { id: "world-context", label: "World issues and context" },
+      { id: "india-regional", label: "India and regional affairs" },
+      { id: "public-debate", label: "Public debate and policy" },
+      { id: "climate-disasters", label: "Climate and disasters" },
+      { id: "economy-markets", label: "Economy and markets" },
+      { id: "science-news", label: "Science and technology news" },
+      { id: "media-literacy", label: "Media literacy" },
+      { id: "compare-reports", label: "Compare reported viewpoints" },
+    ],
+  },
+  {
+    id: "humanities",
+    label: "Humanities and society",
+    topics: [
+      { id: "history", label: "History" },
+      { id: "geography", label: "Geography" },
+      { id: "psychology", label: "Psychology" },
+      { id: "sociology", label: "Sociology and anthropology" },
+      { id: "philosophy-ethics", label: "Philosophy and ethics" },
+      { id: "human-rights", label: "Human rights and society" },
+      { id: "international-relations", label: "International relations" },
+    ],
+  },
+  {
+    id: "language-literature",
+    label: "Language and literature",
+    topics: [
+      { id: "general-english", label: "General English" },
+      { id: "grammar-vocabulary", label: "Grammar and vocabulary" },
+      { id: "journalism", label: "Journalism" },
+      { id: "essays-speeches", label: "Essays and speeches" },
+      { id: "fiction-poetry", label: "Fiction and poetry" },
+      { id: "biography-reviews", label: "Biography and book reviews" },
+      { id: "translation", label: "Translation practice" },
+    ],
+  },
+  {
+    id: "professional-writing",
+    label: "Everyday and professional writing",
+    topics: [
+      { id: "email", label: "Email and correspondence" },
+      { id: "notices", label: "Notices and announcements" },
+      { id: "reports", label: "Reports and summaries" },
+      { id: "instructions", label: "Instructions and procedures" },
+      { id: "customer-support", label: "Customer support" },
+      { id: "applications-resumes", label: "Applications and resumes" },
+      { id: "meeting-notes", label: "Meeting notes and presentations" },
+    ],
+  },
 ];
 
 export const PRACTICE_AI_DIFFICULTIES: PracticeAiOption[] = [
@@ -144,10 +199,14 @@ export const PRACTICE_AI_DIFFICULTIES: PracticeAiOption[] = [
   { id: "professional", label: "Professional" },
 ];
 
-export const PRACTICE_AI_LENGTHS: Array<PracticeAiOption & { words: number }> = [
+export const PRACTICE_AI_CUSTOM_MIN_WORDS = 20;
+export const PRACTICE_AI_CUSTOM_MAX_WORDS = 2000;
+
+export const PRACTICE_AI_LENGTHS: Array<PracticeAiOption & { words?: number }> = [
   { id: "short", label: "Short (about 200 words)", words: 200 },
   { id: "medium", label: "Medium (about 400 words)", words: 400 },
   { id: "long", label: "Long (about 800 words)", words: 800 },
+  { id: "custom", label: "Custom", words: undefined },
 ];
 
 const MODEL_ORDER: Array<{ id: string; provider: PracticeAiProvider; model: string; label: string }> = [
@@ -161,6 +220,8 @@ export interface PracticeGenerationRequest {
   topicId: string;
   difficultyId: string;
   lengthId: string;
+  customTopic?: string;
+  customLengthWords?: number;
 }
 
 export interface PracticeGenerationResult {
@@ -175,7 +236,10 @@ function optionLabel(options: PracticeAiOption[], id: string, fallback: string):
 }
 
 export function getPracticeAiCategory(id: string): PracticeAiCategory {
-  return PRACTICE_AI_CATEGORIES.find((category) => category.id === id) ?? PRACTICE_AI_CATEGORIES[0];
+  const category = PRACTICE_AI_CATEGORIES.find((entry) => entry.id === id) ?? PRACTICE_AI_CATEGORIES[0];
+  return category.topics.some((topic) => topic.id === CUSTOM_TOPIC.id)
+    ? category
+    : { ...category, topics: [...category.topics, CUSTOM_TOPIC] };
 }
 
 export function getPracticeAiTopic(categoryId: string, topicId: string): PracticeAiOption {
@@ -187,21 +251,46 @@ function getLength(lengthId: string) {
   return PRACTICE_AI_LENGTHS.find((length) => length.id === lengthId) ?? PRACTICE_AI_LENGTHS[1];
 }
 
+function getTargetWords(request: PracticeGenerationRequest): number {
+  if (request.lengthId === "custom") {
+    const value = Number(request.customLengthWords);
+    if (!Number.isInteger(value) || value < PRACTICE_AI_CUSTOM_MIN_WORDS || value > PRACTICE_AI_CUSTOM_MAX_WORDS) {
+      throw new Error(`Custom length must be between ${PRACTICE_AI_CUSTOM_MIN_WORDS} and ${PRACTICE_AI_CUSTOM_MAX_WORDS} words.`);
+    }
+    return value;
+  }
+  return getLength(request.lengthId).words ?? 400;
+}
+
+function getTopicLabel(request: PracticeGenerationRequest, fallback: string): string {
+  if (request.topicId === CUSTOM_TOPIC.id) {
+    const customTopic = request.customTopic?.trim();
+    if (!customTopic) throw new Error("Enter a topic before generating practice text.");
+    return customTopic.slice(0, 120);
+  }
+  return fallback;
+}
+
 function buildPrompt(request: PracticeGenerationRequest): string {
   const category = getPracticeAiCategory(request.categoryId);
   const topic = getPracticeAiTopic(request.categoryId, request.topicId);
   const difficulty = optionLabel(PRACTICE_AI_DIFFICULTIES, request.difficultyId, "Intermediate");
-  const length = getLength(request.lengthId);
+  const targetWords = getTargetWords(request);
+  const topicLabel = getTopicLabel(request, topic.label);
+  const isCurrentAffairs = request.categoryId === "current-affairs";
 
   return [
     "Create one original typing-practice passage.",
     `Subject: ${category.label}.`,
-    `Topic: ${topic.label}.`,
+    `Topic: ${topicLabel}.`,
     `Typing level: ${difficulty}.`,
-    `Target length: approximately ${length.words} words.`,
-    "Use clear English (US or India) and natural, accurate grammar for the selected subject.",
+    `Target length: approximately ${targetWords} words, within a reasonable tolerance.`,
+    "Use clear English in a consistent US English or India English style, with natural grammar and spelling.",
     "Use only characters available on a standard English QWERTY keyboard: ASCII letters, digits, spaces, line breaks, and common punctuation such as . , ; : ! ? ' \" ( ) - / %.",
     "Do not use em dashes, en dashes, curly quotes, ellipsis characters, emoji, decorative symbols, non-Latin scripts, Markdown, bullet points, code fences, headings, metadata, citations, disclaimers, or a preamble.",
+    isCurrentAffairs
+      ? "This is a non-live current-affairs and media-literacy exercise. Do not claim that information is the latest, today’s news, or verified by live sources; do not invent dates, statistics, sources, or breaking events. Present general context, media-literacy skills, or balanced viewpoints without political persuasion."
+      : "Keep the passage educational and grounded in the selected subject; do not present it as personalized legal, medical, financial, or professional advice.",
     "Return only the passage. Make it useful for typing practice, coherent from beginning to end, and appropriate for a general audience.",
   ].join(" ");
 }
@@ -210,6 +299,7 @@ const SYSTEM_PROMPT = [
   "You are RoyScript's plain-text typing practice writer.",
   "Follow the user's subject and topic exactly.",
   "Never invent legal advice, medical advice, citations, case outcomes, or official statements; write neutral educational practice text instead.",
+  "For current-affairs requests, write a non-live educational exercise and never imply live retrieval or up-to-date verification.",
   "Return only one original passage and follow the keyboard-safe character rules in the request.",
 ].join(" ");
 
@@ -279,16 +369,15 @@ export function getAvailablePracticeModel(keys: ProviderKeys = loadProviderKeys(
 
 export async function generatePracticeText(request: PracticeGenerationRequest): Promise<PracticeGenerationResult> {
   const selected = getAvailablePracticeModel();
-  if (!selected) {
-    throw new Error("Add a Gemini, OpenAI, or Groq key in Settings > AI Setup to generate practice text.");
-  }
+  if (!selected) throw new Error("Choose a provider in AI Setup to generate practice text.");
 
   const apiKey = loadProviderKeys()[selected.provider]?.trim();
   if (!apiKey) throw new Error("The selected AI provider key is not available. Check Settings > AI Setup.");
 
+  const prompt = buildPrompt(request);
   const raw = selected.provider === "gemini"
-    ? await requestGemini(apiKey, buildPrompt(request), selected.model)
-    : await requestChatCompletion(selected.provider, apiKey, buildPrompt(request), selected.model);
+    ? await requestGemini(apiKey, prompt, selected.model)
+    : await requestChatCompletion(selected.provider, apiKey, prompt, selected.model);
   const text = normalizePracticeText(raw);
   if (!text) throw new Error(`${selected.label} returned no usable practice text. Try again.`);
 

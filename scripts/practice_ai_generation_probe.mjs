@@ -91,6 +91,7 @@ try {
         "Committees and reports",
         "Budget and finance",
         "Policy and public-interest debates",
+        "Custom topic",
       ],
       `${viewport.name}: parliamentary topic taxonomy did not update correctly`,
     );
@@ -102,7 +103,7 @@ try {
 
     await clickButtonWithText(page, "Generate");
     await page.waitForFunction(
-      () => document.body.textContent?.includes("Add a Gemini, OpenAI, or Groq key in Settings > AI Setup"),
+      () => document.body.textContent?.includes("Choose a provider in AI Setup to generate practice text."),
       { timeout: 2500 },
     );
     assert.equal(
@@ -123,9 +124,39 @@ try {
     await page.$$eval("select", (nodes) => {
       const topic = nodes[1];
       if (!topic) throw new Error("Missing Topic select");
-      topic.value = "bills";
+      topic.value = "custom-topic";
       topic.dispatchEvent(new Event("change", { bubbles: true }));
     });
+    await page.click('input[placeholder="Enter a topic"]');
+    await page.type('input[placeholder="Enter a topic"]', "Digital rights committee reporting");
+    await page.$$eval("select", (nodes) => {
+      const length = nodes[3];
+      if (!length) throw new Error("Missing Length select");
+      length.value = "custom";
+      length.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await page.click('input[aria-label="Custom word count"]');
+    await page.keyboard.down("Control");
+    await page.keyboard.press("A");
+    await page.keyboard.up("Control");
+    await page.type('input[aria-label="Custom word count"]', "20");
+
+    await page.click('input[aria-label="Custom word count"]');
+    await page.keyboard.down("Control");
+    await page.keyboard.press("A");
+    await page.keyboard.up("Control");
+    await page.type('input[aria-label="Custom word count"]', "10");
+    await clickButtonWithText(page, "Generate");
+    await page.waitForFunction(
+      () => document.body.textContent?.includes("Custom length must be between 20 and 2000 words."),
+      { timeout: 2500 },
+    );
+
+    await page.click('input[aria-label="Custom word count"]');
+    await page.keyboard.down("Control");
+    await page.keyboard.press("A");
+    await page.keyboard.up("Control");
+    await page.type('input[aria-label="Custom word count"]', "20");
 
     await page.evaluate(() => {
       window.__practiceFetches = [];
@@ -150,7 +181,8 @@ try {
     const requestBody = JSON.parse(request.body);
     const promptText = requestBody.contents?.[0]?.parts?.[0]?.text ?? "";
     assert.match(promptText, /Subject: Parliament and public policy/);
-    assert.match(promptText, /Topic: Bills and legislation/);
+    assert.match(promptText, /Topic: Digital rights committee reporting/);
+    assert.match(promptText, /Target length: approximately 20 words/);
     assert.match(promptText, /standard English QWERTY keyboard/);
     assert.match(promptText, /Do not use em dashes, en dashes/);
     assert.equal(
@@ -160,7 +192,9 @@ try {
     );
 
     const unexpectedErrors = errors.filter(
-      (error) => !error.includes("Add a Gemini, OpenAI, or Groq key in Settings > AI Setup to generate practice text."),
+      (error) =>
+        !error.includes("Choose a provider in AI Setup to generate practice text.") &&
+        !error.includes("Custom length must be between 20 and 2000 words."),
     );
     assert.deepEqual(unexpectedErrors, [], `${viewport.name}: application errors detected: ${unexpectedErrors.join(" | ")}`);
     console.log(

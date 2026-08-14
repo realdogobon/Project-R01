@@ -9,12 +9,13 @@ import { useSettings, THEME_OPTIONS } from "../contexts/SettingsContext";
 import { WordEngine } from "../lib/word-engine";
 import {
   generatePracticeText,
-  getAvailablePracticeModel,
   getPracticeAiCategory,
   getPracticeAiTopic,
   PRACTICE_AI_CATEGORIES,
   PRACTICE_AI_DIFFICULTIES,
   PRACTICE_AI_LENGTHS,
+  PRACTICE_AI_CUSTOM_MIN_WORDS,
+  PRACTICE_AI_CUSTOM_MAX_WORDS,
 } from "../lib/practice-ai";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { TypingScreen } from "../components/typing/TypingScreen";
@@ -338,14 +339,15 @@ export function PracticeMode({
   const [isAiModalOpen, setIsAiModalOpen] = useState(false);
   const [aiCategory, setAiCategory] = useState("legal");
   const [aiTopic, setAiTopic] = useState("civil");
+  const [aiCustomTopic, setAiCustomTopic] = useState("");
   const [aiDifficulty, setAiDifficulty] = useState("intermediate");
   const [aiLength, setAiLength] = useState("medium");
+  const [aiCustomLengthWords, setAiCustomLengthWords] = useState("250");
   const [isGenerating, setIsGenerating] = useState(false);
   const [generateError, setGenerateError] = useState("");
 
   const selectedAiCategory = getPracticeAiCategory(aiCategory);
   const selectedAiTopic = getPracticeAiTopic(aiCategory, aiTopic);
-  const availablePracticeModel = getAvailablePracticeModel();
 
   const handleGenerateAI = async () => {
     if (isGenerating) return;
@@ -357,11 +359,16 @@ export function PracticeMode({
         topicId: aiTopic,
         difficultyId: aiDifficulty,
         lengthId: aiLength,
+        customTopic: aiCustomTopic,
+        customLengthWords: Number(aiCustomLengthWords),
       });
       if (result.text) {
         setText(result.text);
         if (!title.trim() || title === "Demo Test") {
-          setTitle(`${selectedAiCategory.label} - ${selectedAiTopic.label}`);
+          const topicTitle = selectedAiTopic.id === "custom-topic" && aiCustomTopic.trim()
+            ? aiCustomTopic.trim()
+            : selectedAiTopic.label;
+          setTitle(`${selectedAiCategory.label} - ${topicTitle}`);
         }
         setIsAiModalOpen(false);
       } else {
@@ -1881,6 +1888,7 @@ export function PracticeMode({
                         const nextCategory = getPracticeAiCategory(e.target.value);
                         setAiCategory(nextCategory.id);
                         setAiTopic(nextCategory.topics[0]?.id ?? "");
+                        setAiCustomTopic("");
                       }}
                       className="w-full appearance-none bg-white dark:bg-[#2A2A35] border border-[#E5DCDA] dark:border-[#1A1A23] rounded-md px-3 py-1.5 text-[13px] outline-none shadow-sm focus:border-[var(--accent-color)]"
                     >
@@ -1906,6 +1914,15 @@ export function PracticeMode({
                     </select>
                     <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
                   </div>
+                  {selectedAiTopic.id === "custom-topic" && (
+                    <input
+                      value={aiCustomTopic}
+                      onChange={(e) => setAiCustomTopic(e.target.value.slice(0, 120))}
+                      placeholder="Enter a topic"
+                      maxLength={120}
+                      className="w-full bg-white dark:bg-[#2A2A35] border border-[#E5DCDA] dark:border-[#1A1A23] rounded-md px-3 py-1.5 text-[13px] outline-none shadow-sm focus:border-[var(--accent-color)]"
+                    />
+                  )}
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
@@ -1939,6 +1956,21 @@ export function PracticeMode({
                       </select>
                       <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
                     </div>
+                    {aiLength === "custom" && (
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="number"
+                          min={PRACTICE_AI_CUSTOM_MIN_WORDS}
+                          max={PRACTICE_AI_CUSTOM_MAX_WORDS}
+                          inputMode="numeric"
+                          value={aiCustomLengthWords}
+                          onChange={(e) => setAiCustomLengthWords(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                          aria-label="Custom word count"
+                          className="w-full bg-white dark:bg-[#2A2A35] border border-[#E5DCDA] dark:border-[#1A1A23] rounded-md px-3 py-1.5 text-[13px] outline-none shadow-sm focus:border-[var(--accent-color)] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        />
+                        <span className="text-[11px] text-neutral-500 dark:text-neutral-400 whitespace-nowrap">words</span>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -1951,10 +1983,7 @@ export function PracticeMode({
                   </div>
                 )}
 
-                <div className="flex items-center justify-between gap-3 pt-4 border-t border-black/5 dark:border-white/5">
-                  <span className="text-[11px] text-neutral-500 dark:text-neutral-400 truncate" title={availablePracticeModel?.label ?? "No AI key configured"}>
-                    {availablePracticeModel ? availablePracticeModel.label : "Add an AI key in Settings"}
-                  </span>
+                <div className="flex items-center justify-end gap-3 pt-4 border-t border-black/5 dark:border-white/5">
                   <div className="flex items-center gap-2 shrink-0">
                     <button
                       onClick={() => setIsAiModalOpen(false)}
