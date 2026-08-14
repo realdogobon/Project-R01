@@ -44,15 +44,15 @@ try {
 
     await page.goto(`${previewUrl}/?from_webdev=1`, { waitUntil: "networkidle2" });
     await page.click('button[title="Start Practice"]');
-    await page.waitForSelector('button[aria-label="Open AI practice generator"]');
+    await page.waitForSelector('button[aria-label="Create practice text"]');
 
     assert.equal(
-      await page.$$eval('button[aria-label="Open AI practice generator"]', (buttons) => buttons.length),
+      await page.$$eval('button[aria-label="Create practice text"]', (buttons) => buttons.length),
       1,
       `${viewport.name}: expected exactly one standalone AI trigger`,
     );
     assert.equal(
-      await page.$eval('button[aria-label="Open AI practice generator"]', (button) =>
+      await page.$eval('button[aria-label="Create practice text"]', (button) =>
         !button.textContent?.includes("AI Generation") &&
         getComputedStyle(button).backgroundColor === "rgba(0, 0, 0, 0)",
       ),
@@ -60,12 +60,12 @@ try {
       `${viewport.name}: AI trigger still appears as a text or filled button`,
     );
 
-    await page.click('button[aria-label="Open AI practice generator"]');
-    await page.waitForSelector('button[aria-label="Close AI Practice"]');
+    await page.click('button[aria-label="Create practice text"]');
+    await page.waitForSelector('button[aria-label="Close practice text"]');
     assert.equal(
-      await page.$eval("body", (body) => body.textContent?.includes("AI Practice") ?? false),
+      await page.$eval("body", (body) => body.textContent?.includes("Practice text") ?? false),
       true,
-      `${viewport.name}: AI Practice modal did not open`,
+      `${viewport.name}: Practice text modal did not open`,
     );
     assert.equal(
       await page.$$eval("select", (selects) => selects.length),
@@ -107,8 +107,13 @@ try {
 
     await clickButtonWithText(page, "Generate");
     await page.waitForFunction(
-      () => document.body.textContent?.includes("Choose a provider in AI Setup to generate practice text."),
-      { timeout: 2500 },
+      () => Array.from(document.querySelectorAll("button")).some((button) => button.textContent?.trim() === "Generate" && !button.disabled),
+      { timeout: 5000 },
+    );
+    assert.equal(
+      await page.$eval("body", (body) => body.textContent?.includes("Choose a provider in AI Setup to generate practice text.") ?? false),
+      false,
+      `${viewport.name}: provider failure remained visible after silent-failure handling`,
     );
     assert.equal(
       await page.$eval("body", (body) => body.textContent?.includes("/api/generate-practice") ?? false),
@@ -121,9 +126,9 @@ try {
     });
     await page.reload({ waitUntil: "networkidle2" });
     await page.click('button[title="Start Practice"]');
-    await page.waitForSelector('button[aria-label="Open AI practice generator"]');
-    await page.click('button[aria-label="Open AI practice generator"]');
-    await page.waitForSelector('button[aria-label="Close AI Practice"]');
+    await page.waitForSelector('button[aria-label="Create practice text"]');
+    await page.click('button[aria-label="Create practice text"]');
+    await page.waitForSelector('button[aria-label="Close practice text"]');
     await page.select("select:nth-of-type(1)", "parliament");
     await page.$$eval("select", (nodes) => {
       const topic = nodes[1];
@@ -152,8 +157,13 @@ try {
     await page.type('input[aria-label="Custom word count"]', "10");
     await clickButtonWithText(page, "Generate");
     await page.waitForFunction(
-      () => document.body.textContent?.includes("Custom length must be between 20 and 2000 words."),
-      { timeout: 2500 },
+      () => Array.from(document.querySelectorAll("button")).some((button) => button.textContent?.trim() === "Generate" && !button.disabled),
+      { timeout: 5000 },
+    );
+    assert.equal(
+      await page.$eval("body", (body) => body.textContent?.includes("Custom length must be between 20 and 2000 words.") ?? false),
+      false,
+      `${viewport.name}: invalid custom-length validation remained visible`,
     );
 
     await page.click('input[aria-label="Custom word count"]');
@@ -221,8 +231,8 @@ try {
       `${viewport.name}: normalized generated text still contains non-ASCII characters`,
     );
 
-    await page.click('button[aria-label="Open AI practice generator"]');
-    await page.waitForSelector('button[aria-label="Close AI Practice"]');
+    await page.click('button[aria-label="Create practice text"]');
+    await page.waitForSelector('button[aria-label="Close practice text"]');
     await page.$$eval("select", (nodes) => {
       const length = nodes[3];
       if (!length) throw new Error("Missing Length select for large custom test");

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
-import { ArrowLeft, Play, CheckCircle, Clock, ShieldAlert, Sparkles, Loader2, Settings2, ArrowRight, RotateCcw, RotateCw, X, Zap, Trophy, FileText, BookOpen, HeartPulse, FastForward, PlaySquare, Lock, Hourglass, SlidersHorizontal, ChevronDown } from "lucide-react";
+import { ArrowLeft, Play, CheckCircle, Clock, NotebookPen, Sparkles, Loader2, Settings2, ArrowRight, RotateCcw, RotateCw, X, Zap, Trophy, FileText, BookOpen, HeartPulse, FastForward, PlaySquare, Lock, Hourglass, SlidersHorizontal, ChevronDown } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { useSoundEngine } from "../hooks/useSoundEngine";
 import { ClassicKeyboard, KeyboardThemeName, KEY_LABELS } from "../components/keyboard/ClassicKeyboard";
@@ -345,6 +345,16 @@ export function PracticeMode({
   const [aiCustomLengthWords, setAiCustomLengthWords] = useState("250");
   const [isGenerating, setIsGenerating] = useState(false);
   const [generateError, setGenerateError] = useState("");
+  const [generationStage, setGenerationStage] = useState<"drafting" | "checking">("drafting");
+
+  useEffect(() => {
+    if (!isGenerating) {
+      setGenerationStage("drafting");
+      return;
+    }
+    const stageTimer = window.setTimeout(() => setGenerationStage("checking"), 2200);
+    return () => window.clearTimeout(stageTimer);
+  }, [isGenerating]);
 
   const selectedAiCategory = getPracticeAiCategory(aiCategory);
   const selectedAiTopic = getPracticeAiTopic(aiCategory, aiTopic);
@@ -353,6 +363,13 @@ export function PracticeMode({
     if (isGenerating) return;
     setIsGenerating(true);
     setGenerateError("");
+    await new Promise<void>((resolve) => {
+      if (typeof window === "undefined") {
+        resolve();
+        return;
+      }
+      window.requestAnimationFrame(() => resolve());
+    });
     try {
       const result = await generatePracticeText({
         categoryId: aiCategory,
@@ -372,11 +389,11 @@ export function PracticeMode({
         }
         setIsAiModalOpen(false);
       } else {
-        setGenerateError("The selected provider returned no usable practice text. Please try again.");
+        setGenerateError("The selected provider returned no usable practice text.");
       }
     } catch (err: any) {
       console.error(err);
-      setGenerateError(err.message || "Failed to generate text. Please try again.");
+      setGenerateError(err instanceof Error ? err.message : "Generation failed.");
     } finally {
       setIsGenerating(false);
     }
@@ -424,6 +441,13 @@ export function PracticeMode({
     }
     setIsGenerating(true);
     setGenerateError("");
+    await new Promise<void>((resolve) => {
+      if (typeof window === "undefined") {
+        resolve();
+        return;
+      }
+      window.requestAnimationFrame(() => resolve());
+    });
     try {
       if (advMode === "zen") {
         setText("");
@@ -444,7 +468,7 @@ export function PracticeMode({
       setTitle(`${targetWordCount} Words Run`);
     } catch (err: any) {
       console.error(err);
-      setGenerateError(err.message || "Failed to generate text. Please try again.");
+      setGenerateError(err instanceof Error ? err.message : "Generation failed.");
     } finally {
       setIsGenerating(false);
     }
@@ -1524,6 +1548,13 @@ export function PracticeMode({
 
       setIsGenerating(true);
       setGenerateError("");
+      await new Promise<void>((resolve) => {
+        if (typeof window === "undefined") {
+          resolve();
+          return;
+        }
+        window.requestAnimationFrame(() => resolve());
+      });
       try {
         const result = await generatePracticeText({
           categoryId: targetCategory,
@@ -1533,7 +1564,7 @@ export function PracticeMode({
         });
         setText(result.text);
       } catch (error) {
-        setGenerateError(error instanceof Error ? error.message : "Failed to generate text. Please try again.");
+        setGenerateError(error instanceof Error ? error.message : "Generation failed.");
       } finally {
         setIsGenerating(false);
       }
@@ -1670,7 +1701,7 @@ export function PracticeMode({
                                   Configure Session
                                 </h2>
                                 <p className="text-[13px] text-neutral-500 dark:text-neutral-400 mt-1">
-                                  Setup your practice material or generate with AI.
+                                  Set up a session or create a practice passage.
                                 </p>
                               </div>
                               <div className="flex items-center gap-3 shrink-0">
@@ -1679,11 +1710,11 @@ export function PracticeMode({
                                     setGenerateError("");
                                     setIsAiModalOpen(true);
                                   }}
-                                  aria-label="Open AI practice generator"
-                                  title="AI practice generator"
+                                  aria-label="Create practice text"
+                                  title="Create practice text"
                                   className="p-1.5 text-blue-500 dark:text-blue-400 hover:text-blue-600 dark:hover:text-blue-300 transition-colors rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 active:scale-95"
                                 >
-                                  <Sparkles className="w-[18px] h-[18px]" strokeWidth={1.8} />
+                                  <NotebookPen className="w-[18px] h-[18px]" strokeWidth={1.8} />
                                 </button>
                               </div>
                             </div>
@@ -1721,14 +1752,6 @@ export function PracticeMode({
                                   </div>
                                 )}
                               </div>
-                              {generateError && (
-                                <div className="mt-2 p-2.5 bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400 border border-red-200 dark:border-red-900/50 rounded-md text-[13px]">
-                                  <div className="flex items-start gap-2">
-                                    <ShieldAlert className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                                    <p>{generateError}</p>
-                                  </div>
-                                </div>
-                              )}
                             </div>
                           </div>
 
@@ -1868,11 +1891,11 @@ export function PracticeMode({
             >
               <div className="h-[38px] flex items-center justify-between pl-4 pr-0 shrink-0 select-none bg-black/5 dark:bg-white/5 border-b border-black/5 dark:border-white/5">
                 <div className="flex items-center gap-2.5">
-                  <Sparkles className="w-4 h-4 text-blue-500" />
-                  <span className="text-[12px] font-medium tracking-wide">AI Practice</span>
+                  <NotebookPen className="w-4 h-4 text-blue-500" />
+                  <span className="text-[12px] font-medium tracking-wide">Practice text</span>
                 </div>
                 <div className="flex items-center h-full">
-                  <button onClick={() => setIsAiModalOpen(false)} aria-label="Close AI Practice" className="h-full px-4 hover:bg-[#E81123] hover:text-white transition-colors">
+                  <button onClick={() => setIsAiModalOpen(false)} aria-label="Close practice text" className="h-full px-4 hover:bg-[#E81123] hover:text-white transition-colors">
                     <X className="w-4 h-4" />
                   </button>
                 </div>
@@ -1974,15 +1997,6 @@ export function PracticeMode({
                   </div>
                 </div>
 
-                {generateError && (
-                  <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-md text-[13px] text-red-600 dark:text-red-400">
-                    <div className="flex items-start gap-2">
-                      <ShieldAlert className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                      <p>{generateError}</p>
-                    </div>
-                  </div>
-                )}
-
                 <div className="flex items-center justify-end gap-3 pt-4 border-t border-black/5 dark:border-white/5">
                   <div className="flex items-center gap-2 shrink-0">
                     <button
@@ -1994,11 +2008,12 @@ export function PracticeMode({
                     <button
                       onClick={handleGenerateAI}
                       disabled={isGenerating}
+                      aria-busy={isGenerating}
                       className="flex items-center justify-center gap-2 px-3 py-1.5 rounded-md text-white text-[13px] transition-all active:scale-95 shadow-sm hover:opacity-90 min-w-[92px]"
                       style={{ backgroundColor: themeAccentColor }}
                     >
                       {isGenerating && <Loader2 className="w-4 h-4 animate-spin" />}
-                      {isGenerating ? "Working..." : "Generate"}
+                      {isGenerating ? (generationStage === "checking" ? "Checking..." : "Creating...") : "Generate"}
                     </button>
                   </div>
                 </div>

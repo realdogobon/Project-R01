@@ -59,8 +59,8 @@ export function AccountPicker({
       try {
         await onSwitch(uid, pwd);
         handleClose();
-      } catch (err: any) {
-        setError(err.message || "Incorrect password.");
+      } catch {
+        setError(null);
       } finally {
         setIsSwitching(false);
       }
@@ -187,9 +187,6 @@ export function AccountPicker({
                           placeholder="Password"
                           className="w-full bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg px-3 py-1.5 text-[12px] text-neutral-900 dark:text-neutral-100 placeholder-neutral-400 outline-none focus:border-neutral-400 dark:focus:border-neutral-500 transition-colors"
                         />
-                        {error && (
-                          <p className="text-[11px] text-red-500 mt-1">{error}</p>
-                        )}
                         <button
                           disabled={!password || isSwitching}
                           onClick={() => doSwitch(acct.uid, password)}

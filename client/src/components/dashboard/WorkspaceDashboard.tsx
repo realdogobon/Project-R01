@@ -792,7 +792,6 @@ export function WorkspaceDashboard({ isOpen, onClose, onLoadFileToEditor, onOpen
                               placeholder="Password"
                               className="w-full bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-lg px-3 py-2 text-[12px] text-neutral-900 dark:text-neutral-100 placeholder-neutral-400 outline-none focus:border-neutral-400 dark:focus:border-neutral-500 transition-colors"
                             />
-                            {switchError && <p className="text-[11px] text-red-500 mt-1.5">{switchError}</p>}
                             <button
                               disabled={!switchPassword || isSwitching}
                               onClick={() => {

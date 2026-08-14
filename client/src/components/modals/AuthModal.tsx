@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useAuth } from "../../contexts/AuthContext";
-import { X, Mail, Lock, User, Phone, CheckCircle, AlertCircle } from "lucide-react";
+import { X, Mail, Lock, User, Phone, CheckCircle } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
 interface AuthModalProps {
@@ -11,7 +11,7 @@ interface AuthModalProps {
 }
 
 export function AuthModal({ isOpen, onClose, onBeforeSubmit }: AuthModalProps) {
-  const { signIn, signUp, signInWithGoogle, error, clearError } = useAuth();
+  const { signIn, signUp, signInWithGoogle, clearError } = useAuth();
   const [isRegister, setIsRegister] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -75,8 +75,8 @@ export function AuthModal({ isOpen, onClose, onBeforeSubmit }: AuthModalProps) {
         setDisplayName("");
         setMobile("");
       }, 1500);
-    } catch (err: any) {
-      setFormError(err.message || "An authentication error occurred.");
+    } catch {
+      setFormError(null);
     } finally {
       setLoading(false);
     }
@@ -94,39 +94,11 @@ export function AuthModal({ isOpen, onClose, onBeforeSubmit }: AuthModalProps) {
         setIsSuccess(false);
         onClose();
       }, 1500);
-    } catch (err: any) {
-      setFormError(err.message || "Google authentication failed.");
+    } catch {
+      setFormError(null);
     } finally {
       setLoading(false);
     }
-  };
-
-  const activeError = formError || error;
-
-  const getFriendlyErrorMessage = (errText: string) => {
-    const textLower = errText.toLowerCase();
-    if (textLower.includes("operation-not-allowed") || textLower.includes("auth/operation-not-allowed")) {
-      return (
-        <div className="flex flex-col gap-2.5 text-left leading-normal">
-          <span className="font-bold text-[13px] text-red-600 dark:text-red-400 flex items-center gap-1.5">
-            ⚠️ Auth Provider Disabled in Firebase Console
-          </span>
-          <span className="text-[11.5px] text-neutral-600 dark:text-neutral-400 font-normal">
-            Bhai, iska simple sa reason hai: Firebase project setup hone par <strong>Email/Password</strong> registration custom configuration se off rehta hai. Isko open karne ke liye:
-          </span>
-          <div className="bg-black/5 dark:bg-white/5 p-2.5 rounded-lg border border-black/[0.06] dark:border-white/[0.06] space-y-1 text-[11px] font-mono text-neutral-600 dark:text-neutral-300">
-            <div>1. Open your <strong>Firebase Console</strong>.</div>
-            <div>2. Go to <strong>Build &rarr; Authentication &rarr; Sign-in method</strong>.</div>
-            <div>3. Click <strong>Add new provider</strong> &rarr; select <strong>Email/Password</strong>.</div>
-            <div>4. Toggle the <strong>Enable</strong> switch &rarr; Click <strong>Save</strong>!</div>
-          </div>
-          <span className="text-[11.5px] font-semibold text-blue-600 dark:text-blue-400">
-            💡 Easy bypass: Click the Google Sign-In button below! Google authentication is already enabled and works instantly out-of-the-box!
-          </span>
-        </div>
-      );
-    }
-    return errText;
   };
 
   return (
@@ -181,16 +153,6 @@ export function AuthModal({ isOpen, onClose, onBeforeSubmit }: AuthModalProps) {
                   to continue to RoyScript Suite
                 </p>
               </div>
-
-            {/* Error Feedback with Interactive Help */}
-            {activeError && (
-              <div className="mx-8 mt-5 p-4 rounded-xl bg-red-500/[0.06] dark:bg-red-500/[0.04] border border-red-500/15 flex items-start gap-3 text-[12px] font-medium text-neutral-800 dark:text-neutral-300 select-none max-h-[220px] overflow-y-auto">
-                <AlertCircle className="w-4 h-4 shrink-0 text-red-500 mt-0.5" />
-                <div className="flex-1">
-                  {getFriendlyErrorMessage(activeError)}
-                </div>
-              </div>
-            )}
 
             <div className="p-8 pt-5 space-y-5">
               {/* Google Auth Button - Primary Option since it works natively out-of-the-box */}

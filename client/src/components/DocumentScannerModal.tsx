@@ -1372,11 +1372,6 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                   <ChevronRight className={`absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 ${!isTextReady ? 'text-gray-300 dark:text-gray-600' : 'text-gray-400 dark:text-gray-500'} pointer-events-none transition-colors duration-200`} />
               </div>
 
-              {(shakePath || (showPathRequiredError && !selectedDestinationFolder)) && (
-                <div className="text-[11px] text-red-500 dark:text-red-400 font-semibold pl-0.5 mt-0.5 animate-in fade-in slide-in-from-top-1 duration-200">
-                  * Path selection required
-                </div>
-              )}
             </div>
 
             {cropQueue.length > 0 && (
