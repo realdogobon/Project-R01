@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { aiAwareFetch } from "@/lib/aiNotice";
 import { createPortal } from "react-dom";
 import { ArrowLeft, Play, CheckCircle, Clock, ShieldAlert, Sparkles, Loader2, Settings2, ArrowRight, RotateCcw, RotateCw, X, Zap, Trophy, FileText, BookOpen, HeartPulse, FastForward, PlaySquare, Lock, Hourglass, SlidersHorizontal, ChevronDown } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
@@ -8,6 +7,15 @@ import { ClassicKeyboard, KeyboardThemeName, KEY_LABELS } from "../components/ke
 import { motion, AnimatePresence } from "motion/react";
 import { useSettings, THEME_OPTIONS } from "../contexts/SettingsContext";
 import { WordEngine } from "../lib/word-engine";
+import {
+  generatePracticeText,
+  getAvailablePracticeModel,
+  getPracticeAiCategory,
+  getPracticeAiTopic,
+  PRACTICE_AI_CATEGORIES,
+  PRACTICE_AI_DIFFICULTIES,
+  PRACTICE_AI_LENGTHS,
+} from "../lib/practice-ai";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { TypingScreen } from "../components/typing/TypingScreen";
 import type { ReplayEvent } from "../lib/typing-engine";
@@ -328,50 +336,36 @@ export function PracticeMode({
 
 
   const [isAiModalOpen, setIsAiModalOpen] = useState(false);
-  const [aiCategory, setAiCategory] = useState("Legal & Court Matters");
+  const [aiCategory, setAiCategory] = useState("legal");
+  const [aiTopic, setAiTopic] = useState("civil");
   const [aiDifficulty, setAiDifficulty] = useState("intermediate");
   const [aiLength, setAiLength] = useState("medium");
   const [isGenerating, setIsGenerating] = useState(false);
   const [generateError, setGenerateError] = useState("");
 
-  const categories = [
-    "Legal & Court Matters",
-    "Parliamentary & Debates",
-    "Progressive & Editorials",
-    "Business & Financial",
-    "General & Narrative",
-    "Science & Technology",
-    "Medical & Healthcare"
-  ];
+  const selectedAiCategory = getPracticeAiCategory(aiCategory);
+  const selectedAiTopic = getPracticeAiTopic(aiCategory, aiTopic);
+  const availablePracticeModel = getAvailablePracticeModel();
 
   const handleGenerateAI = async () => {
     if (isGenerating) return;
     setIsGenerating(true);
     setGenerateError("");
     try {
-      const response = await aiAwareFetch("/api/generate-practice", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          category: aiCategory,
-          difficulty: aiDifficulty,
-          length: aiLength
-        })
+      const result = await generatePracticeText({
+        categoryId: aiCategory,
+        topicId: aiTopic,
+        difficultyId: aiDifficulty,
+        lengthId: aiLength,
       });
-      let data;
-      try {
-        data = await response.json();
-      } catch (jsonErr) {
-        throw new Error(`Server returned an invalid response (${response.status}).`);
-      }
-      if (response.ok && data.text) {
-        setText(data.text);
+      if (result.text) {
+        setText(result.text);
         if (!title.trim() || title === "Demo Test") {
-          setTitle(`${aiCategory} - ${aiDifficulty.charAt(0).toUpperCase() + aiDifficulty.slice(1)}`);
+          setTitle(`${selectedAiCategory.label} - ${selectedAiTopic.label}`);
         }
         setIsAiModalOpen(false);
       } else {
-        setGenerateError(data.error || data.details || "Failed to generate text. Please try again.");
+        setGenerateError("The selected provider returned no usable practice text. Please try again.");
       }
     } catch (err: any) {
       console.error(err);
@@ -1475,7 +1469,8 @@ export function PracticeMode({
   const applyPreset = async (presetType: 'speed' | 'legal' | 'medical' | 'story') => {
       if (isGenerating) return;
 
-      let targetCategory = "General & Narrative";
+      let targetCategory = "general";
+      let targetTopic = "explainer";
       let targetDifficulty = "intermediate";
       let targetLength = "short";
 
@@ -1486,7 +1481,8 @@ export function PracticeMode({
           setStrictMinAccuracy("95");
           targetLength = "short";
           targetDifficulty = "advanced";
-          targetCategory = "General & Narrative";
+          targetCategory = "general";
+          targetTopic = "everyday";
       } else if (presetType === 'legal') {
           setTitle("Legal Document Drill");
           setDurationLimit("");
@@ -1494,52 +1490,43 @@ export function PracticeMode({
           setStrictMinAccuracy("98");
           targetLength = "medium";
           targetDifficulty = "professional";
-          targetCategory = "Legal & Court Matters";
+          targetCategory = "legal";
+          targetTopic = "civil";
       } else if (presetType === 'medical') {
           setTitle("Medical Journal Outline");
           setDurationLimit("");
           setIsStrictModeEnabled(false);
           targetLength = "medium";
           targetDifficulty = "professional";
-          targetCategory = "Medical & Healthcare";
+          targetCategory = "medical";
+          targetTopic = "clinical";
       } else if (presetType === 'story') {
           setTitle("Story Snippet Practice");
           setDurationLimit("");
           setIsStrictModeEnabled(false);
           targetLength = "medium";
           targetDifficulty = "intermediate";
-          targetCategory = "General & Narrative";
+          targetCategory = "general";
+          targetTopic = "short-narrative";
       }
 
       setAiCategory(targetCategory);
+      setAiTopic(targetTopic);
       setAiDifficulty(targetDifficulty);
       setAiLength(targetLength);
 
       setIsGenerating(true);
       setGenerateError("");
       try {
-        const response = await aiAwareFetch("/api/generate-practice", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ category: targetCategory, difficulty: targetDifficulty, length: targetLength }),
+        const result = await generatePracticeText({
+          categoryId: targetCategory,
+          topicId: targetTopic,
+          difficultyId: targetDifficulty,
+          lengthId: targetLength,
         });
-
-        let data;
-        try {
-          data = await response.json();
-        } catch (jsonErr) {
-          throw new Error(`Server returned an invalid response (${response.status}).`);
-        }
-
-        if (response.ok && data.text) {
-          setText(data.text);
-        } else {
-          setGenerateError(data.error || data.details || "Failed to generate text. Please try again.");
-        }
+        setText(result.text);
       } catch (error) {
-        setGenerateError("Network error. Please try again.");
+        setGenerateError(error instanceof Error ? error.message : "Failed to generate text. Please try again.");
       } finally {
         setIsGenerating(false);
       }
@@ -1681,10 +1668,15 @@ export function PracticeMode({
                               </div>
                               <div className="flex items-center gap-3 shrink-0">
                                 <button
-                                  onClick={() => setIsAiModalOpen(true)}
-                                  className="px-4 py-2 text-[13px] font-medium rounded-md transition-all bg-white dark:bg-[#333] text-neutral-900 dark:text-white shadow-sm border border-black/10 dark:border-white/10 hover:border-blue-500/50 flex items-center gap-2 group"
+                                  onClick={() => {
+                                    setGenerateError("");
+                                    setIsAiModalOpen(true);
+                                  }}
+                                  aria-label="Open AI practice generator"
+                                  title="AI practice generator"
+                                  className="p-1.5 text-blue-500 dark:text-blue-400 hover:text-blue-600 dark:hover:text-blue-300 transition-colors rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 active:scale-95"
                                 >
-                                  <Sparkles className="w-4 h-4 text-blue-500 group-hover:scale-110 transition-transform" /> AI Generation
+                                  <Sparkles className="w-[18px] h-[18px]" strokeWidth={1.8} />
                                 </button>
                               </div>
                             </div>
@@ -1865,88 +1857,93 @@ export function PracticeMode({
               exit={{ opacity: 0, scale: 0.98, y: 10 }}
               transition={{ duration: 0.2, ease: "easeOut" }}
               style={{ "--accent-color": themeAccentColor } as React.CSSProperties}
-              className="flex flex-col bg-[#FCF5F3] dark:bg-[#20202A] rounded-xl shadow-[0_24px_54px_rgba(0,0,0,0.25)] overflow-hidden max-w-[460px] w-full border border-black/5 dark:border-white/10 font-sans"
+              className="flex flex-col bg-[#F3F3F3] dark:bg-[#202020] rounded-lg shadow-[0_24px_54px_rgba(0,0,0,0.25)] overflow-hidden w-[400px] h-auto max-w-full max-h-[90vh] border border-black/5 dark:border-white/10 font-sans text-[#202020] dark:text-[#EAEAEA] justify-between"
             >
-              {/* Title Bar Context */}
               <div className="h-[38px] flex items-center justify-between pl-4 pr-0 shrink-0 select-none bg-black/5 dark:bg-white/5 border-b border-black/5 dark:border-white/5">
-                 <div className="flex items-center gap-2.5 text-[#1E1E1E] dark:text-[#EAEAEA]">
-                   <Sparkles className="w-4 h-4 text-blue-500" />
-                   <span className="text-[12px] font-medium tracking-wide">AI Text Generator</span>
-                 </div>
-                 <div className="flex items-center h-full">
-                   <button onClick={() => setIsAiModalOpen(false)} className="h-full px-4 hover:bg-[#E81123] hover:text-white text-[#1E1E1E] dark:text-[#EAEAEA] transition-colors">
-                     <X className="w-4 h-4"/>
-                   </button>
-                 </div>
+                <div className="flex items-center gap-2.5">
+                  <Sparkles className="w-4 h-4 text-blue-500" />
+                  <span className="text-[12px] font-medium tracking-wide">AI Practice</span>
+                </div>
+                <div className="flex items-center h-full">
+                  <button onClick={() => setIsAiModalOpen(false)} aria-label="Close AI Practice" className="h-full px-4 hover:bg-[#E81123] hover:text-white transition-colors">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
 
-              {/* Config Content */}
-              <div className="p-6 space-y-5">
-                <div>
-                  <label className="block text-[11px] uppercase tracking-wider text-[#1E1E1E]/50 dark:text-[#EAEAEA]/40 font-semibold mb-2">
-                    Domain Category
-                  </label>
+              <div className="p-5 pb-6 flex-1 flex flex-col overflow-y-auto custom-scrollbar space-y-5">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[13px] pl-0.5">Subject</label>
                   <div className="relative">
                     <select
                       value={aiCategory}
-                      onChange={(e) => setAiCategory(e.target.value)}
-                      className="w-full bg-[#F5EBE9] dark:bg-[#2A2A35]/50 border-none rounded-lg px-4 py-2.5 text-[14px] font-medium text-[#1E1E1E] dark:text-[#EAEAEA] focus:outline-none focus:ring-2 focus:ring-[var(--accent-color)] transition-colors appearance-none pr-10 cursor-pointer"
+                      onChange={(e) => {
+                        const nextCategory = getPracticeAiCategory(e.target.value);
+                        setAiCategory(nextCategory.id);
+                        setAiTopic(nextCategory.topics[0]?.id ?? "");
+                      }}
+                      className="w-full appearance-none bg-white dark:bg-[#2A2A35] border border-[#E5DCDA] dark:border-[#1A1A23] rounded-md px-3 py-1.5 text-[13px] outline-none shadow-sm focus:border-[var(--accent-color)]"
                     >
-                      {categories.map((cat) => (
-                        <option key={cat} value={cat} className="bg-[#FCF5F3] dark:bg-[#20202A]">{cat}</option>
+                      {PRACTICE_AI_CATEGORIES.map((category) => (
+                        <option key={category.id} value={category.id}>{category.label}</option>
                       ))}
                     </select>
-                    <div className="absolute inset-y-0 right-0 flex items-center px-4 pointer-events-none text-[#1E1E1E]/40 dark:text-[#EAEAEA]/30">
-                      <Settings2 className="w-4 h-4" />
-                    </div>
+                    <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[13px] pl-0.5">Topic</label>
+                  <div className="relative">
+                    <select
+                      value={selectedAiTopic.id}
+                      onChange={(e) => setAiTopic(e.target.value)}
+                      className="w-full appearance-none bg-white dark:bg-[#2A2A35] border border-[#E5DCDA] dark:border-[#1A1A23] rounded-md px-3 py-1.5 text-[13px] outline-none shadow-sm focus:border-[var(--accent-color)]"
+                    >
+                      {selectedAiCategory.topics.map((topic) => (
+                        <option key={topic.id} value={topic.id}>{topic.label}</option>
+                      ))}
+                    </select>
+                    <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-[11px] uppercase tracking-wider text-[#1E1E1E]/50 dark:text-[#EAEAEA]/40 font-semibold mb-2">
-                      Difficulty Level
-                    </label>
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[13px] pl-0.5">Difficulty</label>
                     <div className="relative">
                       <select
                         value={aiDifficulty}
                         onChange={(e) => setAiDifficulty(e.target.value)}
-                        className="w-full bg-[#F5EBE9] dark:bg-[#2A2A35]/50 border-none rounded-lg px-4 py-2.5 text-[14px] font-medium text-[#1E1E1E] dark:text-[#EAEAEA] focus:outline-none focus:ring-2 focus:ring-[var(--accent-color)] transition-colors appearance-none pr-10 cursor-pointer"
+                        className="w-full appearance-none bg-white dark:bg-[#2A2A35] border border-[#E5DCDA] dark:border-[#1A1A23] rounded-md px-3 py-1.5 text-[13px] outline-none shadow-sm focus:border-[var(--accent-color)]"
                       >
-                        <option value="beginner" className="bg-[#FCF5F3] dark:bg-[#20202A]">Beginner (&lt;60 WPM)</option>
-                        <option value="intermediate" className="bg-[#FCF5F3] dark:bg-[#20202A]">Intermediate (60-90 WPM)</option>
-                        <option value="advanced" className="bg-[#FCF5F3] dark:bg-[#20202A]">Advanced (90-120 WPM)</option>
-                        <option value="professional" className="bg-[#FCF5F3] dark:bg-[#20202A]">Professional (120+ WPM)</option>
+                        {PRACTICE_AI_DIFFICULTIES.map((difficulty) => (
+                          <option key={difficulty.id} value={difficulty.id}>{difficulty.label}</option>
+                        ))}
                       </select>
-                      <div className="absolute inset-y-0 right-0 flex items-center px-4 pointer-events-none text-[#1E1E1E]/40 dark:text-[#EAEAEA]/30">
-                        <Settings2 className="w-4 h-4" />
-                      </div>
+                      <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
                     </div>
                   </div>
 
-                  <div>
-                    <label className="block text-[11px] uppercase tracking-wider text-[#1E1E1E]/50 dark:text-[#EAEAEA]/40 font-semibold mb-2">
-                      Practice Length
-                    </label>
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[13px] pl-0.5">Length</label>
                     <div className="relative">
                       <select
                         value={aiLength}
                         onChange={(e) => setAiLength(e.target.value)}
-                        className="w-full bg-[#F5EBE9] dark:bg-[#2A2A35]/50 border-none rounded-lg px-4 py-2.5 text-[14px] font-medium text-[#1E1E1E] dark:text-[#EAEAEA] focus:outline-none focus:ring-2 focus:ring-[var(--accent-color)] transition-colors appearance-none pr-10 cursor-pointer"
+                        className="w-full appearance-none bg-white dark:bg-[#2A2A35] border border-[#E5DCDA] dark:border-[#1A1A23] rounded-md px-3 py-1.5 text-[13px] outline-none shadow-sm focus:border-[var(--accent-color)]"
                       >
-                        <option value="short" className="bg-[#FCF5F3] dark:bg-[#20202A]">Short ~200 words</option>
-                        <option value="medium" className="bg-[#FCF5F3] dark:bg-[#20202A]">Medium ~400 words</option>
-                        <option value="long" className="bg-[#FCF5F3] dark:bg-[#20202A]">Long ~800 words</option>
+                        {PRACTICE_AI_LENGTHS.map((length) => (
+                          <option key={length.id} value={length.id}>{length.label}</option>
+                        ))}
                       </select>
-                      <div className="absolute inset-y-0 right-0 flex items-center px-4 pointer-events-none text-[#1E1E1E]/40 dark:text-[#EAEAEA]/30">
-                        <Settings2 className="w-4 h-4" />
-                      </div>
+                      <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
                     </div>
                   </div>
                 </div>
 
                 {generateError && (
-                  <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-[13px] text-red-600 dark:text-red-400">
+                  <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-md text-[13px] text-red-600 dark:text-red-400">
                     <div className="flex items-start gap-2">
                       <ShieldAlert className="w-4 h-4 flex-shrink-0 mt-0.5" />
                       <p>{generateError}</p>
@@ -1954,27 +1951,27 @@ export function PracticeMode({
                   </div>
                 )}
 
-                {/* Footer Buttons */}
-                <div className="flex justify-end gap-2 pt-4 border-t border-black/5 dark:border-white/5">
-                  <button
-                    onClick={() => setIsAiModalOpen(false)}
-                    className="px-5 py-2 rounded-lg text-[14px] font-medium bg-transparent text-[#1E1E1E]/70 dark:text-[#EAEAEA]/70 hover:text-[#1E1E1E] dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5 transition-all"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleGenerateAI}
-                    disabled={isGenerating}
-                    className="flex items-center justify-center px-6 py-2 rounded-lg text-white text-[14px] font-medium transition-all active:scale-95 shadow-md hover:opacity-90 min-w-[140px]"
-                    style={{ backgroundColor: themeAccentColor }}
-                  >
-                    {isGenerating ? (
-                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                    ) : (
-                      <Sparkles className="w-4 h-4 mr-2" />
-                    )}
-                    {isGenerating ? "Generating..." : "Generate Text"}
-                  </button>
+                <div className="flex items-center justify-between gap-3 pt-4 border-t border-black/5 dark:border-white/5">
+                  <span className="text-[11px] text-neutral-500 dark:text-neutral-400 truncate" title={availablePracticeModel?.label ?? "No AI key configured"}>
+                    {availablePracticeModel ? availablePracticeModel.label : "Add an AI key in Settings"}
+                  </span>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      onClick={() => setIsAiModalOpen(false)}
+                      className="px-3 py-1.5 text-[13px] rounded-md hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleGenerateAI}
+                      disabled={isGenerating}
+                      className="flex items-center justify-center gap-2 px-3 py-1.5 rounded-md text-white text-[13px] transition-all active:scale-95 shadow-sm hover:opacity-90 min-w-[92px]"
+                      style={{ backgroundColor: themeAccentColor }}
+                    >
+                      {isGenerating && <Loader2 className="w-4 h-4 animate-spin" />}
+                      {isGenerating ? "Working..." : "Generate"}
+                    </button>
+                  </div>
                 </div>
               </div>
             </motion.div>

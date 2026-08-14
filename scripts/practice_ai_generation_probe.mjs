@@ -1,0 +1,174 @@
+import assert from "node:assert/strict";
+import { createRequire } from "node:module";
+
+const require = createRequire(import.meta.url);
+const puppeteer = require("/tmp/node_modules/puppeteer-core");
+
+const previewUrl = process.env.PREVIEW_URL || "https://3000-imtbdo58j1lh8wnjamngs-672e8f19.us4.manus.computer";
+const viewports = [
+  { name: "desktop", width: 1280, height: 720 },
+  { name: "mobile", width: 375, height: 812 },
+];
+
+const browser = await puppeteer.launch({
+  executablePath: "/usr/bin/chromium",
+  headless: true,
+  args: ["--no-sandbox", "--disable-dev-shm-usage"],
+});
+
+const clickButtonWithText = async (page, text) => {
+  await page.evaluate((expectedText) => {
+    const button = [...document.querySelectorAll("button")].find(
+      (candidate) => candidate.textContent?.trim() === expectedText,
+    );
+    if (!button) throw new Error(`Missing button: ${expectedText}`);
+    button.click();
+  }, text);
+};
+
+try {
+  for (const viewport of viewports) {
+    const page = await browser.newPage();
+    await page.setViewport({ width: viewport.width, height: viewport.height });
+    const errors = [];
+    const ignoredWarnings = [];
+    page.on("pageerror", (error) => errors.push(String(error)));
+    page.on("console", (message) => {
+      if (message.type() !== "error") return;
+      if (message.text().includes("net::ERR_BLOCKED_BY_RESPONSE.NotSameOrigin")) {
+        ignoredWarnings.push(message.text());
+        return;
+      }
+      errors.push(message.text());
+    });
+
+    await page.goto(`${previewUrl}/?from_webdev=1`, { waitUntil: "networkidle2" });
+    await page.click('button[title="Start Practice"]');
+    await page.waitForSelector('button[aria-label="Open AI practice generator"]');
+
+    assert.equal(
+      await page.$$eval('button[aria-label="Open AI practice generator"]', (buttons) => buttons.length),
+      1,
+      `${viewport.name}: expected exactly one standalone AI trigger`,
+    );
+    assert.equal(
+      await page.$eval('button[aria-label="Open AI practice generator"]', (button) =>
+        !button.textContent?.includes("AI Generation") &&
+        getComputedStyle(button).backgroundColor === "rgba(0, 0, 0, 0)",
+      ),
+      true,
+      `${viewport.name}: AI trigger still appears as a text or filled button`,
+    );
+
+    await page.click('button[aria-label="Open AI practice generator"]');
+    await page.waitForSelector('button[aria-label="Close AI Practice"]');
+    assert.equal(
+      await page.$eval("body", (body) => body.textContent?.includes("AI Practice") ?? false),
+      true,
+      `${viewport.name}: AI Practice modal did not open`,
+    );
+    assert.equal(
+      await page.$$eval("select", (selects) => selects.length),
+      4,
+      `${viewport.name}: expected Subject, Topic, Difficulty, and Length`,
+    );
+    assert.equal(
+      await page.$eval("body", (body) => body.textContent?.includes("AI Text Generator") ?? false),
+      false,
+      `${viewport.name}: old AI Text Generator title remains`,
+    );
+
+    await page.select("select:nth-of-type(1)", "parliament");
+    const topicLabels = await page.$$eval("select", (nodes) =>
+      [...nodes[1].options].map((option) => option.textContent?.trim()),
+    );
+    assert.deepEqual(
+      topicLabels,
+      [
+        "Parliamentary questions",
+        "Bills and legislation",
+        "Motions and resolutions",
+        "Committees and reports",
+        "Budget and finance",
+        "Policy and public-interest debates",
+      ],
+      `${viewport.name}: parliamentary topic taxonomy did not update correctly`,
+    );
+    assert.equal(
+      await page.$eval("select:nth-of-type(1)", (select) => select.value),
+      "parliament",
+      `${viewport.name}: subject selection did not persist`,
+    );
+
+    await clickButtonWithText(page, "Generate");
+    await page.waitForFunction(
+      () => document.body.textContent?.includes("Add a Gemini, OpenAI, or Groq key in Settings > AI Setup"),
+      { timeout: 2500 },
+    );
+    assert.equal(
+      await page.$eval("body", (body) => body.textContent?.includes("/api/generate-practice") ?? false),
+      false,
+      `${viewport.name}: obsolete generation endpoint surfaced to the user`,
+    );
+
+    await page.evaluate(() => {
+      localStorage.setItem("royscript_ai_keys", JSON.stringify({ gemini: "probe-key" }));
+    });
+    await page.reload({ waitUntil: "networkidle2" });
+    await page.click('button[title="Start Practice"]');
+    await page.waitForSelector('button[aria-label="Open AI practice generator"]');
+    await page.click('button[aria-label="Open AI practice generator"]');
+    await page.waitForSelector('button[aria-label="Close AI Practice"]');
+    await page.select("select:nth-of-type(1)", "parliament");
+    await page.$$eval("select", (nodes) => {
+      const topic = nodes[1];
+      if (!topic) throw new Error("Missing Topic select");
+      topic.value = "bills";
+      topic.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+
+    await page.evaluate(() => {
+      window.__practiceFetches = [];
+      const nativeFetch = window.fetch.bind(window);
+      window.fetch = async (input, init) => {
+        const url = typeof input === "string" ? input : input.url;
+        if (!url.includes("generativelanguage.googleapis.com")) return nativeFetch(input, init);
+        window.__practiceFetches.push({ url, body: init?.body ?? null });
+        return new Response(JSON.stringify({
+          candidates: [{ content: { parts: [{ text: "Hello \u2014 world\u2026 \u201cquoted\u201d \u2605" }] } }],
+        }), { status: 200, headers: { "Content-Type": "application/json" } });
+      };
+    });
+
+    await clickButtonWithText(page, "Generate");
+    await page.waitForFunction(
+      () => document.querySelector("textarea")?.value === 'Hello - world... "quoted"',
+      { timeout: 2500 },
+    );
+    const request = await page.evaluate(() => window.__practiceFetches?.[0] ?? null);
+    assert.ok(request, `${viewport.name}: mocked Gemini request was not made`);
+    const requestBody = JSON.parse(request.body);
+    const promptText = requestBody.contents?.[0]?.parts?.[0]?.text ?? "";
+    assert.match(promptText, /Subject: Parliament and public policy/);
+    assert.match(promptText, /Topic: Bills and legislation/);
+    assert.match(promptText, /standard English QWERTY keyboard/);
+    assert.match(promptText, /Do not use em dashes, en dashes/);
+    assert.equal(
+      await page.$eval("textarea", (textarea) => /[^\x09\x0A\x0D\x20-\x7E]/.test(textarea.value)),
+      false,
+      `${viewport.name}: normalized generated text still contains non-ASCII characters`,
+    );
+
+    const unexpectedErrors = errors.filter(
+      (error) => !error.includes("Add a Gemini, OpenAI, or Groq key in Settings > AI Setup to generate practice text."),
+    );
+    assert.deepEqual(unexpectedErrors, [], `${viewport.name}: application errors detected: ${unexpectedErrors.join(" | ")}`);
+    console.log(
+      `${viewport.name} Practice AI probe passed${ignoredWarnings.length ? ` (${ignoredWarnings.length} known preview-resource warning ignored)` : ""}.`,
+    );
+    await page.evaluate(() => localStorage.removeItem("royscript_ai_keys"));
+    await page.close();
+  }
+} finally {
+  await browser.close();
+}
