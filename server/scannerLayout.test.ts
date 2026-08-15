@@ -16,7 +16,7 @@ describe("scanner action-bar layout contract", () => {
     expect(source).toContain("max-w-full min-w-0 flex-wrap overflow-visible");
   });
 
-  it("uses the quiet staged upload surface while retaining stable import controls", () => {
+  it("uses a canvas-native upload stage and command rail while retaining stable import controls", () => {
     const source = fs.readFileSync(scannerModalPath, "utf8");
 
     expect(source).toContain("data-scanner-empty-upload-state");
@@ -32,14 +32,15 @@ describe("scanner action-bar layout contract", () => {
     expect(source).toContain("data-scanner-upload-selected");
     expect(source).toContain("data-scanner-remove-selected-upload");
     expect(source).toContain("data-scanner-upload-thumbnail");
-    expect(source).toContain("Add a document");
-    expect(source).toContain("Drop a file here or choose one.");
-    expect(source).toContain("Use document");
+    expect(source).toContain("Drop a document");
+    expect(source).toContain("Release anywhere in this canvas");
+    expect(source).toContain("Add to scanner");
     expect(source).toContain("Up to 20 MB");
     expect(source).toContain("CloudUpload");
-    expect(source).toContain("max-w-[360px]");
-    expect(source).toContain("min-h-[304px]");
-    expect(source).toContain("min-h-[102px]");
-    expect(source).toContain("min-h-[76px]");
+    expect(source).toContain("data-scanner-upload-command-strip");
+    expect(source).toContain("max-w-[620px]");
+    expect(source).toContain("min-h-[360px]");
+    expect(source).toContain("rounded-full bg-[#F1F0F5]/90");
+    expect(source).not.toContain("border border-gray-200/70 bg-gradient-to-b");
   });
 });
