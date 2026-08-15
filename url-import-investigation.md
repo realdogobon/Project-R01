@@ -6,7 +6,7 @@ The user supplied `https://www.scribd.com/document/742163601/Progressive-March-2
 
 Browser inspection on 2026-08-15 established that this address is a **Scribd document viewer page**, not a direct PDF response. The visible page advertises 40 pages and renders preview images, but its visible Download action opens a dialog offering a 30-day trial. No direct downloadable document file was exposed by the unauthenticated public page.
 
-The current scanner importer uses a browser fetch and expects a directly accessible document/text response. It therefore cannot turn this viewer HTML into the original 40-page file, and it must not bypass Scribd’s trial, login, payment, or publisher restrictions. The next investigation step is to classify direct-file URLs, open webpages, viewer pages, and protected pages separately, then define an approved extension path for each supported category.
+The original browser-only importer used a browser fetch and expected a directly accessible document/text response. The implemented protected server importer broadens support for legitimate, anonymously public documents, but it still cannot turn this viewer HTML into the original 40-page file and must not bypass Scribd’s trial, login, payment, or publisher restrictions. Direct document responses and legitimate public Google Docs/Drive export or download routes are the supported boundary; hosted viewers, login- or payment-gated pages, and publisher-protected sources remain silent unavailable cases.
 
 ## Browser-origin fetch evidence
 
