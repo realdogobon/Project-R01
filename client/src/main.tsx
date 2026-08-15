@@ -1,5 +1,7 @@
-import {StrictMode, Component, ReactNode} from 'react';
-import {createRoot} from 'react-dom/client';
+import { StrictMode } from 'react';
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { httpBatchLink } from "@trpc/client";
+import { createRoot } from 'react-dom/client';
 
 
 if (typeof Map !== 'undefined' && !('getOrInsertComputed' in Map.prototype)) {
@@ -36,13 +38,26 @@ if (typeof WeakMap !== 'undefined' && !('getOrInsertComputed' in WeakMap.prototy
 
 import App from './App.tsx';
 import './index.css';
-
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { trpc } from "./lib/trpc";
+
+const queryClient = new QueryClient();
+const trpcClient = trpc.createClient({
+    links: [
+      httpBatchLink({
+        url: "/api/trpc",
+      }),
+    ],
+});
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <ErrorBoundary>
-      <App />
-    </ErrorBoundary>
+    <trpc.Provider client={trpcClient} queryClient={queryClient}>
+      <QueryClientProvider client={queryClient}>
+        <ErrorBoundary>
+          <App />
+        </ErrorBoundary>
+      </QueryClientProvider>
+    </trpc.Provider>
   </StrictMode>,
 );

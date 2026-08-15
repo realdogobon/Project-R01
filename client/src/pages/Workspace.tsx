@@ -86,6 +86,7 @@ import { recognizeImage, releaseWorker } from "../lib/OcrEngine";
 import { transcribeWithModel, hasApiKeyFor, getProviderOf } from "../lib/AiVisionEngine";
 import { ExportEngine } from "../lib/ExportEngine";
 import { ingestDocument, searchIntelligence, syncRagIndex, ScanDocument, getAllScans, deleteScan, updateDocument, restoreScan } from "../lib/rag-search";
+import { trpc } from "../lib/trpc";
 const globalScannerEngine = new ScannerEngine();
 const SCANNER_MAX_VISUAL_FILE_BYTES = 20_000_000;
 const SCANNER_MAX_TEXT_FILE_BYTES = 2_000_000;
@@ -1193,6 +1194,7 @@ export default function Workspace() {
   const [isScannerAnimating, setIsScannerAnimating] = useState(false);
   const [scannerPdfDoc, setScannerPdfDoc] = useState<any>(null);
   const [isScannerDocumentLoading, setIsScannerDocumentLoading] = useState(false);
+  const publicLinkImport = trpc.scanner.importPublicLink.useMutation();
   const [scannerStitchedUrl, setScannerStitchedUrl] = useState<string>("");
   const [scannerRawStitchedUrl, setScannerRawStitchedUrl] = useState<string>("");
   const [scannerCrop, setScannerCrop] = useState<Crop>();
@@ -1971,35 +1973,20 @@ export default function Workspace() {
 
   const importScannerDocumentFromUrl = async (rawUrl: string) => {
     try {
-      const source = new URL(rawUrl.trim());
-      if (source.protocol !== "https:" && source.protocol !== "http:") throw new Error("Unsupported URL protocol");
-      const response = await fetch(source.toString());
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const advertisedSize = Number(response.headers.get("content-length") || "0");
-      const sourceLooksLikeText = /\.(?:txt|md|html?|css|json|js|ts|csv|xml|ya?ml)$/i.test(source.pathname)
-        || /^(?:text\/|application\/(?:json|xml))/.test(response.headers.get("content-type") || "");
-      const maximumBytes = sourceLooksLikeText ? SCANNER_MAX_TEXT_FILE_BYTES : SCANNER_MAX_VISUAL_FILE_BYTES;
-      if (Number.isFinite(advertisedSize) && advertisedSize > maximumBytes) throw new Error("File exceeds scanner limit");
-      const blob = await response.blob();
-      if (blob.size > maximumBytes) throw new Error("File exceeds scanner limit");
+      const result = await publicLinkImport.mutateAsync({ url: rawUrl.trim() });
+      if (result.ok === false) {
+        setOcrError("");
+        setScannerLogs([result.message]);
+        return;
+      }
 
-      const pathName = source.pathname.split("/").filter(Boolean).at(-1) || "linked-document";
-      const contentType = blob.type.split(";")[0].toLowerCase();
-      const extensionByType: Record<string, string> = {
-        "application/pdf": ".pdf",
-        "text/markdown": ".md",
-        "text/html": ".html",
-        "text/plain": ".txt",
-        "image/jpeg": ".jpg",
-        "image/png": ".png",
-        "image/webp": ".webp",
-      };
-      const hasExtension = /\.[a-z0-9]{1,8}$/i.test(pathName);
-      const fileName = hasExtension ? pathName : `${pathName}${extensionByType[contentType] || ".txt"}`;
-      await processUploadedFile(new File([blob], fileName, { type: contentType || blob.type }));
+      const binary = window.atob(result.base64);
+      const bytes = new Uint8Array(binary.length);
+      for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+      await processUploadedFile(new File([bytes], result.fileName, { type: result.contentType }));
     } catch {
       setOcrError("");
-      setScannerLogs(["The document link could not be imported."]);
+      setScannerLogs(["The document link is not available for scanner import."]);
     }
   };
 

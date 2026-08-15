@@ -101,13 +101,17 @@ export class ExportEngine {
 
   static async exportReportPDF(documents: ScanDocument[], filename: string = "RoyScript_TSR_Report.pdf", watermark?: string) {
      const bytes = await this.generateCombinedPDF(documents, { watermark });
-     const blob = new Blob([bytes], { type: "application/pdf" });
+     const stableBytes = new Uint8Array(bytes.byteLength);
+     stableBytes.set(bytes);
+     const blob = new Blob([stableBytes.buffer], { type: "application/pdf" });
      saveAs(blob, filename);
   }
 
   static async exportSinglePDF(docTitle: string, content: string, watermark?: string) {
      const bytes = await this.generateCombinedPDF([{ title: docTitle, content, id: "1", owner_id: "local", createdAt: new Date() }], { watermark });
-     const blob = new Blob([bytes], { type: "application/pdf" });
+     const stableBytes = new Uint8Array(bytes.byteLength);
+     stableBytes.set(bytes);
+     const blob = new Blob([stableBytes.buffer], { type: "application/pdf" });
      const safeTitle = docTitle.replace(/[^a-z0-9]/gi, '_').toLowerCase();
      saveAs(blob, `${safeTitle}.pdf`);
   }
