@@ -16,7 +16,7 @@ describe("scanner action-bar layout contract", () => {
     expect(source).toContain("max-w-full min-w-0 flex-wrap overflow-visible");
   });
 
-  it("uses the reference-led staged upload surface while retaining stable import controls", () => {
+  it("uses the quiet staged upload surface while retaining stable import controls", () => {
     const source = fs.readFileSync(scannerModalPath, "utf8");
 
     expect(source).toContain("data-scanner-empty-upload-state");
@@ -32,12 +32,13 @@ describe("scanner action-bar layout contract", () => {
     expect(source).toContain("data-scanner-upload-selected");
     expect(source).toContain("data-scanner-remove-selected-upload");
     expect(source).toContain("data-scanner-upload-thumbnail");
-    expect(source).toContain("Drag &amp; drop a document");
-    expect(source).toContain("Drop it right here!");
+    expect(source).toContain("Add a document");
+    expect(source).toContain("Drop document here");
     expect(source).toContain("Upload document");
     expect(source).toContain("Up to 20 MB");
-    expect(source).toContain("min-h-[352px]");
-    expect(source).toContain("min-h-[192px]");
-    expect(source).toContain("min-h-[146px]");
+    expect(source).toContain("max-w-[520px]");
+    expect(source).toContain("min-h-[340px]");
+    expect(source).toContain("min-h-[168px]");
+    expect(source).toContain("min-h-[108px]");
   });
 });

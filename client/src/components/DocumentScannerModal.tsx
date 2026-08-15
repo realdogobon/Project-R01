@@ -1656,8 +1656,8 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                    ) : (!hasDocumentLoaded || uploadPresentation.phase === "selected" || uploadPresentation.phase === "pending") ? (
                      <div
                        data-scanner-empty-upload-state
-                       className="w-full max-w-[760px] min-h-[352px] mx-auto rounded-[32px] bg-white/88 dark:bg-[#20202A]/90 p-7 shadow-[0_30px_64px_-38px_rgba(87,76,215,0.56)] transition-[transform,box-shadow] duration-300"
-                       style={{ boxShadow: isDragActive ? `0 34px 70px -34px ${uploadSurfaceAccent}9C` : undefined }}
+                       className="w-full max-w-[520px] min-h-[340px] mx-auto rounded-[28px] bg-transparent p-5 transition-colors duration-300"
+                       style={{ backgroundColor: isDragActive ? `${uploadSurfaceAccent}0E` : undefined }}
                        onDragOver={(event) => { event.preventDefault(); event.stopPropagation(); setIsDragActive(true); }}
                        onDragEnter={(event) => { event.preventDefault(); event.stopPropagation(); setIsDragActive(true); }}
                        onDragLeave={(event) => { event.preventDefault(); event.stopPropagation(); setIsDragActive(false); }}
@@ -1704,54 +1704,47 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                                uploadPresentationVisibleAtRef.current = performance.now();
                                setIsUploadPendingEntered(true);
                              }}
-                             className="flex min-h-[296px] flex-col justify-center"
+                             className="flex min-h-[290px] flex-col justify-center"
                            >
-                             <div className="flex min-h-[176px] flex-col items-center justify-center rounded-[25px] bg-[#FBFAFF] px-8 text-center dark:bg-white/[0.035]">
-                               <span className="mb-5 flex h-16 w-16 items-center justify-center rounded-[22px] bg-white text-[#7868F4] shadow-[0_16px_30px_-18px_rgba(64,51,177,0.45)] dark:bg-white/[0.07]">
-                                 <FileText className="h-8 w-8" strokeWidth={1.55} />
-                               </span>
-                               <h3 className="text-[22px] font-semibold tracking-[-0.035em] text-[#28253B] dark:text-white">Uploading document</h3>
-                               <p className="mt-2 text-[13px] text-[#777386] dark:text-white/55">Preparing your file for the scanner.</p>
+                             <div className="mx-auto w-full max-w-[368px] rounded-2xl bg-white/70 px-5 py-4 shadow-[0_14px_30px_-24px_rgba(62,55,91,0.45)] dark:bg-white/[0.045]">
+                               <div className="flex items-center gap-3.5">
+                                 <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#F0EEFF] text-[#7868F4] dark:bg-[#7868F4]/15"><FileText className="h-4.5 w-4.5" strokeWidth={1.7} /></span>
+                                 <span className="min-w-0 flex-1"><span className="block truncate text-[13px] font-medium text-[#343146] dark:text-white">{uploadPresentation.fileName}</span><span className="mt-0.5 flex items-center gap-1.5 text-[11px] text-[#807C8D] dark:text-white/45"><span className="h-3 w-3 rounded-full border-2 border-current border-t-transparent animate-spin" /> Preparing document</span></span>
+                               </div>
+                               <div className="mt-3 h-px overflow-hidden bg-[#EAE7F2] dark:bg-white/[0.08]"><motion.div className="h-full w-[42%] bg-[#7868F4]" initial={{ x: "-115%" }} animate={{ x: "260%" }} transition={{ repeat: Infinity, duration: 1.05, ease: "linear" }} /></div>
                              </div>
-                             <div className="mt-5 flex items-center gap-4 px-4">
-                               <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#F0EEFF] text-[#7868F4] dark:bg-[#7868F4]/15"><FileText className="h-5 w-5" strokeWidth={1.7} /></span>
-                               <span className="min-w-0 flex-1"><span className="block truncate text-[14px] font-medium text-[#343146] dark:text-white">{uploadPresentation.fileName}</span><span className="mt-0.5 flex items-center gap-1.5 text-[12px] text-[#807C8D] dark:text-white/45"><span className="h-3 w-3 rounded-full border-2 border-current border-t-transparent animate-spin" /> Uploading</span></span>
-                             </div>
-                             <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-[#ECEAF8] dark:bg-white/[0.08]"><motion.div className="h-full w-[42%] rounded-full bg-[#7868F4]" initial={{ x: "-115%" }} animate={{ x: "260%" }} transition={{ repeat: Infinity, duration: 1.05, ease: "linear" }} /></div>
                            </motion.div>
                          ) : (
-                           <motion.div key={uploadPresentation.phase === "selected" ? "selected-upload" : "idle-upload"} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.24, ease: [0.23, 1, 0.32, 1] }} className="flex min-h-[296px] flex-col">
+                           <motion.div key={uploadPresentation.phase === "selected" ? "selected-upload" : "idle-upload"} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.24, ease: [0.23, 1, 0.32, 1] }} className="flex min-h-[290px] flex-col">
                              <button
                                type="button"
                                data-scanner-upload-dropzone
                                onClick={() => localUploadInputRef.current?.click()}
-                             className={`flex w-full flex-col items-center justify-center rounded-[25px] px-8 text-center transition-all duration-300 ${uploadPresentation.phase === "selected" ? "min-h-[146px] py-4" : "min-h-[192px]"} ${isDragActive ? "bg-[#7868F4] text-white shadow-inner" : "bg-[#FBFAFF] text-[#28253B] hover:bg-[#F8F6FF] dark:bg-white/[0.035] dark:text-white dark:hover:bg-white/[0.06]"}`}
+                             className={`flex w-full flex-col items-center justify-center rounded-[22px] px-8 text-center transition-all duration-300 ${uploadPresentation.phase === "selected" ? "min-h-[108px] py-3" : "min-h-[168px]"} ${isDragActive ? "bg-[#F0EEFF] text-[#4C3CC8] dark:bg-[#7868F4]/16 dark:text-white" : "bg-transparent text-[#28253B] hover:bg-[#FAF9FD] dark:text-white dark:hover:bg-white/[0.035]"}`}
                              >
                                {isDragActive ? (
                                  <>
-                                   <span className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-white/16 text-white"><Images className="h-7 w-7" strokeWidth={1.6} /></span>
-                                   <h3 className="text-[23px] font-semibold tracking-[-0.035em]">Drop it right here!</h3>
+                                   <span className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-white/70 text-[#7868F4] dark:bg-white/[0.08] dark:text-white"><Images className="h-5 w-5" strokeWidth={1.6} /></span>
+                                   <h3 className="text-[17px] font-semibold tracking-[-0.025em]">Drop document here</h3>
                                  </>
                                ) : (
                                  <>
-                                   <span className={`relative flex items-center justify-center text-[#7868F4] ${uploadPresentation.phase === "selected" ? "mb-3 h-[44px] w-[64px]" : "mb-5 h-[66px] w-[84px]"}`} aria-hidden="true">
-                                     <FileText className={`absolute left-1 -rotate-[13deg] opacity-65 ${uploadPresentation.phase === "selected" ? "top-1 h-8 w-8" : "top-3 h-12 w-12"}`} strokeWidth={1.45} />
-                                     <FileText className={`absolute right-1 rotate-[13deg] opacity-65 ${uploadPresentation.phase === "selected" ? "top-1 h-8 w-8" : "top-3 h-12 w-12"}`} strokeWidth={1.45} />
-                                     <Images className={`relative z-10 rounded-xl bg-white shadow-[0_12px_22px_-15px_rgba(64,51,177,0.55)] dark:bg-[#29273A] ${uploadPresentation.phase === "selected" ? "h-9 w-9 p-2" : "h-12 w-12 p-2.5"}`} strokeWidth={1.6} />
+                                   <span className={`flex items-center justify-center rounded-2xl bg-white text-[#8B8798] shadow-[0_12px_26px_-20px_rgba(53,47,78,0.5)] dark:bg-white/[0.07] dark:text-white/65 ${uploadPresentation.phase === "selected" ? "mb-2 h-10 w-10" : "mb-4 h-12 w-12"}`} aria-hidden="true">
+                                     <FileText className={uploadPresentation.phase === "selected" ? "h-4.5 w-4.5" : "h-5 w-5"} strokeWidth={1.55} />
                                    </span>
-                                   <h3 className={`${uploadPresentation.phase === "selected" ? "text-[19px]" : "text-[23px]"} font-semibold tracking-[-0.035em]`}>Drag &amp; drop a document</h3>
-                                   <p className={`${uploadPresentation.phase === "selected" ? "mt-1 text-[12px]" : "mt-2 text-[14px]"} text-[#777386] dark:text-white/55`}>or <span className="font-semibold text-[#7868F4] underline decoration-[#B8B0FF] underline-offset-2">browse files</span> on your device</p>
+                                   <h3 className={`${uploadPresentation.phase === "selected" ? "text-[16px]" : "text-[18px]"} font-semibold tracking-[-0.025em]`}>Add a document</h3>
+                                   <p className={`${uploadPresentation.phase === "selected" ? "mt-0.5 text-[11px]" : "mt-1.5 text-[12px]"} text-[#777386] dark:text-white/55`}>Drop a file here, or choose one from your device.</p>
                                  </>
                                )}
                              </button>
 
                              {uploadPresentation.phase === "selected" && uploadPresentation.file ? (
-                               <motion.div data-scanner-upload-selected initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.04, duration: 0.2 }} className="mt-3 flex items-center gap-3 px-4 py-1.5">
-                                 <span className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-[#F0EEFF] text-[#7868F4] dark:bg-[#7868F4]/15">
+                               <motion.div data-scanner-upload-selected initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.04, duration: 0.2 }} className="mx-auto mt-3 flex w-full max-w-[368px] items-center gap-3 rounded-2xl bg-white/65 px-3.5 py-2.5 shadow-[0_12px_28px_-24px_rgba(53,47,78,0.42)] dark:bg-white/[0.04]">
+                                 <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-[#F0EEFF] text-[#7868F4] dark:bg-[#7868F4]/15">
                                    {uploadPresentation.thumbnailUrl ? <img data-scanner-upload-thumbnail src={uploadPresentation.thumbnailUrl} alt="" className="h-full w-full object-cover" /> : <FileText className="h-5 w-5" strokeWidth={1.7} />}
                                  </span>
                                  <span className="min-w-0 flex-1 text-left"><span className="block truncate text-[14px] font-medium text-[#343146] dark:text-white">{uploadPresentation.file.name}</span><span className="mt-0.5 block text-[12px] text-[#8A8696] dark:text-white/45">{uploadPresentation.file.type.startsWith("image/") ? "Image" : "Document"} · {formatUploadFileSize(uploadPresentation.file.size)}</span></span>
-                                 <button data-scanner-remove-selected-upload type="button" aria-label="Remove selected file" onClick={removeSelectedUploadFile} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[#ED6A84] transition-colors hover:bg-[#FFF0F3]"><X className="h-5 w-5" strokeWidth={2.1} /></button>
+                                 <button data-scanner-remove-selected-upload type="button" aria-label="Remove selected file" onClick={removeSelectedUploadFile} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[#9A95A8] transition-colors hover:bg-[#F5F3F8] hover:text-[#5E5968] dark:hover:bg-white/[0.06]"><X className="h-4 w-4" strokeWidth={2} /></button>
                                </motion.div>
                              ) : null}
 
@@ -1760,12 +1753,12 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                                  data-scanner-local-upload
                                  type="button"
                                  onClick={() => uploadPresentation.phase === "selected" && uploadPresentation.file ? startLocalUploadPresentation(uploadPresentation.file) : localUploadInputRef.current?.click()}
-                                 className="mx-auto flex min-w-[172px] items-center justify-center gap-2 rounded-full bg-[#7868F4] px-6 py-3 text-[14px] font-semibold text-white shadow-[0_14px_26px_-15px_rgba(80,64,213,0.82)] transition-all hover:bg-[#6D5DE8] active:scale-[0.97]"
+                                 className="mx-auto flex min-w-[148px] items-center justify-center gap-2 rounded-xl bg-[#7868F4] px-5 py-2.5 text-[13px] font-medium text-white shadow-[0_12px_22px_-16px_rgba(80,64,213,0.72)] transition-all hover:bg-[#6D5DE8] active:scale-[0.97]"
                                >
                                  <FolderOpen className="h-4 w-4" strokeWidth={1.9} />
                                  {uploadPresentation.phase === "selected" ? "Upload document" : "Choose file"}
                                </button>
-                               <div className="mt-3 flex flex-col items-center border-t border-[#ECEAF2] pt-3 dark:border-white/[0.08]">
+                               <div className="mt-4 flex flex-col items-center border-t border-[#ECEAF2] pt-3 dark:border-white/[0.08]">
                                  <div className="flex items-center justify-center gap-3">
                                    <button data-scanner-import-url type="button" onClick={() => { const rawUrl = window.prompt("Paste a public document link"); if (rawUrl?.trim()) void onImportFromUrl?.(rawUrl); }} className="inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 text-[12px] text-[#777386] transition-colors hover:bg-[#F3F1FC] hover:text-[#4B465C] dark:text-white/50 dark:hover:bg-white/[0.06] dark:hover:text-white"><Link className="h-3.5 w-3.5" strokeWidth={1.8} />From link</button>
                                    <span className="h-3.5 w-px bg-[#DEDCEA] dark:bg-white/[0.12]" aria-hidden="true" />
