@@ -68,6 +68,26 @@ try {
   report.states.idle = await measureState();
   await capture("01-idle.png");
 
+  const idleHoverBefore = await page.evaluate(() => {
+    const dropzone = document.querySelector("[data-scanner-upload-dropzone]");
+    if (!dropzone) throw new Error("Scanner upload dropzone was not found");
+    const styles = getComputedStyle(dropzone);
+    return { backgroundColor: styles.backgroundColor, boxShadow: styles.boxShadow, transform: styles.transform };
+  });
+  await page.hover("[data-scanner-upload-dropzone]");
+  await sleep(120);
+  report.states.idleHover = {
+    ...(await measureState()),
+    before: idleHoverBefore,
+    after: await page.evaluate(() => {
+      const dropzone = document.querySelector("[data-scanner-upload-dropzone]");
+      if (!dropzone) throw new Error("Scanner upload dropzone was not found");
+      const styles = getComputedStyle(dropzone);
+      return { backgroundColor: styles.backgroundColor, boxShadow: styles.boxShadow, transform: styles.transform };
+    }),
+  };
+  await capture("01a-idle-hover.png");
+
   await page.evaluate(() => {
     const target = document.querySelector("[data-scanner-empty-upload-state]");
     if (!target) throw new Error("Reference upload surface was not found");
@@ -100,6 +120,9 @@ try {
   report.states.settled = { ...(await measureState()), previewReady };
 
   if (!report.states.dragActive.dropzone) throw new Error("Drag-active upload surface did not render");
+  if (JSON.stringify(report.states.idleHover.before) !== JSON.stringify(report.states.idleHover.after)) {
+    throw new Error("Idle hover changed the upload canvas visual treatment");
+  }
   if (!report.states.selected.selected) throw new Error("Selected-file row did not render before upload");
   if (!report.states.selected.hasLocalThumbnail) throw new Error("Image selection did not render a local thumbnail");
   if (!report.states.pending.pending) throw new Error("Pending upload row did not render");

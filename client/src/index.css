@@ -86,6 +86,20 @@
     transform: none !important;
   }
 
+  [data-scanner-empty-upload-state] button,
+  [data-scanner-empty-upload-state] button:hover:not(:disabled),
+  [data-scanner-empty-upload-state] button:active:not(:disabled) {
+    transform: none !important;
+    animation: none !important;
+    box-shadow: none !important;
+  }
+
+  [data-scanner-empty-upload-state] button svg,
+  [data-scanner-empty-upload-state] button:hover:not(:disabled) svg {
+    animation: none !important;
+    transform: none !important;
+  }
+
 
   input, textarea, select {
     transition:

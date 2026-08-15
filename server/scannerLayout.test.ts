@@ -16,7 +16,7 @@ describe("scanner action-bar layout contract", () => {
     expect(source).toContain("max-w-full min-w-0 flex-wrap overflow-visible");
   });
 
-  it("uses a canvas-native upload stage and command rail while retaining stable import controls", () => {
+  it("uses a canvas-native upload stage and borderless import controls while retaining stable routes", () => {
     const source = fs.readFileSync(scannerModalPath, "utf8");
 
     expect(source).toContain("data-scanner-empty-upload-state");
@@ -40,7 +40,10 @@ describe("scanner action-bar layout contract", () => {
     expect(source).toContain("data-scanner-upload-command-strip");
     expect(source).toContain("max-w-[620px]");
     expect(source).toContain("min-h-[360px]");
-    expect(source).toContain("rounded-full bg-[#F1F0F5]/90");
+    expect(source).toContain("gap-1 px-4 py-1.5");
+    expect(source).toContain("bg-[#DDD9E6]");
+    expect(source).not.toContain("hover:bg-[#7868F4]/[0.018]");
+    expect(source).not.toContain("scale-[1.08]");
     expect(source).not.toContain("border border-gray-200/70 bg-gradient-to-b");
   });
 });
