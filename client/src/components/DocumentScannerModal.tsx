@@ -24,6 +24,7 @@ import {
   Scissors,
   FolderOpen,
   FileText,
+  CloudUpload,
   Link,
   Images,
   CheckCircle,
@@ -1656,7 +1657,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                    ) : (!hasDocumentLoaded || uploadPresentation.phase === "selected" || uploadPresentation.phase === "pending") ? (
                      <div
                        data-scanner-empty-upload-state
-                       className="w-full max-w-[520px] min-h-[340px] mx-auto rounded-[28px] bg-transparent p-5 transition-colors duration-300"
+                       className="w-full max-w-[420px] min-h-[304px] mx-auto rounded-2xl bg-transparent px-3 py-2 transition-colors duration-300"
                        style={{ backgroundColor: isDragActive ? `${uploadSurfaceAccent}0E` : undefined }}
                        onDragOver={(event) => { event.preventDefault(); event.stopPropagation(); setIsDragActive(true); }}
                        onDragEnter={(event) => { event.preventDefault(); event.stopPropagation(); setIsDragActive(true); }}
@@ -1704,67 +1705,64 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                                uploadPresentationVisibleAtRef.current = performance.now();
                                setIsUploadPendingEntered(true);
                              }}
-                             className="flex min-h-[290px] flex-col justify-center"
+                             className="flex min-h-[280px] flex-col justify-center"
                            >
-                             <div className="mx-auto w-full max-w-[368px] rounded-2xl bg-white/70 px-5 py-4 shadow-[0_14px_30px_-24px_rgba(62,55,91,0.45)] dark:bg-white/[0.045]">
-                               <div className="flex items-center gap-3.5">
-                                 <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#F0EEFF] text-[#7868F4] dark:bg-[#7868F4]/15"><FileText className="h-4.5 w-4.5" strokeWidth={1.7} /></span>
-                                 <span className="min-w-0 flex-1"><span className="block truncate text-[13px] font-medium text-[#343146] dark:text-white">{uploadPresentation.fileName}</span><span className="mt-0.5 flex items-center gap-1.5 text-[11px] text-[#807C8D] dark:text-white/45"><span className="h-3 w-3 rounded-full border-2 border-current border-t-transparent animate-spin" /> Preparing document</span></span>
-                               </div>
-                               <div className="mt-3 h-px overflow-hidden bg-[#EAE7F2] dark:bg-white/[0.08]"><motion.div className="h-full w-[42%] bg-[#7868F4]" initial={{ x: "-115%" }} animate={{ x: "260%" }} transition={{ repeat: Infinity, duration: 1.05, ease: "linear" }} /></div>
+                             <div className="mx-auto w-full max-w-[300px] px-3 text-center">
+                               <CloudUpload className="mx-auto h-6 w-6 text-[#7868F4] dark:text-[#A99FFF]" strokeWidth={1.5} />
+                               <p className="mt-3 truncate text-[12px] font-medium text-[#454153] dark:text-white/80">{uploadPresentation.fileName}</p>
+                               <p className="mt-1 flex items-center justify-center gap-1.5 text-[11px] text-[#8A8696] dark:text-white/45"><span className="h-3 w-3 rounded-full border-2 border-current border-t-transparent animate-spin" /> Preparing document</p>
+                               <div className="mt-4 h-px overflow-hidden bg-[#EAE7F2] dark:bg-white/[0.08]"><motion.div className="h-full w-[42%] bg-[#7868F4]" initial={{ x: "-115%" }} animate={{ x: "260%" }} transition={{ repeat: Infinity, duration: 1.05, ease: "linear" }} /></div>
                              </div>
                            </motion.div>
                          ) : (
-                           <motion.div key={uploadPresentation.phase === "selected" ? "selected-upload" : "idle-upload"} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.24, ease: [0.23, 1, 0.32, 1] }} className="flex min-h-[290px] flex-col">
+                           <motion.div key={uploadPresentation.phase === "selected" ? "selected-upload" : "idle-upload"} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.24, ease: [0.23, 1, 0.32, 1] }} className="flex min-h-[280px] flex-col">
                              <button
                                type="button"
                                data-scanner-upload-dropzone
                                onClick={() => localUploadInputRef.current?.click()}
-                             className={`flex w-full flex-col items-center justify-center rounded-[22px] px-8 text-center transition-all duration-300 ${uploadPresentation.phase === "selected" ? "min-h-[108px] py-3" : "min-h-[168px]"} ${isDragActive ? "bg-[#F0EEFF] text-[#4C3CC8] dark:bg-[#7868F4]/16 dark:text-white" : "bg-transparent text-[#28253B] hover:bg-[#FAF9FD] dark:text-white dark:hover:bg-white/[0.035]"}`}
+                             className={`flex w-full flex-col items-center justify-center rounded-xl px-6 text-center transition-all duration-300 ${uploadPresentation.phase === "selected" ? "min-h-[86px] py-2" : "min-h-[142px]"} ${isDragActive ? "bg-[#7868F4]/[0.07] text-[#5A4BC9] dark:bg-[#7868F4]/12 dark:text-white" : "bg-transparent text-[#343146] hover:bg-[#7868F4]/[0.025] dark:text-white dark:hover:bg-white/[0.025]"}`}
                              >
                                {isDragActive ? (
                                  <>
-                                   <span className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-white/70 text-[#7868F4] dark:bg-white/[0.08] dark:text-white"><Images className="h-5 w-5" strokeWidth={1.6} /></span>
-                                   <h3 className="text-[17px] font-semibold tracking-[-0.025em]">Drop document here</h3>
+                                   <CloudUpload className="mb-2 h-6 w-6" strokeWidth={1.55} />
+                                   <h3 className="text-[14px] font-medium tracking-[-0.015em]">Release to add</h3>
                                  </>
                                ) : (
                                  <>
-                                   <span className={`flex items-center justify-center rounded-2xl bg-white text-[#8B8798] shadow-[0_12px_26px_-20px_rgba(53,47,78,0.5)] dark:bg-white/[0.07] dark:text-white/65 ${uploadPresentation.phase === "selected" ? "mb-2 h-10 w-10" : "mb-4 h-12 w-12"}`} aria-hidden="true">
-                                     <FileText className={uploadPresentation.phase === "selected" ? "h-4.5 w-4.5" : "h-5 w-5"} strokeWidth={1.55} />
-                                   </span>
-                                   <h3 className={`${uploadPresentation.phase === "selected" ? "text-[16px]" : "text-[18px]"} font-semibold tracking-[-0.025em]`}>Add a document</h3>
-                                   <p className={`${uploadPresentation.phase === "selected" ? "mt-0.5 text-[11px]" : "mt-1.5 text-[12px]"} text-[#777386] dark:text-white/55`}>Drop a file here, or choose one from your device.</p>
+                                   <CloudUpload className={`text-[#8A8696] dark:text-white/45 ${uploadPresentation.phase === "selected" ? "mb-1.5 h-5 w-5" : "mb-2.5 h-7 w-7"}`} strokeWidth={1.5} aria-hidden="true" />
+                                   <h3 className={`${uploadPresentation.phase === "selected" ? "text-[13px]" : "text-[15px]"} font-medium tracking-[-0.015em]`}>Add a document</h3>
+                                   <p className={`${uploadPresentation.phase === "selected" ? "mt-0.5 text-[10px]" : "mt-1 text-[11px]"} text-[#888494] dark:text-white/45`}>Drop it here or choose a file.</p>
                                  </>
                                )}
                              </button>
 
                              {uploadPresentation.phase === "selected" && uploadPresentation.file ? (
-                               <motion.div data-scanner-upload-selected initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.04, duration: 0.2 }} className="mx-auto mt-3 flex w-full max-w-[368px] items-center gap-3 rounded-2xl bg-white/65 px-3.5 py-2.5 shadow-[0_12px_28px_-24px_rgba(53,47,78,0.42)] dark:bg-white/[0.04]">
-                                 <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-[#F0EEFF] text-[#7868F4] dark:bg-[#7868F4]/15">
-                                   {uploadPresentation.thumbnailUrl ? <img data-scanner-upload-thumbnail src={uploadPresentation.thumbnailUrl} alt="" className="h-full w-full object-cover" /> : <FileText className="h-5 w-5" strokeWidth={1.7} />}
+                               <motion.div data-scanner-upload-selected initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.04, duration: 0.2 }} className="mx-auto mt-2 flex w-full max-w-[320px] items-center gap-2.5 border-t border-[#ECEAF2] px-1 pt-2.5 dark:border-white/[0.08]">
+                                 <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-[#F0EEFF] text-[#7868F4] dark:bg-[#7868F4]/15">
+                                   {uploadPresentation.thumbnailUrl ? <img data-scanner-upload-thumbnail src={uploadPresentation.thumbnailUrl} alt="" className="h-full w-full object-cover" /> : <CloudUpload className="h-4 w-4" strokeWidth={1.6} />}
                                  </span>
-                                 <span className="min-w-0 flex-1 text-left"><span className="block truncate text-[14px] font-medium text-[#343146] dark:text-white">{uploadPresentation.file.name}</span><span className="mt-0.5 block text-[12px] text-[#8A8696] dark:text-white/45">{uploadPresentation.file.type.startsWith("image/") ? "Image" : "Document"} · {formatUploadFileSize(uploadPresentation.file.size)}</span></span>
-                                 <button data-scanner-remove-selected-upload type="button" aria-label="Remove selected file" onClick={removeSelectedUploadFile} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[#9A95A8] transition-colors hover:bg-[#F5F3F8] hover:text-[#5E5968] dark:hover:bg-white/[0.06]"><X className="h-4 w-4" strokeWidth={2} /></button>
+                                 <span className="min-w-0 flex-1 text-left"><span className="block truncate text-[12px] font-medium text-[#454153] dark:text-white/85">{uploadPresentation.file.name}</span><span className="mt-0.5 block text-[10px] text-[#9893A2] dark:text-white/40">{uploadPresentation.file.type.startsWith("image/") ? "Image" : "Document"} · {formatUploadFileSize(uploadPresentation.file.size)}</span></span>
+                                 <button data-scanner-remove-selected-upload type="button" aria-label="Remove selected file" onClick={removeSelectedUploadFile} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[#AAA5B2] transition-colors hover:bg-[#F5F3F8] hover:text-[#5E5968] dark:hover:bg-white/[0.06]"><X className="h-3.5 w-3.5" strokeWidth={2} /></button>
                                </motion.div>
                              ) : null}
 
-                             <div className="mt-auto pt-3">
+                             <div className="mt-auto pt-2">
                                <button
                                  data-scanner-local-upload
                                  type="button"
                                  onClick={() => uploadPresentation.phase === "selected" && uploadPresentation.file ? startLocalUploadPresentation(uploadPresentation.file) : localUploadInputRef.current?.click()}
-                                 className="mx-auto flex min-w-[148px] items-center justify-center gap-2 rounded-xl bg-[#7868F4] px-5 py-2.5 text-[13px] font-medium text-white shadow-[0_12px_22px_-16px_rgba(80,64,213,0.72)] transition-all hover:bg-[#6D5DE8] active:scale-[0.97]"
+                                 className="mx-auto inline-flex items-center justify-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px] font-medium text-[#6E5DE7] transition-colors hover:bg-[#7868F4]/[0.07] hover:text-[#5C4BCF] dark:text-[#AAA1FF] dark:hover:bg-white/[0.06]"
                                >
-                                 <FolderOpen className="h-4 w-4" strokeWidth={1.9} />
-                                 {uploadPresentation.phase === "selected" ? "Upload document" : "Choose file"}
+                                 <CloudUpload className="h-3.5 w-3.5" strokeWidth={1.7} />
+                                 {uploadPresentation.phase === "selected" ? "Use document" : "Choose a file"}
                                </button>
-                               <div className="mt-4 flex flex-col items-center border-t border-[#ECEAF2] pt-3 dark:border-white/[0.08]">
-                                 <div className="flex items-center justify-center gap-3">
+                               <div className="mt-3 flex flex-col items-center pt-2">
+                                 <div className="flex items-center justify-center gap-2">
                                    <button data-scanner-import-url type="button" onClick={() => { const rawUrl = window.prompt("Paste a public document link"); if (rawUrl?.trim()) void onImportFromUrl?.(rawUrl); }} className="inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 text-[12px] text-[#777386] transition-colors hover:bg-[#F3F1FC] hover:text-[#4B465C] dark:text-white/50 dark:hover:bg-white/[0.06] dark:hover:text-white"><Link className="h-3.5 w-3.5" strokeWidth={1.8} />From link</button>
                                    <span className="h-3.5 w-px bg-[#DEDCEA] dark:bg-white/[0.12]" aria-hidden="true" />
                                    <button data-scanner-image-sequence type="button" onClick={() => imageSequenceInputRef.current?.click()} className="inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 text-[12px] text-[#777386] transition-colors hover:bg-[#F3F1FC] hover:text-[#4B465C] dark:text-white/50 dark:hover:bg-white/[0.06] dark:hover:text-white"><Images className="h-3.5 w-3.5" strokeWidth={1.8} />Image sequence</button>
                                  </div>
-                                 <p className="mt-1.5 text-[10px] font-medium tracking-[0.01em] text-[#A29EAE] dark:text-white/35">PDF · Images · Text &nbsp;•&nbsp; Up to 20 MB</p>
+                                 <p className="mt-1 text-[10px] font-medium tracking-[0.01em] text-[#AAA5B4] dark:text-white/30">PDF · Images · Text &nbsp;•&nbsp; Up to 20 MB</p>
                                </div>
                              </div>
                            </motion.div>
