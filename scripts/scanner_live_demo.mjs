@@ -11,6 +11,7 @@ const fixtures = {
   largePdf: "/tmp/scanner-audit/cp43-complete-issue.pdf",
   markdown: "/tmp/scanner-audit/fixtures/supported.md",
 };
+const publicTextUrl = "https://raw.githubusercontent.com/github/gitignore/main/Node.gitignore";
 const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
 for (const [name, fixture] of Object.entries(fixtures)) {
@@ -40,15 +41,6 @@ await page.evaluateOnNewDocument(() => {
 await page.setRequestInterception(true);
 page.on("request", (request) => {
   const target = new URL(request.url());
-  if (target.hostname === "scanner-demo.local") {
-    void request.respond({
-      status: 200,
-      contentType: "text/markdown",
-      headers: { "Access-Control-Allow-Origin": "*", "Content-Length": String(fs.statSync(fixtures.markdown).size) },
-      body: fs.readFileSync(fixtures.markdown),
-    }).catch(() => undefined);
-    return;
-  }
   if (target.hostname === "generativelanguage.googleapis.com") {
     const headers = {
       "Access-Control-Allow-Origin": "*",
@@ -117,8 +109,15 @@ try {
   report.steps.push("crop-and-clip");
 
   await page.click('[title="Scan"]');
+  await page.waitForSelector('[title="Stop scan"]', { timeout: 10000 });
+  await capture("04-scan-to-stop-preflight.png");
+  await page.click('[title="Stop scan"]');
+  await page.waitForSelector('[title="Scan"]', { timeout: 10000 });
+  report.steps.push("scan-to-stop-preflight");
+
+  await page.click('[title="Scan"]');
   await page.waitForSelector('button[title="Send extracted text"]', { timeout: 60000 });
-  await capture("04-scan-complete.png");
+  await capture("05-scan-complete.png");
   report.steps.push("scan-complete-with-mock-provider");
 
   const destination = await page.evaluate(() => {
@@ -131,7 +130,7 @@ try {
   await page.select(destination, "doc_editor");
   await page.click('button[title="Send extracted text"]');
   await page.waitForFunction(() => !document.querySelector("#scanner-viewport"), { timeout: 10000 });
-  await capture("05-sent-to-workspace.png");
+  await capture("06-sent-to-workspace.png");
   report.steps.push("send-to-workspace");
 
   await openScanner("limits-and-imports");
@@ -140,7 +139,7 @@ try {
   await sleep(800);
   const oversizeRejected = await page.evaluate(() => !document.querySelector("#scanner-viewport img[alt='Scanned Document Paper Element']") && document.body.innerText.includes("Images & PDFs: 20 MB per file"));
   if (!oversizeRejected) throw new Error("100 MB PDF did not remain outside the scanner ingestion path");
-  await capture("06-100mb-rejected-at-limit.png");
+  await capture("07-100mb-rejected-at-limit.png");
   report.steps.push("100mb-pdf-rejected-before-render");
 
   const urlButton = await page.evaluate(() => {
@@ -150,10 +149,10 @@ try {
     return "#scanner-live-demo-url";
   });
   if (!urlButton) throw new Error("URL import control was not found");
-  page.once("dialog", (dialog) => void dialog.accept("https://scanner-demo.local/demo.md"));
+  page.once("dialog", (dialog) => void dialog.accept(publicTextUrl));
   await page.click(urlButton);
   await page.waitForSelector('button[title="Send extracted text"]', { timeout: 60000 });
-  await capture("07-url-imported-markdown.png");
+  await capture("08-url-imported-markdown.png");
   report.steps.push("url-import-markdown");
 
   await openScanner("image-sequence");
@@ -170,7 +169,7 @@ try {
   await chooser.accept([fixtures.jpeg, fixtures.webp]);
   await visualReady();
   await page.waitForFunction(() => /\b1\/2\b/.test(document.body.innerText), { timeout: 30000 });
-  await capture("08-image-sequence-two-pages.png");
+  await capture("09-image-sequence-two-pages.png");
   report.steps.push("image-sequence-two-page-pdf");
 } finally {
   report.providerRequests = providerRequests.length;
