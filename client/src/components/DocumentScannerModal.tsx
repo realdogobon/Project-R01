@@ -24,7 +24,8 @@ import {
   Scissors,
   FolderOpen,
   FileText,
-  Sparkles,
+  Link,
+  Images,
   CheckCircle,
   Hand,
   Printer,
@@ -1563,15 +1564,17 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                    ) : !hasDocumentLoaded ? (
                      // Drag & Drop / File Upload fallback zone when no document has been uploaded yet
                      <div
-                       className={`w-full max-w-2xl border-2 border-dashed bg-white dark:bg-[#1A1A22] flex flex-col items-center justify-center rounded-xl transition-all duration-300 group mx-auto my-auto p-8 ${
+                       data-scanner-empty-upload-state
+                       className={`w-full max-w-2xl border border-gray-200/70 bg-gradient-to-b from-white to-gray-50/70 dark:border-white/[0.08] dark:from-[#1D1D26] dark:to-[#181820] flex flex-col items-center justify-center rounded-2xl transition-all duration-300 group mx-auto ${windowSize.width < 640 ? 'mt-4 mb-12 px-5 py-3' : 'my-auto px-7 py-8'} ${
                          isDragActive
                            ? "scale-[1.01]"
-                           : "border-gray-300 dark:border-gray-700 hover:border-neutral-400 dark:hover:border-neutral-500"
+                           : "hover:border-gray-300 dark:hover:border-white/[0.13]"
                        }`}
                        style={{
-                         minHeight: '420px',
+                         height: windowSize.width < 640 ? '232px' : undefined,
+                         minHeight: windowSize.width < 640 ? '232px' : '420px',
                          borderColor: isDragActive ? activeAccent : undefined,
-                         boxShadow: isDragActive ? `0 10px 30px -10px ${activeAccent}55, 0 0 0 1px ${activeAccent}` : undefined,
+                         boxShadow: isDragActive ? `0 16px 36px -18px ${activeAccent}70, 0 0 0 1px ${activeAccent}` : undefined,
                          background: isDragActive ? `${activeAccent}08` : undefined
                        }}
                        onDragOver={(e) => {
@@ -1598,47 +1601,32 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                           }
                        }}
                      >
-                        <div className="w-20 h-24 bg-gray-50 dark:bg-zinc-800/40 rounded-xl flex items-center justify-center mb-6 relative transition-all duration-300 border border-black/5 dark:border-white/5"
+                        <div className={`${windowSize.width < 640 ? 'w-9 h-9 rounded-xl mb-2' : 'w-12 h-12 rounded-2xl mb-5'} bg-white/80 dark:bg-white/[0.045] flex items-center justify-center transition-all duration-300 border border-black/[0.06] dark:border-white/[0.07] shadow-[0_10px_24px_-16px_rgba(0,0,0,0.45)]`}
                            style={{
-                             transform: isDragActive ? "scale(1.1) translateY(-4px)" : undefined,
+                             transform: isDragActive ? "scale(1.06) translateY(-3px)" : undefined,
                              borderColor: isDragActive ? activeAccent : undefined
                            }}>
                            <FileText
-                             className="w-10 h-10 transition-colors duration-300"
-                             style={{ color: isDragActive ? activeAccent : '#9ca3af' }}
-                             strokeWidth={1.5}
+                             className="w-5 h-5 transition-colors duration-300"
+                             style={{ color: isDragActive ? activeAccent : '#8b8b99' }}
+                             strokeWidth={1.65}
                            />
-                           <div className="absolute top-1.5 right-1.5">
-                             <Sparkles
-                               className="w-4 h-4 fill-current transition-all duration-300"
-                               style={{
-                                 color: isDragActive ? activeAccent : '#d1d5db',
-                                 transform: isDragActive ? "rotate(15deg) scale(1.1)" : undefined
-                               }}
-                               strokeWidth={1}
-                             />
-                           </div>
                         </div>
 
-                        <h3 className="text-gray-800 dark:text-gray-200 font-semibold text-base mb-1 tracking-tight">
-                          PDF / Markdown / HTML / TXT / JPEG / PNG / WEBP
+                        <h3 className="text-gray-800 dark:text-gray-100 font-semibold text-[17px] mb-1 tracking-[-0.02em]">
+                          Add a document
                         </h3>
-                        <p className="text-gray-400 dark:text-gray-500 text-[12px] mb-8 font-medium">
-                          Images & PDFs: 20 MB per file · Text: 2 MB per file
+                        <p className={`${windowSize.width < 640 ? 'text-[12px] mb-3' : 'text-[13px] mb-6'} text-gray-500 dark:text-gray-400 font-medium text-center`}>
+                          Drop a file here, or choose one from your device.
                         </p>
 
-                        <div className="text-gray-600 dark:text-gray-300 text-[15px] font-medium mb-3">
-                          Drag & drop document to upload
-                        </div>
-                        <div className="text-gray-400 dark:text-gray-500 text-[13px] font-medium mb-4">
-                          or
-                        </div>
-
                         <label
-                          className="text-white px-8 py-2.5 rounded-lg font-medium cursor-pointer transition-all shadow-md text-[13px] hover:brightness-105 hover:shadow-lg active:scale-95 duration-150 inline-flex items-center justify-center cursor-pointer"
+                          data-scanner-local-upload
+                          className="text-white min-w-32 px-5 py-2.5 rounded-xl font-medium cursor-pointer transition-all shadow-[0_10px_20px_-12px_rgba(0,0,0,0.65)] text-[13px] hover:brightness-105 hover:shadow-[0_12px_24px_-12px_rgba(0,0,0,0.7)] active:scale-[0.97] duration-150 inline-flex items-center justify-center gap-2"
                           style={{ backgroundColor: activeAccent }}
                         >
-                          Browse
+                          <FolderOpen className="w-3.5 h-3.5" strokeWidth={1.9} />
+                          Choose file
                           <input
                             type="file"
                             className="hidden"
@@ -1651,7 +1639,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                           />
                         </label>
 
-                        <div className="mt-12 flex flex-col gap-2 font-medium items-center">
+                        <div className={`${windowSize.width < 640 ? 'mt-3 pt-2' : 'mt-7 pt-5'} w-full max-w-[310px] border-t border-gray-200/70 dark:border-white/[0.07] flex flex-col items-center`}>
                           <input
                             ref={imageSequenceInputRef}
                             type="file"
@@ -1664,15 +1652,23 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                               void onImageSequenceUpload?.(files);
                             }}
                           />
-                          <button type="button" onClick={() => {
+                          <div className="flex items-center justify-center gap-2.5">
+                          <button data-scanner-import-url type="button" onClick={() => {
                             const rawUrl = window.prompt("Paste a public document link");
                             if (rawUrl?.trim()) void onImportFromUrl?.(rawUrl);
-                          }} className="text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 underline decoration-gray-300 dark:decoration-gray-700 hover:decoration-gray-400 transition-colors text-[12px]">
-                            Upload document from URL
+                          }} className="text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 transition-colors text-[12px] inline-flex items-center gap-1.5 py-1 px-1.5 rounded-md hover:bg-black/[0.03] dark:hover:bg-white/[0.05]">
+                            <Link className="w-3.5 h-3.5" strokeWidth={1.8} />
+                            From link
                           </button>
-                          <button type="button" onClick={() => imageSequenceInputRef.current?.click()} className="text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 underline decoration-gray-300 dark:decoration-gray-700 hover:decoration-gray-400 transition-colors text-[12px]">
-                            Extract text from image sequences
+                          <span className="h-3.5 w-px bg-gray-200 dark:bg-white/[0.10]" aria-hidden="true" />
+                          <button data-scanner-image-sequence type="button" onClick={() => imageSequenceInputRef.current?.click()} className="text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 transition-colors text-[12px] inline-flex items-center gap-1.5 py-1 px-1.5 rounded-md hover:bg-black/[0.03] dark:hover:bg-white/[0.05]">
+                            <Images className="w-3.5 h-3.5" strokeWidth={1.8} />
+                            Image sequence
                           </button>
+                          </div>
+                          <p className={`${windowSize.width < 640 ? 'mt-1' : 'mt-3'} text-[10px] font-medium tracking-[0.01em] text-gray-400 dark:text-gray-500 text-center`}>
+                            PDF · Images · Text &nbsp;•&nbsp; Up to 20 MB
+                          </p>
                         </div>
                      </div>
                   ) : scannerTotalPages > 1 ? (
@@ -1837,14 +1833,17 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                           </div>
                        ) : (
                           <div
-                            className={`w-full max-w-2xl border-2 border-dashed bg-white dark:bg-[#1A1A22] flex flex-col items-center justify-center rounded-xl transition-all duration-300 group mx-auto my-auto p-8 ${
+                            data-scanner-empty-upload-state
+                            className={`w-full max-w-2xl border border-gray-200/70 bg-gradient-to-b from-white to-gray-50/70 dark:border-white/[0.08] dark:from-[#1D1D26] dark:to-[#181820] flex flex-col items-center justify-center rounded-2xl transition-all duration-300 group mx-auto ${windowSize.width < 640 ? 'mt-4 mb-12 px-5 py-4' : 'my-auto px-7 py-8'} ${
                               isDragActive
                                 ? "scale-[1.01]"
-                                : "border-gray-300 dark:border-gray-700 hover:border-neutral-400 dark:hover:border-neutral-500"
+                                : "hover:border-gray-300 dark:hover:border-white/[0.13]"
                             }`}
                             style={{
-                              height: `calc(max(320px, 80vh - 220px) * ${scannerZoom})`,
-                              minHeight: '420px',
+                              height: windowSize.width < 640
+                                ? '248px'
+                                : `calc(max(320px, 80vh - 220px) * ${scannerZoom})`,
+                              minHeight: windowSize.width < 640 ? '248px' : '420px',
                               borderColor: isDragActive ? activeAccent : undefined,
                               boxShadow: isDragActive ? `0 10px 30px -10px ${activeAccent}55, 0 0 0 1px ${activeAccent}` : undefined,
                               background: isDragActive ? `${activeAccent}08` : undefined
@@ -1873,47 +1872,32 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                                }
                             }}
                           >
-                             <div className="w-20 h-24 bg-gray-50 dark:bg-zinc-800/40 rounded-xl flex items-center justify-center mb-6 relative transition-all duration-300 border border-black/5 dark:border-white/5"
+                             <div className={`${windowSize.width < 640 ? 'w-10 h-10 rounded-xl mb-3' : 'w-12 h-12 rounded-2xl mb-5'} bg-white/80 dark:bg-white/[0.045] flex items-center justify-center transition-all duration-300 border border-black/[0.06] dark:border-white/[0.07] shadow-[0_10px_24px_-16px_rgba(0,0,0,0.45)]`}
                                 style={{
-                                  transform: isDragActive ? "scale(1.1) translateY(-4px)" : undefined,
+                                  transform: isDragActive ? "scale(1.06) translateY(-3px)" : undefined,
                                   borderColor: isDragActive ? activeAccent : undefined
                                 }}>
                                 <FileText
-                                  className="w-10 h-10 transition-colors duration-300"
-                                  style={{ color: isDragActive ? activeAccent : '#9ca3af' }}
-                                  strokeWidth={1.5}
+                                  className="w-5 h-5 transition-colors duration-300"
+                                  style={{ color: isDragActive ? activeAccent : '#8b8b99' }}
+                                  strokeWidth={1.65}
                                 />
-                                <div className="absolute top-1.5 right-1.5">
-                                  <Sparkles
-                                    className="w-4 h-4 fill-current transition-all duration-300"
-                                    style={{
-                                      color: isDragActive ? activeAccent : '#d1d5db',
-                                      transform: isDragActive ? "rotate(15deg) scale(1.1)" : undefined
-                                    }}
-                                    strokeWidth={1}
-                                  />
-                                </div>
                              </div>
 
-                              <h3 className="text-gray-800 dark:text-gray-200 font-semibold text-base mb-1 tracking-tight">
-                                PDF / Markdown / HTML / TXT / JPEG / PNG / WEBP
+                              <h3 className="text-gray-800 dark:text-gray-100 font-semibold text-[17px] mb-1 tracking-[-0.02em]">
+                                Add a document
                               </h3>
-                              <p className="text-gray-400 dark:text-gray-500 text-[12px] mb-8 font-medium">
-                                Images & PDFs: 20 MB per file · Text: 2 MB per file
+                              <p className={`${windowSize.width < 640 ? 'text-[12px] mb-4' : 'text-[13px] mb-6'} text-gray-500 dark:text-gray-400 font-medium text-center`}>
+                                Drop a file here, or choose one from your device.
                              </p>
 
-                             <div className="text-gray-600 dark:text-gray-300 text-[15px] font-medium mb-3">
-                               Drag & drop document to upload
-                             </div>
-                             <div className="text-gray-400 dark:text-gray-500 text-[13px] font-medium mb-4">
-                               or
-                             </div>
-
                              <label
-                               className="text-white px-8 py-2.5 rounded-lg font-medium cursor-pointer transition-all shadow-md text-[13px] hover:brightness-105 hover:shadow-lg active:scale-95 duration-150 inline-flex items-center justify-center"
+                               data-scanner-local-upload
+                               className="text-white min-w-32 px-5 py-2.5 rounded-xl font-medium cursor-pointer transition-all shadow-[0_10px_20px_-12px_rgba(0,0,0,0.65)] text-[13px] hover:brightness-105 hover:shadow-[0_12px_24px_-12px_rgba(0,0,0,0.7)] active:scale-[0.97] duration-150 inline-flex items-center justify-center gap-2"
                                style={{ backgroundColor: activeAccent }}
                              >
-                               Browse
+                               <FolderOpen className="w-3.5 h-3.5" strokeWidth={1.9} />
+                               Choose file
                                <input
                                  type="file"
                                  className="hidden"
@@ -1926,8 +1910,9 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                                />
                              </label>
 
-                              <div className="mt-12 flex flex-col gap-2 font-medium items-center">
+                              <div className={`${windowSize.width < 640 ? 'mt-4 pt-3' : 'mt-7 pt-5'} w-full max-w-[310px] border-t border-gray-200/70 dark:border-white/[0.07] flex flex-col items-center`}>
                                 <input
+                                  ref={imageSequenceInputRef}
                                   type="file"
                                   className="hidden"
                                   accept=".jpeg,.jpg,.png,.webp"
@@ -1938,19 +1923,24 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                                     void onImageSequenceUpload?.(files);
                                   }}
                                 />
-                                <button type="button" onClick={() => {
+                                <div className="flex items-center justify-center gap-2.5">
+                                <button data-scanner-import-url type="button" onClick={() => {
                                   const rawUrl = window.prompt("Paste a public document link");
                                   if (rawUrl?.trim()) void onImportFromUrl?.(rawUrl);
-                                }} className="text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 underline decoration-gray-300 dark:decoration-gray-700 hover:decoration-gray-400 transition-colors text-[12px]">
-                                  Upload document from URL
+                                }} className="text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 transition-colors text-[12px] inline-flex items-center gap-1.5 py-1 px-1.5 rounded-md hover:bg-black/[0.03] dark:hover:bg-white/[0.05]">
+                                  <Link className="w-3.5 h-3.5" strokeWidth={1.8} />
+                                  From link
                                 </button>
-                                <button type="button" onClick={(event) => {
-                                  const input = event.currentTarget.parentElement?.querySelector<HTMLInputElement>('input[type="file"]');
-                                  input?.click();
-                                }} className="text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 underline decoration-gray-300 dark:decoration-gray-700 hover:decoration-gray-400 transition-colors text-[12px]">
-                                  Extract text from image sequences
+                                <span className="h-3.5 w-px bg-gray-200 dark:bg-white/[0.10]" aria-hidden="true" />
+                                <button type="button" onClick={() => imageSequenceInputRef.current?.click()} data-scanner-image-sequence className="text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 transition-colors text-[12px] inline-flex items-center gap-1.5 py-1 px-1.5 rounded-md hover:bg-black/[0.03] dark:hover:bg-white/[0.05]">
+                                  <Images className="w-3.5 h-3.5" strokeWidth={1.8} />
+                                  Image sequence
                                 </button>
-                             </div>
+                                </div>
+                                <p className={`${windowSize.width < 640 ? 'mt-2' : 'mt-3'} text-[10px] font-medium tracking-[0.01em] text-gray-400 dark:text-gray-500 text-center`}>
+                                  PDF · Images · Text &nbsp;•&nbsp; Up to 20 MB
+                                </p>
+                              </div>
                           </div>
                        )}
                        </div>

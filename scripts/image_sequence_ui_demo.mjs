@@ -36,13 +36,8 @@ try {
   await page.click('[title="AI Scanner"]');
   await page.waitForSelector("#scanner-viewport", { timeout: 20000 });
 
-  const sequenceButton = await page.evaluate(() => {
-    const control = [...document.querySelectorAll("button")].find((candidate) => candidate.textContent?.trim() === "Extract text from image sequences");
-    if (!control) return null;
-    control.id = "image-sequence-demo-trigger";
-    return "#image-sequence-demo-trigger";
-  });
-  if (!sequenceButton) throw new Error("Image-sequence import control was not found");
+  const sequenceButton = "[data-scanner-image-sequence]";
+  if (!await page.$(sequenceButton)) throw new Error("Image-sequence import control was not found");
 
   const chooserPromise = page.waitForFileChooser({ timeout: 10000 });
   await page.click(sequenceButton);

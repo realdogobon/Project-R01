@@ -44,13 +44,8 @@ try {
     await input.uploadFile(localFilePath);
     report.rpcOk = true;
   } else {
-    const urlTrigger = await page.evaluate(() => {
-      const button = [...document.querySelectorAll("button")].find((candidate) => candidate.textContent?.trim() === "Upload document from URL");
-      if (!button) return null;
-      button.id = "scanner-action-probe-url";
-      return "#scanner-action-probe-url";
-    });
-    if (!urlTrigger) throw new Error("URL import trigger was not found");
+    const urlTrigger = "[data-scanner-import-url]";
+    if (!await page.$(urlTrigger)) throw new Error("URL import trigger was not found");
 
     const responsePromise = page.waitForResponse(
       (response) => response.url().includes("/api/trpc/scanner.importPublicLink") && response.request().method() === "POST",

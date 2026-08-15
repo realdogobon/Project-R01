@@ -42,13 +42,8 @@ try {
   await page.click('[title="AI Scanner"]');
   await page.waitForSelector("#scanner-viewport", { timeout: 30_000 });
 
-  const urlButton = await page.evaluate(() => {
-    const button = [...document.querySelectorAll("button")].find((candidate) => candidate.textContent?.trim() === "Upload document from URL");
-    if (!button) return null;
-    button.id = "public-link-ui-probe-url";
-    return "#public-link-ui-probe-url";
-  });
-  if (!urlButton) throw new Error("URL import button was not found");
+  const urlButton = "[data-scanner-import-url]";
+  if (!await page.$(urlButton)) throw new Error("URL import button was not found");
 
   const importResponse = page.waitForResponse(
     (response) => response.url().includes("/api/trpc/scanner.importPublicLink") && response.request().method() === "POST",

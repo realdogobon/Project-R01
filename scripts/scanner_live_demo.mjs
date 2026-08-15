@@ -34,6 +34,10 @@ page.on("pageerror", (error) => errors.push(`pageerror: ${error.message}`));
 page.on("console", (message) => {
   if (message.type() === "error") errors.push(`console: ${message.text()}`);
 });
+page.on("requestfailed", (request) => {
+  const failure = request.failure()?.errorText;
+  if (failure) errors.push(`request: ${failure} ${request.url()}`);
+});
 await page.evaluateOnNewDocument(() => {
   localStorage.setItem("royscript_ai_keys", JSON.stringify({ gemini: "live-demo-mock-key" }));
   localStorage.removeItem("ais_saved_scan_extracts");
@@ -137,18 +141,13 @@ try {
   const oversizeInput = await primaryInput();
   await oversizeInput.uploadFile(fixtures.largePdf);
   await sleep(800);
-  const oversizeRejected = await page.evaluate(() => !document.querySelector("#scanner-viewport img[alt='Scanned Document Paper Element']") && document.body.innerText.includes("Images & PDFs: 20 MB per file"));
+  const oversizeRejected = await page.evaluate(() => !document.querySelector("#scanner-viewport img[alt='Scanned Document Paper Element']") && Boolean(document.querySelector("[data-scanner-empty-upload-state]")));
   if (!oversizeRejected) throw new Error("100 MB PDF did not remain outside the scanner ingestion path");
   await capture("07-100mb-rejected-at-limit.png");
   report.steps.push("100mb-pdf-rejected-before-render");
 
-  const urlButton = await page.evaluate(() => {
-    const button = [...document.querySelectorAll("button")].find((candidate) => candidate.textContent?.trim() === "Upload document from URL");
-    if (!button) return null;
-    button.id = "scanner-live-demo-url";
-    return "#scanner-live-demo-url";
-  });
-  if (!urlButton) throw new Error("URL import control was not found");
+  const urlButton = "[data-scanner-import-url]";
+  if (!await page.$(urlButton)) throw new Error("URL import control was not found");
   page.once("dialog", (dialog) => void dialog.accept(publicTextUrl));
   await page.click(urlButton);
   await page.waitForSelector('button[title="Send extracted text"]', { timeout: 60000 });
@@ -156,13 +155,8 @@ try {
   report.steps.push("url-import-markdown");
 
   await openScanner("image-sequence");
-  const sequenceButton = await page.evaluate(() => {
-    const button = [...document.querySelectorAll("button")].find((candidate) => candidate.textContent?.trim() === "Extract text from image sequences");
-    if (!button) return null;
-    button.id = "scanner-live-demo-sequence";
-    return "#scanner-live-demo-sequence";
-  });
-  if (!sequenceButton) throw new Error("Image-sequence control was not found");
+  const sequenceButton = "[data-scanner-image-sequence]";
+  if (!await page.$(sequenceButton)) throw new Error("Image-sequence control was not found");
   const chooserPromise = page.waitForFileChooser({ timeout: 10000 });
   await page.click(sequenceButton);
   const chooser = await chooserPromise;
