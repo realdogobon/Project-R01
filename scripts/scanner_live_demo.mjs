@@ -140,7 +140,10 @@ try {
   await openScanner("limits-and-imports");
   const oversizeInput = await primaryInput();
   await oversizeInput.uploadFile(fixtures.largePdf);
-  await sleep(800);
+  await page.waitForFunction(
+    () => !document.querySelector("[data-scanner-upload-pending]") && Boolean(document.querySelector("[data-scanner-import-url]")),
+    { timeout: 5_000 },
+  );
   const oversizeRejected = await page.evaluate(() => !document.querySelector("#scanner-viewport img[alt='Scanned Document Paper Element']") && Boolean(document.querySelector("[data-scanner-empty-upload-state]")));
   if (!oversizeRejected) throw new Error("100 MB PDF did not remain outside the scanner ingestion path");
   await capture("07-100mb-rejected-at-limit.png");

@@ -541,6 +541,9 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
 
   const [isFlipping, setIsFlipping] = useState(false);
   const [isDragActive, setIsDragActive] = useState(false);
+  const [uploadPresentation, setUploadPresentation] = useState<{ phase: "idle" | "pending" | "success"; fileName?: string }>({ phase: "idle" });
+  const uploadPresentationTimerRef = React.useRef<number | null>(null);
+  const uploadPresentationStartedAtRef = React.useRef(0);
   const [flipDirection, setFlipDirection] = useState<"next" | "prev">("next");
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number } | null>(null);
   const [isSpacePressed, setIsSpacePressed] = useState(false);
@@ -550,6 +553,48 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
   const [windowSize, setWindowSize] = useState(() => ({ width: window.innerWidth, height: window.innerHeight }));
   const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
   const [pageAspectRatio, setPageAspectRatio] = useState(1 / 1.414);
+
+  const resetUploadPresentationTimer = () => {
+    if (uploadPresentationTimerRef.current !== null) {
+      window.clearTimeout(uploadPresentationTimerRef.current);
+      uploadPresentationTimerRef.current = null;
+    }
+  };
+
+  const startLocalUploadPresentation = (file: File) => {
+    resetUploadPresentationTimer();
+    uploadPresentationStartedAtRef.current = performance.now();
+    setUploadPresentation({ phase: "pending", fileName: file.name });
+    void onFileUpload?.(file);
+  };
+
+  useEffect(() => {
+    if (uploadPresentation.phase !== "pending") return;
+
+    if (hasDocumentLoaded && !isDocumentLoading) {
+      resetUploadPresentationTimer();
+      const showSuccess = () => {
+        setUploadPresentation((current) => ({ ...current, phase: "success" }));
+        uploadPresentationTimerRef.current = window.setTimeout(() => {
+          setUploadPresentation({ phase: "idle" });
+          uploadPresentationTimerRef.current = null;
+        }, 620);
+      };
+      const pendingDuration = performance.now() - uploadPresentationStartedAtRef.current;
+      uploadPresentationTimerRef.current = window.setTimeout(showSuccess, Math.max(0, 420 - pendingDuration));
+      return;
+    }
+
+    if (!isDocumentLoading && !scannerFile) {
+      resetUploadPresentationTimer();
+      uploadPresentationTimerRef.current = window.setTimeout(() => {
+        setUploadPresentation({ phase: "idle" });
+        uploadPresentationTimerRef.current = null;
+      }, 900);
+    }
+  }, [hasDocumentLoaded, isDocumentLoading, scannerFile, uploadPresentation.phase]);
+
+  useEffect(() => resetUploadPresentationTimer, []);
 
   useEffect(() => {
     const onResize = () => setWindowSize({ width: window.innerWidth, height: window.innerHeight });
@@ -1287,17 +1332,6 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                  </select>
                  <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500 pointer-events-none" />
               </div>
-              {!apiKeyConfigured && (
-                <p className="text-[11px] leading-relaxed text-[#B0413E] dark:text-[#E88A88] pt-1 pl-0.5">
-                  No {providerLabel} key configured — scans will run locally in the browser instead.
-                  <button
-                    onClick={() => setShowKeyInput(true)}
-                    className="underline underline-offset-2 hover:opacity-80 ml-1"
-                  >
-                    Add key
-                  </button>
-                </p>
-              )}
               {showKeyInput && (
                 <div key={`key-${keyRefresh}`} className="mt-2 flex items-center gap-1.5">
                   <input
@@ -1469,7 +1503,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                onPointerLeave={onPointerUp}
                className={`flex-1 min-h-0 w-full overflow-auto custom-scrollbar relative bg-[#F9F9F9] dark:bg-[#1A1A22] ${isSpacePressed ? (dragRef.current?.isDragging ? "cursor-grabbing" : "cursor-grab") : isCropEnabled ? "cursor-crosshair" : dragRef.current?.isDragging ? "cursor-grabbing" : "cursor-grab"}`}
             >
-               {isDocumentLoading && (
+               {isDocumentLoading && uploadPresentation.phase === "idle" && (
                  <div className="absolute inset-0 z-[80] flex items-center justify-center bg-[#F9F9F9]/90 dark:bg-[#1A1A22]/90 backdrop-blur-[2px]">
                    <div className="flex flex-col items-center gap-3 text-neutral-600 dark:text-neutral-300">
                      <div className="h-7 w-7 rounded-full border-2 border-current border-t-transparent animate-spin" />
@@ -1477,6 +1511,25 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                    </div>
                  </div>
                )}
+               <AnimatePresence>
+                 {uploadPresentation.phase === "success" && (
+                   <motion.div
+                     data-scanner-upload-success
+                     initial={{ opacity: 0, scale: 0.96 }}
+                     animate={{ opacity: 1, scale: 1 }}
+                     exit={{ opacity: 0, scale: 0.985 }}
+                     transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
+                     className="absolute inset-0 z-[82] flex items-center justify-center bg-[#F9F9F9]/88 dark:bg-[#1A1A22]/88 backdrop-blur-[2px] pointer-events-none"
+                   >
+                     <div className="flex items-center gap-2.5 text-gray-700 dark:text-gray-200 text-[13px] font-medium">
+                       <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-white/80 dark:bg-white/[0.06] shadow-[0_10px_24px_-16px_rgba(0,0,0,0.5)]">
+                         <CheckCircle className="h-4 w-4" style={{ color: activeAccent }} strokeWidth={1.9} />
+                       </span>
+                       <span>Document ready</span>
+                     </div>
+                   </motion.div>
+                 )}
+               </AnimatePresence>
                <div
                  data-scanner-stage
                  className="relative m-auto flex items-center justify-center p-3 sm:p-8 transition-all duration-200"
@@ -1561,20 +1614,19 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                             )}
                          </div>
                       </div>
-                   ) : !hasDocumentLoaded ? (
+                   ) : (!hasDocumentLoaded || uploadPresentation.phase === "pending") ? (
                      // Drag & Drop / File Upload fallback zone when no document has been uploaded yet
                      <div
                        data-scanner-empty-upload-state
-                       className={`w-full max-w-2xl border border-gray-200/70 bg-gradient-to-b from-white to-gray-50/70 dark:border-white/[0.08] dark:from-[#1D1D26] dark:to-[#181820] flex flex-col items-center justify-center rounded-2xl transition-all duration-300 group mx-auto ${windowSize.width < 640 ? 'mt-4 mb-12 px-5 py-3' : 'my-auto px-7 py-8'} ${
+                       className={`w-full max-w-2xl bg-transparent flex flex-col items-center justify-center rounded-2xl transition-all duration-300 group mx-auto ${windowSize.width < 640 ? 'mt-4 mb-12 px-5 py-3' : 'my-auto px-7 py-8'} ${
                          isDragActive
                            ? "scale-[1.01]"
-                           : "hover:border-gray-300 dark:hover:border-white/[0.13]"
+                           : ""
                        }`}
                        style={{
                          height: windowSize.width < 640 ? '232px' : undefined,
                          minHeight: windowSize.width < 640 ? '232px' : '420px',
-                         borderColor: isDragActive ? activeAccent : undefined,
-                         boxShadow: isDragActive ? `0 16px 36px -18px ${activeAccent}70, 0 0 0 1px ${activeAccent}` : undefined,
+                         boxShadow: isDragActive ? `0 16px 36px -18px ${activeAccent}70` : undefined,
                          background: isDragActive ? `${activeAccent}08` : undefined
                        }}
                        onDragOver={(e) => {
@@ -1597,14 +1649,42 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                           e.stopPropagation();
                           setIsDragActive(false);
                           if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-                             onFileUpload?.(e.dataTransfer.files[0]);
+                             startLocalUploadPresentation(e.dataTransfer.files[0]);
                           }
                        }}
                      >
-                        <div className={`${windowSize.width < 640 ? 'w-9 h-9 rounded-xl mb-2' : 'w-12 h-12 rounded-2xl mb-5'} bg-white/80 dark:bg-white/[0.045] flex items-center justify-center transition-all duration-300 border border-black/[0.06] dark:border-white/[0.07] shadow-[0_10px_24px_-16px_rgba(0,0,0,0.45)]`}
+                        <AnimatePresence mode="wait">
+                        {uploadPresentation.phase === "pending" ? (
+                          <motion.div
+                            key="pending-upload"
+                            data-scanner-upload-pending
+                            initial={{ opacity: 0, y: 8 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -8 }}
+                            transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
+                            className="flex w-full max-w-[360px] flex-col items-center"
+                          >
+                            <div className="flex w-full items-center gap-3 rounded-2xl bg-white/70 px-4 py-3.5 shadow-[0_16px_38px_-24px_rgba(0,0,0,0.5)] dark:bg-white/[0.045]">
+                              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-black/[0.035] dark:bg-white/[0.06]">
+                                <FileText className="h-4.5 w-4.5" style={{ color: activeAccent }} strokeWidth={1.7} />
+                              </span>
+                              <span className="min-w-0 flex-1 text-left">
+                                <span className="block truncate text-[13px] font-medium text-gray-800 dark:text-gray-100">{uploadPresentation.fileName}</span>
+                                <span className="mt-0.5 flex items-center gap-1.5 text-[11px] text-gray-500 dark:text-gray-400">
+                                  <span className="h-2.5 w-2.5 rounded-full border-2 border-current border-t-transparent animate-spin" />
+                                  Preparing document
+                                </span>
+                              </span>
+                            </div>
+                            <div className="mt-3 h-px w-full overflow-hidden bg-black/[0.06] dark:bg-white/[0.10]">
+                              <motion.div className="h-full w-2/5" style={{ backgroundColor: activeAccent }} initial={{ x: "-120%" }} animate={{ x: "280%" }} transition={{ repeat: Infinity, duration: 1.05, ease: "linear" }} />
+                            </div>
+                          </motion.div>
+                        ) : (
+                          <motion.div key="idle-upload" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }} className="flex flex-col items-center w-full">
+                        <div className={`${windowSize.width < 640 ? 'w-9 h-9 rounded-xl mb-2' : 'w-12 h-12 rounded-2xl mb-5'} bg-white/70 dark:bg-white/[0.045] flex items-center justify-center transition-all duration-300 shadow-[0_10px_24px_-16px_rgba(0,0,0,0.45)]`}
                            style={{
                              transform: isDragActive ? "scale(1.06) translateY(-3px)" : undefined,
-                             borderColor: isDragActive ? activeAccent : undefined
                            }}>
                            <FileText
                              className="w-5 h-5 transition-colors duration-300"
@@ -1633,7 +1713,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                             accept=".pdf,.md,.html,.txt,.jpeg,.jpg,.png,.webp"
                             onChange={(e) => {
                                if (e.target.files && e.target.files[0]) {
-                                 onFileUpload?.(e.target.files[0]);
+                                 startLocalUploadPresentation(e.target.files[0]);
                                }
                             }}
                           />
@@ -1670,6 +1750,9 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                             PDF · Images · Text &nbsp;•&nbsp; Up to 20 MB
                           </p>
                         </div>
+                        </motion.div>
+                        )}
+                        </AnimatePresence>
                      </div>
                   ) : scannerTotalPages > 1 ? (
                     // Book Spread Layout & Single Cover System
@@ -1868,7 +1951,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                                e.stopPropagation();
                                setIsDragActive(false);
                                if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-                                  onFileUpload?.(e.dataTransfer.files[0]);
+                                 startLocalUploadPresentation(e.dataTransfer.files[0]);
                                }
                             }}
                           >
@@ -1904,7 +1987,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                                  accept=".pdf,.md,.html,.txt,.jpeg,.jpg,.png,.webp"
                                  onChange={(e) => {
                                     if (e.target.files && e.target.files[0]) {
-                                      onFileUpload?.(e.target.files[0]);
+                                      startLocalUploadPresentation(e.target.files[0]);
                                     }
                                  }}
                                />

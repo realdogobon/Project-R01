@@ -23,6 +23,10 @@ describe("scanner action-bar layout contract", () => {
     expect(source).toContain("data-scanner-local-upload");
     expect(source).toContain("data-scanner-import-url");
     expect(source).toContain("data-scanner-image-sequence");
+    expect(source).toContain("data-scanner-upload-pending");
+    expect(source).toContain("data-scanner-upload-success");
+    expect(source).toContain("startLocalUploadPresentation");
+    expect(source).not.toContain("No {providerLabel} key configured");
     expect(source).not.toContain("border-2 border-dashed");
     expect(source).toContain("Add a document");
     expect(source).toContain("Up to 20 MB");
