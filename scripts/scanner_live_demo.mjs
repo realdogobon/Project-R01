@@ -88,16 +88,25 @@ const visualReady = () => page.waitForFunction(
 );
 const hasVisibleControl = (selector) => page.evaluate((target) =>
   [...document.querySelectorAll(target)].some((candidate) => {
-    const element = candidate;
-    const rect = element.getBoundingClientRect();
-    const style = window.getComputedStyle(element);
-    return rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" && style.display !== "none";
+    const rect = candidate.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return false;
+    for (let ancestor = candidate; ancestor; ancestor = ancestor.parentElement) {
+      const style = window.getComputedStyle(ancestor);
+      if (style.display === "none" || style.visibility === "hidden" || Number(style.opacity) === 0 || style.pointerEvents === "none") return false;
+    }
+    const topElement = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+    return Boolean(topElement && (candidate.contains(topElement) || topElement.contains(candidate)));
   }), selector);
 const clickVisibleControl = (selector) => page.evaluate((target) => {
   const element = [...document.querySelectorAll(target)].find((candidate) => {
     const rect = candidate.getBoundingClientRect();
-    const style = window.getComputedStyle(candidate);
-    return rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" && style.display !== "none";
+    if (rect.width <= 0 || rect.height <= 0) return false;
+    for (let ancestor = candidate; ancestor; ancestor = ancestor.parentElement) {
+      const style = window.getComputedStyle(ancestor);
+      if (style.display === "none" || style.visibility === "hidden" || Number(style.opacity) === 0 || style.pointerEvents === "none") return false;
+    }
+    const topElement = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+    return Boolean(topElement && (candidate.contains(topElement) || topElement.contains(candidate)));
   });
   if (!(element instanceof HTMLElement)) throw new Error(`No visible control matched ${target}`);
   element.click();
@@ -163,7 +172,16 @@ try {
   await page.waitForSelector("[data-scanner-upload-selected]", { timeout: 10_000 });
   await page.click("[data-scanner-local-upload]");
   await page.waitForFunction(
-    () => !document.querySelector("[data-scanner-upload-pending]") && Boolean(document.querySelector("[data-scanner-import-url]")),
+    () => !document.querySelector("[data-scanner-upload-pending]") && [...document.querySelectorAll("[data-scanner-import-url]")].some((candidate) => {
+      const rect = candidate.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return false;
+      for (let ancestor = candidate; ancestor; ancestor = ancestor.parentElement) {
+        const style = window.getComputedStyle(ancestor);
+        if (style.display === "none" || style.visibility === "hidden" || Number(style.opacity) === 0 || style.pointerEvents === "none") return false;
+      }
+      const topElement = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+      return Boolean(topElement && (candidate.contains(topElement) || topElement.contains(candidate)));
+    }),
     { timeout: 5_000 },
   );
   const oversizeRejected = await page.evaluate(() => !document.querySelector("#scanner-viewport img[alt='Scanned Document Paper Element']") && Boolean(document.querySelector("[data-scanner-empty-upload-state]")));

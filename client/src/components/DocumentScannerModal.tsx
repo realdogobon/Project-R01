@@ -1657,7 +1657,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                    ) : (!hasDocumentLoaded || uploadPresentation.phase === "selected" || uploadPresentation.phase === "pending") ? (
                      <div
                        data-scanner-empty-upload-state
-                       className="w-full max-w-[420px] min-h-[304px] mx-auto rounded-2xl bg-transparent px-3 py-2 transition-colors duration-300"
+                       className="relative translate-y-[76px] w-full max-w-[360px] min-h-[304px] mx-auto bg-transparent px-3 py-3 transition-colors duration-300"
                        style={{ backgroundColor: isDragActive ? `${uploadSurfaceAccent}0E` : undefined }}
                        onDragOver={(event) => { event.preventDefault(); event.stopPropagation(); setIsDragActive(true); }}
                        onDragEnter={(event) => { event.preventDefault(); event.stopPropagation(); setIsDragActive(true); }}
@@ -1705,7 +1705,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                                uploadPresentationVisibleAtRef.current = performance.now();
                                setIsUploadPendingEntered(true);
                              }}
-                             className="flex min-h-[280px] flex-col justify-center"
+                             className="flex min-h-[278px] flex-col justify-center"
                            >
                              <div className="mx-auto w-full max-w-[300px] px-3 text-center">
                                <CloudUpload className="mx-auto h-6 w-6 text-[#7868F4] dark:text-[#A99FFF]" strokeWidth={1.5} />
@@ -1715,23 +1715,23 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                              </div>
                            </motion.div>
                          ) : (
-                           <motion.div key={uploadPresentation.phase === "selected" ? "selected-upload" : "idle-upload"} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.24, ease: [0.23, 1, 0.32, 1] }} className="flex min-h-[280px] flex-col">
+                           <motion.div key={uploadPresentation.phase === "selected" ? "selected-upload" : "idle-upload"} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.24, ease: [0.23, 1, 0.32, 1] }} className="flex min-h-[278px] flex-col items-center justify-center text-center">
                              <button
                                type="button"
                                data-scanner-upload-dropzone
                                onClick={() => localUploadInputRef.current?.click()}
-                             className={`flex w-full flex-col items-center justify-center rounded-xl px-6 text-center transition-all duration-300 ${uploadPresentation.phase === "selected" ? "min-h-[86px] py-2" : "min-h-[142px]"} ${isDragActive ? "bg-[#7868F4]/[0.07] text-[#5A4BC9] dark:bg-[#7868F4]/12 dark:text-white" : "bg-transparent text-[#343146] hover:bg-[#7868F4]/[0.025] dark:text-white dark:hover:bg-white/[0.025]"}`}
+                             className={`flex w-full flex-col items-center justify-center rounded-xl px-5 py-2 text-center transition-all duration-300 ${uploadPresentation.phase === "selected" ? "min-h-[76px]" : "min-h-[102px]"} ${isDragActive ? "bg-[#7868F4]/[0.06] text-[#5A4BC9] dark:bg-[#7868F4]/10 dark:text-white" : "bg-transparent text-[#343146] hover:bg-[#7868F4]/[0.018] dark:text-white dark:hover:bg-white/[0.018]"}`}
                              >
                                {isDragActive ? (
                                  <>
-                                   <CloudUpload className="mb-2 h-6 w-6" strokeWidth={1.55} />
-                                   <h3 className="text-[14px] font-medium tracking-[-0.015em]">Release to add</h3>
+                                   <CloudUpload className="mb-2 h-5 w-5" strokeWidth={1.55} />
+                                   <h3 className="text-[13px] font-medium tracking-[-0.01em]">Release to add</h3>
                                  </>
                                ) : (
                                  <>
-                                   <CloudUpload className={`text-[#8A8696] dark:text-white/45 ${uploadPresentation.phase === "selected" ? "mb-1.5 h-5 w-5" : "mb-2.5 h-7 w-7"}`} strokeWidth={1.5} aria-hidden="true" />
-                                   <h3 className={`${uploadPresentation.phase === "selected" ? "text-[13px]" : "text-[15px]"} font-medium tracking-[-0.015em]`}>Add a document</h3>
-                                   <p className={`${uploadPresentation.phase === "selected" ? "mt-0.5 text-[10px]" : "mt-1 text-[11px]"} text-[#888494] dark:text-white/45`}>Drop it here or choose a file.</p>
+                                   <CloudUpload className={`text-[#8A8696] dark:text-white/45 ${uploadPresentation.phase === "selected" ? "mb-1 h-4.5 w-4.5" : "mb-2 h-5 w-5"}`} strokeWidth={1.5} aria-hidden="true" />
+                                   <h3 className={`${uploadPresentation.phase === "selected" ? "text-[12px]" : "text-[14px]"} font-medium tracking-[-0.01em]`}>Add a document</h3>
+                                   <p className={`${uploadPresentation.phase === "selected" ? "mt-0.5 text-[10px]" : "mt-1 text-[11px]"} text-[#888494] dark:text-white/45`}>Drop a file here or choose one.</p>
                                  </>
                                )}
                              </button>
@@ -1746,17 +1746,17 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                                </motion.div>
                              ) : null}
 
-                             <div className="mt-auto pt-2">
+                             <div className="mt-4">
                                <button
                                  data-scanner-local-upload
                                  type="button"
                                  onClick={() => uploadPresentation.phase === "selected" && uploadPresentation.file ? startLocalUploadPresentation(uploadPresentation.file) : localUploadInputRef.current?.click()}
-                                 className="mx-auto inline-flex items-center justify-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px] font-medium text-[#6E5DE7] transition-colors hover:bg-[#7868F4]/[0.07] hover:text-[#5C4BCF] dark:text-[#AAA1FF] dark:hover:bg-white/[0.06]"
+                                 className="mx-auto inline-flex h-7 items-center justify-center gap-1.5 rounded-md px-2.5 text-[12px] font-medium text-[#6E5DE7] transition-colors hover:bg-[#7868F4]/[0.055] hover:text-[#5C4BCF] dark:text-[#AAA1FF] dark:hover:bg-white/[0.06]"
                                >
                                  <CloudUpload className="h-3.5 w-3.5" strokeWidth={1.7} />
                                  {uploadPresentation.phase === "selected" ? "Use document" : "Choose a file"}
                                </button>
-                               <div className="mt-3 flex flex-col items-center pt-2">
+                               <div className="mt-3 flex flex-col items-center">
                                  <div className="flex items-center justify-center gap-2">
                                    <button data-scanner-import-url type="button" onClick={() => { const rawUrl = window.prompt("Paste a public document link"); if (rawUrl?.trim()) void onImportFromUrl?.(rawUrl); }} className="inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 text-[12px] text-[#777386] transition-colors hover:bg-[#F3F1FC] hover:text-[#4B465C] dark:text-white/50 dark:hover:bg-white/[0.06] dark:hover:text-white"><Link className="h-3.5 w-3.5" strokeWidth={1.8} />From link</button>
                                    <span className="h-3.5 w-px bg-[#DEDCEA] dark:bg-white/[0.12]" aria-hidden="true" />

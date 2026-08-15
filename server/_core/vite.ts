@@ -9,11 +9,10 @@ import viteConfig from "../../vite.config";
 export async function setupVite(app: Express, server: Server) {
   const serverOptions = {
     middlewareMode: true,
-    // The managed preview terminates TLS at the public origin and forwards
-    // WebSocket upgrades to this shared HTTP server. Explicitly keep the
-    // browser HMR client on that secure public origin rather than allowing a
-    // stale client to infer Vite's internal development port (5173).
-    hmr: { server, protocol: "wss" as const, clientPort: 443 },
+    // Vite shares this HTTP server for HMR upgrades. Leave the browser client
+    // host, protocol, and port inferred from the managed preview origin so it
+    // never targets the sandbox loopback address from a user browser.
+    hmr: { server },
     allowedHosts: true as const,
   };
 

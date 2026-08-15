@@ -33,13 +33,13 @@ describe("scanner action-bar layout contract", () => {
     expect(source).toContain("data-scanner-remove-selected-upload");
     expect(source).toContain("data-scanner-upload-thumbnail");
     expect(source).toContain("Add a document");
-    expect(source).toContain("Drop it here or choose a file.");
+    expect(source).toContain("Drop a file here or choose one.");
     expect(source).toContain("Use document");
     expect(source).toContain("Up to 20 MB");
     expect(source).toContain("CloudUpload");
-    expect(source).toContain("max-w-[420px]");
+    expect(source).toContain("max-w-[360px]");
     expect(source).toContain("min-h-[304px]");
-    expect(source).toContain("min-h-[142px]");
-    expect(source).toContain("min-h-[86px]");
+    expect(source).toContain("min-h-[102px]");
+    expect(source).toContain("min-h-[76px]");
   });
 });
