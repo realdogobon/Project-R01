@@ -1988,7 +1988,10 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
             </div>
 
             {/* Bottom Final Action Bar */}
-            <div className="w-full p-4 flex flex-wrap sm:flex-nowrap items-center justify-between gap-4 shrink-0 bg-[#FFFFFF] dark:bg-[#20202A] relative z-40 border-t border-black/5 dark:border-white/5 overflow-x-auto custom-scrollbar">
+            <div
+              data-scanner-action-bar
+              className="w-full p-4 flex flex-wrap items-center justify-between gap-4 shrink-0 bg-[#FFFFFF] dark:bg-[#20202A] relative z-40 border-t border-black/5 dark:border-white/5 overflow-visible"
+            >
 
                {/* Left Context Icons */}
                <div className="flex items-center gap-1.5 text-[#202020] dark:text-[#EAEAEA] min-w-max">
@@ -2008,7 +2011,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                </div>
 
                {/* Center Tools (Zoom, Rotate, Move) merged here */}
-               <div className="flex max-w-full overflow-x-auto custom-scrollbar items-center justify-center gap-1.5 bg-[#F9F9F9] dark:bg-[#2A2A35] px-3 py-1.5 rounded-full border border-black/5 dark:border-white/10 shadow-sm shrink-0 min-w-max">
+               <div className="flex max-w-full min-w-0 flex-wrap overflow-visible custom-scrollbar items-center justify-center gap-1.5 bg-[#F9F9F9] dark:bg-[#2A2A35] px-3 py-1.5 rounded-full border border-black/5 dark:border-white/10 shadow-sm shrink-0">
                  <div className="flex gap-1">
                     <button onClick={() => changeScannerZoom(z => Math.max(0.2, z - 0.1))} className="hover:bg-black/5 dark:hover:bg-white/10 p-1.5 rounded-md transition-colors"><ZoomOut className="w-4 h-4 text-gray-700 dark:text-gray-300"/></button>
                    <div className="flex items-center gap-1 bg-black/5 dark:bg-white/10 px-1 py-0.5 rounded h-7">
@@ -2064,6 +2067,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                   </button>
 
                  <button
+                    data-scanner-primary-action
                     onClick={() => {
                       if (isOcrLoading) {
                         onStopScan?.();
