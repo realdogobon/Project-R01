@@ -31,6 +31,11 @@ import {
   Printer,
 } from "lucide-react";
 
+const formatUploadFileSize = (bytes: number) => {
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(bytes >= 10 * 1024 * 1024 ? 0 : 1)} MB`;
+};
+
 interface ScannerCropSurfaceProps {
   crop?: Crop;
   onCommit: (crop: Crop) => void;
@@ -541,14 +546,19 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
 
   const [isFlipping, setIsFlipping] = useState(false);
   const [isDragActive, setIsDragActive] = useState(false);
-  const [uploadPresentation, setUploadPresentation] = useState<{ phase: "idle" | "pending" | "success"; fileName?: string }>({ phase: "idle" });
+  const [uploadPresentation, setUploadPresentation] = useState<{ phase: "idle" | "selected" | "pending" | "success"; file?: File; fileName?: string; thumbnailUrl?: string }>({ phase: "idle" });
+  const [isUploadPendingEntered, setIsUploadPendingEntered] = useState(false);
   const uploadPresentationTimerRef = React.useRef<number | null>(null);
+  const selectedUploadThumbnailUrlRef = React.useRef<string | null>(null);
   const uploadPresentationStartedAtRef = React.useRef(0);
+  const uploadPresentationVisibleAtRef = React.useRef(0);
   const [flipDirection, setFlipDirection] = useState<"next" | "prev">("next");
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number } | null>(null);
   const [isSpacePressed, setIsSpacePressed] = useState(false);
   const imageSequenceInputRef = React.useRef<HTMLInputElement>(null);
+  const localUploadInputRef = React.useRef<HTMLInputElement>(null);
   const activeAccent = themeAccentColor || "#C28181";
+  const uploadSurfaceAccent = "#7868F4";
   const hasDocumentLoaded = !!(scannerPreviewUrl || scannerPreviewUrl2 || scannerStitchedUrl);
   const [windowSize, setWindowSize] = useState(() => ({ width: window.innerWidth, height: window.innerHeight }));
   const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
@@ -561,17 +571,42 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
     }
   };
 
+  const resetSelectedUploadThumbnail = () => {
+    if (selectedUploadThumbnailUrlRef.current) {
+      URL.revokeObjectURL(selectedUploadThumbnailUrlRef.current);
+      selectedUploadThumbnailUrlRef.current = null;
+    }
+  };
+
   const startLocalUploadPresentation = (file: File) => {
     resetUploadPresentationTimer();
+    resetSelectedUploadThumbnail();
     uploadPresentationStartedAtRef.current = performance.now();
+    uploadPresentationVisibleAtRef.current = 0;
+    setIsUploadPendingEntered(false);
     setUploadPresentation({ phase: "pending", fileName: file.name });
     void onFileUpload?.(file);
+  };
+
+  const selectLocalUploadFile = (file: File) => {
+    resetUploadPresentationTimer();
+    resetSelectedUploadThumbnail();
+    const thumbnailUrl = file.type.startsWith("image/") ? URL.createObjectURL(file) : undefined;
+    selectedUploadThumbnailUrlRef.current = thumbnailUrl || null;
+    setUploadPresentation({ phase: "selected", file, fileName: file.name, thumbnailUrl });
+  };
+
+  const removeSelectedUploadFile = () => {
+    resetUploadPresentationTimer();
+    resetSelectedUploadThumbnail();
+    if (localUploadInputRef.current) localUploadInputRef.current.value = "";
+    setUploadPresentation({ phase: "idle" });
   };
 
   useEffect(() => {
     if (uploadPresentation.phase !== "pending") return;
 
-    if (hasDocumentLoaded && !isDocumentLoading) {
+    if (hasDocumentLoaded && !isDocumentLoading && isUploadPendingEntered) {
       resetUploadPresentationTimer();
       const showSuccess = () => {
         setUploadPresentation((current) => ({ ...current, phase: "success" }));
@@ -580,21 +615,25 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
           uploadPresentationTimerRef.current = null;
         }, 620);
       };
-      const pendingDuration = performance.now() - uploadPresentationStartedAtRef.current;
+      const pendingDuration = performance.now() - (uploadPresentationVisibleAtRef.current || uploadPresentationStartedAtRef.current);
       uploadPresentationTimerRef.current = window.setTimeout(showSuccess, Math.max(0, 420 - pendingDuration));
       return;
     }
 
-    if (!isDocumentLoading && !scannerFile) {
+    if (!isDocumentLoading && !hasDocumentLoaded) {
       resetUploadPresentationTimer();
+      const silentResetDelay = Math.max(0, 900 - (performance.now() - uploadPresentationStartedAtRef.current));
       uploadPresentationTimerRef.current = window.setTimeout(() => {
         setUploadPresentation({ phase: "idle" });
         uploadPresentationTimerRef.current = null;
-      }, 900);
+      }, silentResetDelay);
     }
-  }, [hasDocumentLoaded, isDocumentLoading, scannerFile, uploadPresentation.phase]);
+  }, [hasDocumentLoaded, isDocumentLoading, isUploadPendingEntered, uploadPresentation.phase]);
 
-  useEffect(() => resetUploadPresentationTimer, []);
+  useEffect(() => () => {
+    resetUploadPresentationTimer();
+    resetSelectedUploadThumbnail();
+  }, []);
 
   useEffect(() => {
     const onResize = () => setWindowSize({ width: window.innerWidth, height: window.innerHeight });
@@ -1544,7 +1583,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                  } : undefined}
                >
                   <div
-                    className="m-auto relative"
+                    className={`m-auto relative ${!hasDocumentLoaded || uploadPresentation.phase === "selected" || uploadPresentation.phase === "pending" ? "w-full" : ""}`}
                     style={isCropEnabled && hasDocumentLoaded && !isScannerProgressActive ? { width: `${cropVisualWidth}px`, height: `${cropVisualHeight}px` } : undefined}
                   >
                   {scannerProgress && scannerProgress.status !== 'idle' && cropQueue.length > 0 ? (
@@ -1614,145 +1653,130 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                             )}
                          </div>
                       </div>
-                   ) : (!hasDocumentLoaded || uploadPresentation.phase === "pending") ? (
-                     // Drag & Drop / File Upload fallback zone when no document has been uploaded yet
+                   ) : (!hasDocumentLoaded || uploadPresentation.phase === "selected" || uploadPresentation.phase === "pending") ? (
                      <div
                        data-scanner-empty-upload-state
-                       className={`w-full max-w-2xl bg-transparent flex flex-col items-center justify-center rounded-2xl transition-all duration-300 group mx-auto ${windowSize.width < 640 ? 'mt-4 mb-12 px-5 py-3' : 'my-auto px-7 py-8'} ${
-                         isDragActive
-                           ? "scale-[1.01]"
-                           : ""
-                       }`}
-                       style={{
-                         height: windowSize.width < 640 ? '232px' : undefined,
-                         minHeight: windowSize.width < 640 ? '232px' : '420px',
-                         boxShadow: isDragActive ? `0 16px 36px -18px ${activeAccent}70` : undefined,
-                         background: isDragActive ? `${activeAccent}08` : undefined
-                       }}
-                       onDragOver={(e) => {
-                         e.preventDefault();
-                         e.stopPropagation();
-                         setIsDragActive(true);
-                       }}
-                       onDragEnter={(e) => {
-                         e.preventDefault();
-                         e.stopPropagation();
-                         setIsDragActive(true);
-                       }}
-                       onDragLeave={(e) => {
-                         e.preventDefault();
-                         e.stopPropagation();
+                       className="w-full max-w-[760px] min-h-[352px] mx-auto rounded-[32px] bg-white/88 dark:bg-[#20202A]/90 p-7 shadow-[0_30px_64px_-38px_rgba(87,76,215,0.56)] transition-[transform,box-shadow] duration-300"
+                       style={{ boxShadow: isDragActive ? `0 34px 70px -34px ${uploadSurfaceAccent}9C` : undefined }}
+                       onDragOver={(event) => { event.preventDefault(); event.stopPropagation(); setIsDragActive(true); }}
+                       onDragEnter={(event) => { event.preventDefault(); event.stopPropagation(); setIsDragActive(true); }}
+                       onDragLeave={(event) => { event.preventDefault(); event.stopPropagation(); setIsDragActive(false); }}
+                       onDrop={(event) => {
+                         event.preventDefault();
+                         event.stopPropagation();
                          setIsDragActive(false);
-                       }}
-                       onDrop={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          setIsDragActive(false);
-                          if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-                             startLocalUploadPresentation(e.dataTransfer.files[0]);
-                          }
+                         const file = event.dataTransfer.files?.[0];
+                         if (file) selectLocalUploadFile(file);
                        }}
                      >
-                        <AnimatePresence mode="wait">
-                        {uploadPresentation.phase === "pending" ? (
-                          <motion.div
-                            key="pending-upload"
-                            data-scanner-upload-pending
-                            initial={{ opacity: 0, y: 8 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: -8 }}
-                            transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
-                            className="flex w-full max-w-[360px] flex-col items-center"
-                          >
-                            <div className="flex w-full items-center gap-3 rounded-2xl bg-white/70 px-4 py-3.5 shadow-[0_16px_38px_-24px_rgba(0,0,0,0.5)] dark:bg-white/[0.045]">
-                              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-black/[0.035] dark:bg-white/[0.06]">
-                                <FileText className="h-4.5 w-4.5" style={{ color: activeAccent }} strokeWidth={1.7} />
-                              </span>
-                              <span className="min-w-0 flex-1 text-left">
-                                <span className="block truncate text-[13px] font-medium text-gray-800 dark:text-gray-100">{uploadPresentation.fileName}</span>
-                                <span className="mt-0.5 flex items-center gap-1.5 text-[11px] text-gray-500 dark:text-gray-400">
-                                  <span className="h-2.5 w-2.5 rounded-full border-2 border-current border-t-transparent animate-spin" />
-                                  Preparing document
-                                </span>
-                              </span>
-                            </div>
-                            <div className="mt-3 h-px w-full overflow-hidden bg-black/[0.06] dark:bg-white/[0.10]">
-                              <motion.div className="h-full w-2/5" style={{ backgroundColor: activeAccent }} initial={{ x: "-120%" }} animate={{ x: "280%" }} transition={{ repeat: Infinity, duration: 1.05, ease: "linear" }} />
-                            </div>
-                          </motion.div>
-                        ) : (
-                          <motion.div key="idle-upload" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }} className="flex flex-col items-center w-full">
-                        <div className={`${windowSize.width < 640 ? 'w-9 h-9 rounded-xl mb-2' : 'w-12 h-12 rounded-2xl mb-5'} bg-white/70 dark:bg-white/[0.045] flex items-center justify-center transition-all duration-300 shadow-[0_10px_24px_-16px_rgba(0,0,0,0.45)]`}
-                           style={{
-                             transform: isDragActive ? "scale(1.06) translateY(-3px)" : undefined,
-                           }}>
-                           <FileText
-                             className="w-5 h-5 transition-colors duration-300"
-                             style={{ color: isDragActive ? activeAccent : '#8b8b99' }}
-                             strokeWidth={1.65}
-                           />
-                        </div>
+                       <input
+                         ref={localUploadInputRef}
+                         type="file"
+                         className="hidden"
+                         accept=".pdf,.md,.html,.txt,.jpeg,.jpg,.png,.webp"
+                         onChange={(event) => {
+                           const file = event.target.files?.[0];
+                           if (file) selectLocalUploadFile(file);
+                         }}
+                       />
+                       <input
+                         ref={imageSequenceInputRef}
+                         type="file"
+                         className="hidden"
+                         accept=".jpeg,.jpg,.png,.webp"
+                         multiple
+                         onChange={(event) => {
+                           const files = Array.from(event.target.files || []);
+                           event.target.value = "";
+                           void onImageSequenceUpload?.(files);
+                         }}
+                       />
+                       <AnimatePresence mode="wait" initial={false}>
+                         {uploadPresentation.phase === "pending" ? (
+                           <motion.div
+                             key="pending-upload"
+                             data-scanner-upload-pending
+                             initial={{ opacity: 0, y: 12 }}
+                             animate={{ opacity: 1, y: 0 }}
+                             exit={{ opacity: 0, y: -10 }}
+                             transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
+                             onAnimationComplete={() => {
+                               uploadPresentationVisibleAtRef.current = performance.now();
+                               setIsUploadPendingEntered(true);
+                             }}
+                             className="flex min-h-[296px] flex-col justify-center"
+                           >
+                             <div className="flex min-h-[176px] flex-col items-center justify-center rounded-[25px] bg-[#FBFAFF] px-8 text-center dark:bg-white/[0.035]">
+                               <span className="mb-5 flex h-16 w-16 items-center justify-center rounded-[22px] bg-white text-[#7868F4] shadow-[0_16px_30px_-18px_rgba(64,51,177,0.45)] dark:bg-white/[0.07]">
+                                 <FileText className="h-8 w-8" strokeWidth={1.55} />
+                               </span>
+                               <h3 className="text-[22px] font-semibold tracking-[-0.035em] text-[#28253B] dark:text-white">Uploading document</h3>
+                               <p className="mt-2 text-[13px] text-[#777386] dark:text-white/55">Preparing your file for the scanner.</p>
+                             </div>
+                             <div className="mt-5 flex items-center gap-4 px-4">
+                               <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#F0EEFF] text-[#7868F4] dark:bg-[#7868F4]/15"><FileText className="h-5 w-5" strokeWidth={1.7} /></span>
+                               <span className="min-w-0 flex-1"><span className="block truncate text-[14px] font-medium text-[#343146] dark:text-white">{uploadPresentation.fileName}</span><span className="mt-0.5 flex items-center gap-1.5 text-[12px] text-[#807C8D] dark:text-white/45"><span className="h-3 w-3 rounded-full border-2 border-current border-t-transparent animate-spin" /> Uploading</span></span>
+                             </div>
+                             <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-[#ECEAF8] dark:bg-white/[0.08]"><motion.div className="h-full w-[42%] rounded-full bg-[#7868F4]" initial={{ x: "-115%" }} animate={{ x: "260%" }} transition={{ repeat: Infinity, duration: 1.05, ease: "linear" }} /></div>
+                           </motion.div>
+                         ) : (
+                           <motion.div key={uploadPresentation.phase === "selected" ? "selected-upload" : "idle-upload"} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.24, ease: [0.23, 1, 0.32, 1] }} className="flex min-h-[296px] flex-col">
+                             <button
+                               type="button"
+                               data-scanner-upload-dropzone
+                               onClick={() => localUploadInputRef.current?.click()}
+                             className={`flex w-full flex-col items-center justify-center rounded-[25px] px-8 text-center transition-all duration-300 ${uploadPresentation.phase === "selected" ? "min-h-[146px] py-4" : "min-h-[192px]"} ${isDragActive ? "bg-[#7868F4] text-white shadow-inner" : "bg-[#FBFAFF] text-[#28253B] hover:bg-[#F8F6FF] dark:bg-white/[0.035] dark:text-white dark:hover:bg-white/[0.06]"}`}
+                             >
+                               {isDragActive ? (
+                                 <>
+                                   <span className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-white/16 text-white"><Images className="h-7 w-7" strokeWidth={1.6} /></span>
+                                   <h3 className="text-[23px] font-semibold tracking-[-0.035em]">Drop it right here!</h3>
+                                 </>
+                               ) : (
+                                 <>
+                                   <span className={`relative flex items-center justify-center text-[#7868F4] ${uploadPresentation.phase === "selected" ? "mb-3 h-[44px] w-[64px]" : "mb-5 h-[66px] w-[84px]"}`} aria-hidden="true">
+                                     <FileText className={`absolute left-1 -rotate-[13deg] opacity-65 ${uploadPresentation.phase === "selected" ? "top-1 h-8 w-8" : "top-3 h-12 w-12"}`} strokeWidth={1.45} />
+                                     <FileText className={`absolute right-1 rotate-[13deg] opacity-65 ${uploadPresentation.phase === "selected" ? "top-1 h-8 w-8" : "top-3 h-12 w-12"}`} strokeWidth={1.45} />
+                                     <Images className={`relative z-10 rounded-xl bg-white shadow-[0_12px_22px_-15px_rgba(64,51,177,0.55)] dark:bg-[#29273A] ${uploadPresentation.phase === "selected" ? "h-9 w-9 p-2" : "h-12 w-12 p-2.5"}`} strokeWidth={1.6} />
+                                   </span>
+                                   <h3 className={`${uploadPresentation.phase === "selected" ? "text-[19px]" : "text-[23px]"} font-semibold tracking-[-0.035em]`}>Drag &amp; drop a document</h3>
+                                   <p className={`${uploadPresentation.phase === "selected" ? "mt-1 text-[12px]" : "mt-2 text-[14px]"} text-[#777386] dark:text-white/55`}>or <span className="font-semibold text-[#7868F4] underline decoration-[#B8B0FF] underline-offset-2">browse files</span> on your device</p>
+                                 </>
+                               )}
+                             </button>
 
-                        <h3 className="text-gray-800 dark:text-gray-100 font-semibold text-[17px] mb-1 tracking-[-0.02em]">
-                          Add a document
-                        </h3>
-                        <p className={`${windowSize.width < 640 ? 'text-[12px] mb-3' : 'text-[13px] mb-6'} text-gray-500 dark:text-gray-400 font-medium text-center`}>
-                          Drop a file here, or choose one from your device.
-                        </p>
+                             {uploadPresentation.phase === "selected" && uploadPresentation.file ? (
+                               <motion.div data-scanner-upload-selected initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.04, duration: 0.2 }} className="mt-3 flex items-center gap-3 px-4 py-1.5">
+                                 <span className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-[#F0EEFF] text-[#7868F4] dark:bg-[#7868F4]/15">
+                                   {uploadPresentation.thumbnailUrl ? <img data-scanner-upload-thumbnail src={uploadPresentation.thumbnailUrl} alt="" className="h-full w-full object-cover" /> : <FileText className="h-5 w-5" strokeWidth={1.7} />}
+                                 </span>
+                                 <span className="min-w-0 flex-1 text-left"><span className="block truncate text-[14px] font-medium text-[#343146] dark:text-white">{uploadPresentation.file.name}</span><span className="mt-0.5 block text-[12px] text-[#8A8696] dark:text-white/45">{uploadPresentation.file.type.startsWith("image/") ? "Image" : "Document"} · {formatUploadFileSize(uploadPresentation.file.size)}</span></span>
+                                 <button data-scanner-remove-selected-upload type="button" aria-label="Remove selected file" onClick={removeSelectedUploadFile} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[#ED6A84] transition-colors hover:bg-[#FFF0F3]"><X className="h-5 w-5" strokeWidth={2.1} /></button>
+                               </motion.div>
+                             ) : null}
 
-                        <label
-                          data-scanner-local-upload
-                          className="text-white min-w-32 px-5 py-2.5 rounded-xl font-medium cursor-pointer transition-all shadow-[0_10px_20px_-12px_rgba(0,0,0,0.65)] text-[13px] hover:brightness-105 hover:shadow-[0_12px_24px_-12px_rgba(0,0,0,0.7)] active:scale-[0.97] duration-150 inline-flex items-center justify-center gap-2"
-                          style={{ backgroundColor: activeAccent }}
-                        >
-                          <FolderOpen className="w-3.5 h-3.5" strokeWidth={1.9} />
-                          Choose file
-                          <input
-                            type="file"
-                            className="hidden"
-                            accept=".pdf,.md,.html,.txt,.jpeg,.jpg,.png,.webp"
-                            onChange={(e) => {
-                               if (e.target.files && e.target.files[0]) {
-                                 startLocalUploadPresentation(e.target.files[0]);
-                               }
-                            }}
-                          />
-                        </label>
-
-                        <div className={`${windowSize.width < 640 ? 'mt-3 pt-2' : 'mt-7 pt-5'} w-full max-w-[310px] border-t border-gray-200/70 dark:border-white/[0.07] flex flex-col items-center`}>
-                          <input
-                            ref={imageSequenceInputRef}
-                            type="file"
-                            className="hidden"
-                            accept=".jpeg,.jpg,.png,.webp"
-                            multiple
-                            onChange={(event) => {
-                              const files = Array.from(event.target.files || []);
-                              event.target.value = "";
-                              void onImageSequenceUpload?.(files);
-                            }}
-                          />
-                          <div className="flex items-center justify-center gap-2.5">
-                          <button data-scanner-import-url type="button" onClick={() => {
-                            const rawUrl = window.prompt("Paste a public document link");
-                            if (rawUrl?.trim()) void onImportFromUrl?.(rawUrl);
-                          }} className="text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 transition-colors text-[12px] inline-flex items-center gap-1.5 py-1 px-1.5 rounded-md hover:bg-black/[0.03] dark:hover:bg-white/[0.05]">
-                            <Link className="w-3.5 h-3.5" strokeWidth={1.8} />
-                            From link
-                          </button>
-                          <span className="h-3.5 w-px bg-gray-200 dark:bg-white/[0.10]" aria-hidden="true" />
-                          <button data-scanner-image-sequence type="button" onClick={() => imageSequenceInputRef.current?.click()} className="text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 transition-colors text-[12px] inline-flex items-center gap-1.5 py-1 px-1.5 rounded-md hover:bg-black/[0.03] dark:hover:bg-white/[0.05]">
-                            <Images className="w-3.5 h-3.5" strokeWidth={1.8} />
-                            Image sequence
-                          </button>
-                          </div>
-                          <p className={`${windowSize.width < 640 ? 'mt-1' : 'mt-3'} text-[10px] font-medium tracking-[0.01em] text-gray-400 dark:text-gray-500 text-center`}>
-                            PDF · Images · Text &nbsp;•&nbsp; Up to 20 MB
-                          </p>
-                        </div>
-                        </motion.div>
-                        )}
-                        </AnimatePresence>
+                             <div className="mt-auto pt-3">
+                               <button
+                                 data-scanner-local-upload
+                                 type="button"
+                                 onClick={() => uploadPresentation.phase === "selected" && uploadPresentation.file ? startLocalUploadPresentation(uploadPresentation.file) : localUploadInputRef.current?.click()}
+                                 className="mx-auto flex min-w-[172px] items-center justify-center gap-2 rounded-full bg-[#7868F4] px-6 py-3 text-[14px] font-semibold text-white shadow-[0_14px_26px_-15px_rgba(80,64,213,0.82)] transition-all hover:bg-[#6D5DE8] active:scale-[0.97]"
+                               >
+                                 <FolderOpen className="h-4 w-4" strokeWidth={1.9} />
+                                 {uploadPresentation.phase === "selected" ? "Upload document" : "Choose file"}
+                               </button>
+                               <div className="mt-3 flex flex-col items-center border-t border-[#ECEAF2] pt-3 dark:border-white/[0.08]">
+                                 <div className="flex items-center justify-center gap-3">
+                                   <button data-scanner-import-url type="button" onClick={() => { const rawUrl = window.prompt("Paste a public document link"); if (rawUrl?.trim()) void onImportFromUrl?.(rawUrl); }} className="inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 text-[12px] text-[#777386] transition-colors hover:bg-[#F3F1FC] hover:text-[#4B465C] dark:text-white/50 dark:hover:bg-white/[0.06] dark:hover:text-white"><Link className="h-3.5 w-3.5" strokeWidth={1.8} />From link</button>
+                                   <span className="h-3.5 w-px bg-[#DEDCEA] dark:bg-white/[0.12]" aria-hidden="true" />
+                                   <button data-scanner-image-sequence type="button" onClick={() => imageSequenceInputRef.current?.click()} className="inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 text-[12px] text-[#777386] transition-colors hover:bg-[#F3F1FC] hover:text-[#4B465C] dark:text-white/50 dark:hover:bg-white/[0.06] dark:hover:text-white"><Images className="h-3.5 w-3.5" strokeWidth={1.8} />Image sequence</button>
+                                 </div>
+                                 <p className="mt-1.5 text-[10px] font-medium tracking-[0.01em] text-[#A29EAE] dark:text-white/35">PDF · Images · Text &nbsp;•&nbsp; Up to 20 MB</p>
+                               </div>
+                             </div>
+                           </motion.div>
+                         )}
+                       </AnimatePresence>
                      </div>
                   ) : scannerTotalPages > 1 ? (
                     // Book Spread Layout & Single Cover System

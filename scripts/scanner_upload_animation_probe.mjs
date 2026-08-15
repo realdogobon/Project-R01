@@ -52,6 +52,8 @@ const measureState = async () => page.evaluate(() => {
   };
   return {
     empty: rect("[data-scanner-empty-upload-state]"),
+    dropzone: rect("[data-scanner-upload-dropzone]"),
+    selected: rect("[data-scanner-upload-selected]"),
     pending: rect("[data-scanner-upload-pending]"),
     success: rect("[data-scanner-upload-success]"),
     actionBar: rect("[data-scanner-action-bar]"),
@@ -63,24 +65,43 @@ const measureState = async () => page.evaluate(() => {
 
 try {
   await openScanner("success");
-  await capture("01-idle.png");
   report.states.idle = await measureState();
+  await capture("01-idle.png");
+
+  await page.evaluate(() => {
+    const target = document.querySelector("[data-scanner-empty-upload-state]");
+    if (!target) throw new Error("Reference upload surface was not found");
+    target.dispatchEvent(new DragEvent("dragenter", { bubbles: true, cancelable: true }));
+    target.dispatchEvent(new DragEvent("dragover", { bubbles: true, cancelable: true }));
+  });
+  await sleep(80);
+  report.states.dragActive = await measureState();
+  await capture("02-drag-active.png");
+  await page.evaluate(() => document.querySelector("[data-scanner-empty-upload-state]")?.dispatchEvent(new DragEvent("dragleave", { bubbles: true, cancelable: true })));
 
   const successfulInput = await primaryInput();
   await successfulInput.uploadFile(imageFixture);
+  await page.waitForSelector("[data-scanner-upload-selected]", { timeout: 5_000 });
+  await page.waitForSelector("[data-scanner-upload-thumbnail]", { timeout: 5_000 });
+  report.states.selected = { ...(await measureState()), hasLocalThumbnail: true };
+  await capture("03-selected-file.png");
+  await page.click("[data-scanner-local-upload]");
   await page.waitForSelector("[data-scanner-upload-pending]", { timeout: 5_000 });
   await sleep(80);
   report.states.pending = await measureState();
-  await capture("02-pending.png");
+  await capture("04-pending.png");
 
   await page.waitForSelector("[data-scanner-upload-success]", { timeout: 20_000 });
   report.states.success = await measureState();
-  await capture("03-success.png");
+  await capture("05-success.png");
   await sleep(760);
   const previewReady = await page.evaluate(() => [...document.querySelectorAll("#scanner-viewport img, #scanner-viewport canvas")]
     .some((candidate) => candidate instanceof HTMLImageElement && candidate.complete && candidate.naturalWidth > 0));
   report.states.settled = { ...(await measureState()), previewReady };
 
+  if (!report.states.dragActive.dropzone) throw new Error("Drag-active upload surface did not render");
+  if (!report.states.selected.selected) throw new Error("Selected-file row did not render before upload");
+  if (!report.states.selected.hasLocalThumbnail) throw new Error("Image selection did not render a local thumbnail");
   if (!report.states.pending.pending) throw new Error("Pending upload row did not render");
   if (!report.states.success.success) throw new Error("Transient success overlay did not render");
   if (report.states.settled.success) throw new Error("Success overlay did not dismiss after its transient handoff");
@@ -89,13 +110,15 @@ try {
   await openScanner("silent-rejection");
   const rejectedInput = await primaryInput();
   await rejectedInput.uploadFile(oversizeFixture);
+  await page.waitForSelector("[data-scanner-upload-selected]", { timeout: 5_000 });
+  await page.click("[data-scanner-local-upload]");
   await page.waitForSelector("[data-scanner-upload-pending]", { timeout: 5_000 });
   await sleep(1_150);
   report.states.silentFailure = await measureState();
-  await capture("04-silent-failure-returned-to-idle.png");
+  await capture("06-silent-failure-returned-to-idle.png");
 
   if (!report.states.silentFailure.empty) throw new Error("Silent failure did not return to the idle upload surface");
-  if (report.states.silentFailure.pending || report.states.silentFailure.success) throw new Error("Silent failure left an upload state visible");
+  if (report.states.silentFailure.pending || report.states.silentFailure.success || report.states.silentFailure.selected) throw new Error("Silent failure left an upload state visible");
   if (report.states.silentFailure.visibleErrorText.length > 0) throw new Error(`Silent failure exposed an error surface: ${report.states.silentFailure.visibleErrorText.join(" | ")}`);
   if (errors.length > 0) throw new Error(`Unexpected browser errors: ${errors.join(" | ")}`);
 

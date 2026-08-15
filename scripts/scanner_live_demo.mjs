@@ -86,6 +86,22 @@ const visualReady = () => page.waitForFunction(
     .some((candidate) => candidate instanceof HTMLImageElement && candidate.complete && candidate.naturalWidth > 0),
   { timeout: 60000 },
 );
+const hasVisibleControl = (selector) => page.evaluate((target) =>
+  [...document.querySelectorAll(target)].some((candidate) => {
+    const element = candidate;
+    const rect = element.getBoundingClientRect();
+    const style = window.getComputedStyle(element);
+    return rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" && style.display !== "none";
+  }), selector);
+const clickVisibleControl = (selector) => page.evaluate((target) => {
+  const element = [...document.querySelectorAll(target)].find((candidate) => {
+    const rect = candidate.getBoundingClientRect();
+    const style = window.getComputedStyle(candidate);
+    return rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" && style.display !== "none";
+  });
+  if (!(element instanceof HTMLElement)) throw new Error(`No visible control matched ${target}`);
+  element.click();
+}, selector);
 
 const report = { previewUrl, outDir, providerRequests: 0, errors, steps: [] };
 try {
@@ -95,7 +111,11 @@ try {
 
   const normalInput = await primaryInput();
   await normalInput.uploadFile(fixtures.image);
+  await page.waitForSelector("[data-scanner-upload-selected]", { timeout: 10_000 });
+  await page.click("[data-scanner-local-upload]");
   await visualReady();
+  await page.waitForFunction(() => !document.querySelector("[data-scanner-upload-success]"), { timeout: 10_000 });
+  await page.waitForSelector("[data-scanner-document-surface]", { timeout: 10_000 });
   await capture("02-image-uploaded.png");
   report.steps.push("image-upload-preview");
 
@@ -140,6 +160,8 @@ try {
   await openScanner("limits-and-imports");
   const oversizeInput = await primaryInput();
   await oversizeInput.uploadFile(fixtures.largePdf);
+  await page.waitForSelector("[data-scanner-upload-selected]", { timeout: 10_000 });
+  await page.click("[data-scanner-local-upload]");
   await page.waitForFunction(
     () => !document.querySelector("[data-scanner-upload-pending]") && Boolean(document.querySelector("[data-scanner-import-url]")),
     { timeout: 5_000 },
@@ -150,18 +172,18 @@ try {
   report.steps.push("100mb-pdf-rejected-before-render");
 
   const urlButton = "[data-scanner-import-url]";
-  if (!await page.$(urlButton)) throw new Error("URL import control was not found");
+  if (!await hasVisibleControl(urlButton)) throw new Error("URL import control was not found");
   page.once("dialog", (dialog) => void dialog.accept(publicTextUrl));
-  await page.click(urlButton);
+  await clickVisibleControl(urlButton);
   await page.waitForSelector('button[title="Send extracted text"]', { timeout: 60000 });
   await capture("08-url-imported-markdown.png");
   report.steps.push("url-import-markdown");
 
   await openScanner("image-sequence");
   const sequenceButton = "[data-scanner-image-sequence]";
-  if (!await page.$(sequenceButton)) throw new Error("Image-sequence control was not found");
+  if (!await hasVisibleControl(sequenceButton)) throw new Error("Image-sequence control was not found");
   const chooserPromise = page.waitForFileChooser({ timeout: 10000 });
-  await page.click(sequenceButton);
+  await clickVisibleControl(sequenceButton);
   const chooser = await chooserPromise;
   await chooser.accept([fixtures.jpeg, fixtures.webp]);
   await visualReady();
