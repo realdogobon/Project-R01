@@ -165,52 +165,157 @@ const ScannerLiveIcon = ({ className = "w-4 h-4" }: { className?: string }) => {
       }}
     >
       <style>{`
-        @keyframes scanner-toolbar-paper-feed {
-          0%, 12% {
-            transform: translate(-50%, -180%);
+        @keyframes scanner-toolbar-paper-entry {
+          0%, 10% {
+            transform: translate(-50%, -115%);
             opacity: 0;
           }
-          26% {
-            transform: translate(-50%, -120%);
-            opacity: 0.82;
+          23% {
+            transform: translate(-50%, -66%);
+            opacity: 0.6;
           }
-          50% {
-            transform: translate(-50%, -50%);
+          35% {
+            transform: translate(-50%, -27%);
+            opacity: 0.85;
+          }
+          47% {
+            transform: translate(-50%, -3%);
             opacity: 0.9;
           }
-          72% {
-            transform: translate(-50%, 8%);
+          58% {
+            transform: translate(-50%, 15%);
             opacity: 0.9;
           }
-          90% {
-            transform: translate(-50%, 60%);
-            opacity: 0.82;
-          }
-          100% {
-            transform: translate(-50%, 95%);
+          66%, 100% {
+            transform: translate(-50%, 30%);
             opacity: 0;
           }
         }
 
-        .scanner-paper {
-          transform: translate(-50%, -180%);
+        @keyframes scanner-toolbar-paper-tray {
+          0%, 72% {
+            transform: translate(-50%, -115%);
+            opacity: 0;
+          }
+          76% {
+            transform: translate(-50%, -76%);
+            opacity: 0.25;
+          }
+          80% {
+            transform: translate(-50%, -52%);
+            opacity: 0.45;
+          }
+          84% {
+            transform: translate(-50%, -28%);
+            opacity: 0.65;
+          }
+          88% {
+            transform: translate(-50%, -8%);
+            opacity: 0.8;
+          }
+          92% {
+            transform: translate(-50%, 0%);
+            opacity: 0.72;
+          }
+          96% {
+            transform: translate(-50%, 2%);
+            opacity: 0.4;
+          }
+          100% {
+            transform: translate(-50%, 3%);
+            opacity: 0;
+          }
+        }
+
+        @keyframes scanner-toolbar-paper-exit {
+          0%, 72% {
+            transform: translate(-50%, -115%);
+            opacity: 0;
+          }
+          76% {
+            transform: translate(-50%, -76%);
+            opacity: 0.25;
+          }
+          80% {
+            transform: translate(-50%, -52%);
+            opacity: 0.45;
+          }
+          84% {
+            transform: translate(-50%, -28%);
+            opacity: 0.65;
+          }
+          88% {
+            transform: translate(-50%, -8%);
+            opacity: 0.8;
+          }
+          92% {
+            transform: translate(-50%, 0%);
+            opacity: 0.72;
+          }
+          96% {
+            transform: translate(-50%, 2%);
+            opacity: 0.4;
+          }
+          100% {
+            transform: translate(-50%, 3%);
+            opacity: 0;
+          }
+        }
+
+        .scanner-paper-sheet {
+          transform: translate(-50%, -115%);
           opacity: 0;
           will-change: transform, opacity;
         }
 
         @media (prefers-reduced-motion: no-preference) {
-          .scanner-paper--feeding {
-            animation: scanner-toolbar-paper-feed 1.35s cubic-bezier(0.45, 0, 0.15, 1) both;
+          .scanner-paper-sheet--entry.scanner-paper-sheet--feeding {
+            animation: scanner-toolbar-paper-entry 2.7s cubic-bezier(0.33, 0, 0.67, 1) both;
+          }
+
+          .scanner-paper-sheet--tray.scanner-paper-sheet--feeding {
+            animation: scanner-toolbar-paper-tray 2.7s cubic-bezier(0.33, 0, 0.67, 1) both;
+          }
+
+          .scanner-paper-sheet--exit.scanner-paper-sheet--feeding {
+            animation: scanner-toolbar-paper-exit 2.7s cubic-bezier(0.33, 0, 0.67, 1) both;
           }
         }
       `}</style>
       <div className={`relative flex items-center justify-center ${className}`}>
         <div
-          key={paperFeedRun}
+          data-scanner-toolbar-paper-top-holder
           aria-hidden="true"
-          data-scanner-toolbar-paper
-          className={`scanner-paper ${isPaperFeedActive ? "scanner-paper--feeding" : ""} absolute top-1/2 left-1/2 z-0 h-[76%] w-[55%] rounded-[1.5px] pointer-events-none bg-current`}
-        />
+          className="absolute left-[25%] top-[-50%] z-0 h-[87.5%] w-[50%] overflow-hidden pointer-events-none"
+        >
+          <div
+            key={`entry-${paperFeedRun}`}
+            data-scanner-toolbar-paper-entry
+            className={`scanner-paper-sheet scanner-paper-sheet--entry ${isPaperFeedActive ? "scanner-paper-sheet--feeding" : ""} absolute left-1/2 top-0 aspect-[1/1.41421356237] w-[82%] rounded-[1px] pointer-events-none bg-current`}
+          />
+        </div>
+        <div
+          aria-hidden="true"
+          data-scanner-toolbar-paper-output-tray
+          className="absolute left-[25%] top-[58.33%] z-0 h-[87.5%] w-[50%] overflow-hidden pointer-events-none"
+        >
+          <div
+            key={`tray-${paperFeedRun}`}
+            data-scanner-toolbar-paper-output
+            className={`scanner-paper-sheet scanner-paper-sheet--tray ${isPaperFeedActive ? "scanner-paper-sheet--feeding" : ""} absolute left-1/2 top-0 aspect-[1/1.41421356237] w-[82%] rounded-[1px] pointer-events-none bg-current`}
+          />
+        </div>
+        <div
+          data-scanner-toolbar-paper-exit-window
+          aria-hidden="true"
+          className="absolute left-[25%] top-[58.33%] z-0 h-[153%] w-[50%] overflow-hidden pointer-events-none"
+        >
+          <div
+            key={`exit-${paperFeedRun}`}
+            data-scanner-toolbar-paper-exit
+            className={`scanner-paper-sheet scanner-paper-sheet--exit ${isPaperFeedActive ? "scanner-paper-sheet--feeding" : ""} absolute left-1/2 top-0 aspect-[1/1.41421356237] w-[82%] rounded-[1px] pointer-events-none bg-current`}
+          />
+        </div>
         <Printer strokeWidth={1.75} className="relative z-10 w-full h-full text-current opacity-80" />
       </div>
     </div>

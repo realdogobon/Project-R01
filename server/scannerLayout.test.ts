@@ -84,7 +84,7 @@ describe("scanner action-bar layout contract", () => {
     expect(source).not.toContain('text-[11px] font-medium tracking-[0.01em] text-[#AAA5B4]');
   });
 
-  it("replays the workspace scanner toolbar paper through a physical printer path on every mouse entry", () => {
+  it("feeds paper through the workspace scanner toolbar glyph’s front holder and output tray on every pointer entry", () => {
     const source = fs.readFileSync(path.resolve(import.meta.dirname, "../client/src/pages/Workspace.tsx"), "utf8");
 
     expect(source).toContain("const [paperFeedRun, setPaperFeedRun] = useState(0);");
@@ -93,17 +93,35 @@ describe("scanner action-bar layout contract", () => {
     expect(source).toContain("onPointerEnter={() => {");
     expect(source).toContain("setIsPaperFeedActive(true);");
     expect(source).toContain("setPaperFeedRun((run) => run + 1);");
-    expect(source).toContain("key={paperFeedRun}");
-    expect(source).toContain("data-scanner-toolbar-paper");
-    expect(source).toContain("@keyframes scanner-toolbar-paper-feed");
-    expect(source).toContain("translate(-50%, -120%)");
-    expect(source).toContain("translate(-50%, -50%)");
-    expect(source).toContain("translate(-50%, 60%)");
-    expect(source).toContain("1.35s cubic-bezier(0.45, 0, 0.15, 1)");
-    expect(source).toContain("h-[76%] w-[55%]");
-    expect(source).toContain("scanner-paper--feeding");
-    expect(source).toContain('isPaperFeedActive ? "scanner-paper--feeding" : ""');
+    expect(source).toContain("key={`entry-${paperFeedRun}`}");
+    expect(source).toContain("key={`tray-${paperFeedRun}`}");
+    expect(source).toContain("key={`exit-${paperFeedRun}`}");
+    expect(source).toContain("data-scanner-toolbar-paper-top-holder");
+    expect(source).toContain("data-scanner-toolbar-paper-output-tray");
+    expect(source).toContain("data-scanner-toolbar-paper-exit-window");
+    expect(source).toContain("data-scanner-toolbar-paper-entry");
+    expect(source).toContain("data-scanner-toolbar-paper-output");
+    expect(source).toContain("data-scanner-toolbar-paper-exit");
+    expect(source).toContain("@keyframes scanner-toolbar-paper-entry");
+    expect(source).toContain("@keyframes scanner-toolbar-paper-tray");
+    expect(source).toContain("@keyframes scanner-toolbar-paper-exit");
+    expect((source.match(/76% \{\n            transform: translate\(-50%, -76%\);\n            opacity: 0\.25;/g) ?? []).length).toBe(2);
+    expect((source.match(/84% \{\n            transform: translate\(-50%, -28%\);\n            opacity: 0\.65;/g) ?? []).length).toBe(2);
+    expect((source.match(/88% \{\n            transform: translate\(-50%, -8%\);\n            opacity: 0\.8;/g) ?? []).length).toBe(2);
+    expect((source.match(/92% \{\n            transform: translate\(-50%, 0%\);\n            opacity: 0\.72;/g) ?? []).length).toBe(2);
+    expect((source.match(/96% \{\n            transform: translate\(-50%, 2%\);\n            opacity: 0\.4;/g) ?? []).length).toBe(2);
+    expect((source.match(/100% \{\n            transform: translate\(-50%, 3%\);\n            opacity: 0;/g) ?? []).length).toBe(2);
+    expect(source).toContain("left-[25%] top-[-50%]");
+    expect(source).toContain("left-[25%] top-[58.33%]");
+    expect(source).toContain("left-[25%] top-[58.33%]");
+    const maskMatches = source.match(/data-scanner-toolbar-paper-(?:top-holder|output-tray|exit-window)[\s\S]*?w-\[50%\]/g) ?? [];
+    expect(maskMatches.length).toBe(3);
+    expect(source).toContain("2.7s cubic-bezier(0.33, 0, 0.67, 1)");
+    expect(source).toContain("scanner-paper-sheet--feeding");
+    expect(source).toContain('isPaperFeedActive ? "scanner-paper-sheet--feeding" : ""');
     expect(source).toContain("prefers-reduced-motion: no-preference");
-    expect(source).not.toContain(".scanner-icon-wrapper:hover .scanner-paper");
+    expect(source).toContain("overflow-hidden");
+    expect((source.match(/scanner-paper-sheet scanner-paper-sheet--(?:entry|tray|exit)\s[^`]*aspect-\[1\/1\.41421356237\] w-\[82%\]/g) ?? []).length).toBe(3);
+    expect((source.match(/scanner-paper-sheet scanner-paper-sheet--(?:entry|tray|exit)\s[^`]*w-\[82%\] rounded-\[1px\]/g) ?? []).length).toBe(3);
   });
 });
