@@ -1465,7 +1465,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                    onChange={e => setSelectedScanner(e.target.value)}
                    disabled={!hasAnyConfiguredProvider}
                    data-scanner-model-selector
-                   className="w-full appearance-none bg-white dark:bg-[#2A2A35] border border-[#E5DCDA] dark:border-[#1A1A23] rounded-md px-3 py-1.5 text-[13px] text-[#202020] dark:text-[#EAEAEA] outline-none shadow-sm focus:border-[#C28181] dark:focus:border-[#60C5EA] disabled:cursor-not-allowed disabled:opacity-50"
+                   className="w-full appearance-none bg-white dark:bg-[#2A2A35] border border-[#E5DCDA] dark:border-[#1A1A23] rounded-md px-3 py-1.5 font-sans text-[13px] font-normal tracking-normal text-[#202020] dark:text-[#EAEAEA] outline-none shadow-sm focus:border-[#C28181] dark:focus:border-[#60C5EA] disabled:cursor-not-allowed disabled:opacity-50"
                   >
                      <optgroup label="Google Gemini" disabled={!configuredProviders.gemini}>
                       <option value="gemini-3.7-flash">Gemini 3.7 Flash</option>
@@ -1520,7 +1520,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
             <div className="flex flex-col gap-1.5 mb-5">
               <label className="text-[13px] text-[#202020] dark:text-[#EAEAEA] pl-0.5">File type</label>
               <div className="w-full bg-white dark:bg-[#2A2A35] border border-[#E5DCDA] dark:border-[#1A1A23] rounded-md px-3 py-1.5 text-[13px] outline-none shadow-sm flex items-center gap-2 h-[32px]">
-                 <span data-scanner-file-type className={`font-medium tracking-wide ${
+                 <span data-scanner-file-type data-scanner-typography="field" className={`font-sans text-[13px] font-normal tracking-normal ${
                    detectedFileType
                      ? 'text-[#202020] dark:text-[#EAEAEA]'
                      : 'text-gray-400 dark:text-gray-500'
@@ -1557,7 +1557,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                  <select
                    value={selectedResolution}
                    onChange={e => setSelectedResolution(e.target.value)}
-                   className="w-full appearance-none bg-white dark:bg-[#2A2A35] border border-[#E5DCDA] dark:border-[#1A1A23] rounded-md px-3 py-1.5 text-[13px] text-[#202020] dark:text-[#EAEAEA] outline-none shadow-sm focus:border-[#C28181] dark:focus:border-[#60C5EA]"
+                   className="w-full appearance-none bg-white dark:bg-[#2A2A35] border border-[#E5DCDA] dark:border-[#1A1A23] rounded-md px-3 py-1.5 font-sans text-[13px] font-normal tracking-normal text-[#202020] dark:text-[#EAEAEA] outline-none shadow-sm focus:border-[#C28181] dark:focus:border-[#60C5EA]"
                  >
                     <option>150 dpi</option>
                     <option>200 dpi</option>
@@ -1666,7 +1666,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                  <div className="absolute inset-0 z-[80] flex items-center justify-center bg-[#F9F9F9]/90 dark:bg-[#1A1A22]/90 backdrop-blur-[2px]">
                    <div className="flex flex-col items-center gap-3 text-neutral-600 dark:text-neutral-300">
                      <div className="h-7 w-7 rounded-full border-2 border-current border-t-transparent animate-spin" />
-                     <span className="text-[13px] font-medium">Loading document…</span>
+                     <span data-scanner-typography="field" className="font-sans text-[13px] font-normal tracking-normal">Loading document…</span>
                    </div>
                  </div>
                )}
@@ -1680,7 +1680,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                      transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
                      className="absolute inset-0 z-[82] flex items-center justify-center bg-[#F9F9F9]/88 dark:bg-[#1A1A22]/88 backdrop-blur-[2px] pointer-events-none"
                    >
-                     <div className="flex items-center gap-2.5 text-gray-700 dark:text-gray-200 text-[13px] font-medium">
+                     <div data-scanner-typography="field" className="flex items-center gap-2.5 font-sans text-[13px] font-normal tracking-normal text-[#202020] dark:text-[#EAEAEA]">
                        <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-white/80 dark:bg-white/[0.06] shadow-[0_10px_24px_-16px_rgba(0,0,0,0.5)]">
                          <CheckCircle className="h-4 w-4" style={{ color: activeAccent }} strokeWidth={1.9} />
                        </span>
@@ -1751,22 +1751,22 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                          {/* Typography Status — keep the caption clear of the lower scanner controls. */}
                          <div className="absolute -bottom-10 left-0 right-0 flex items-center justify-center animate-in fade-in zoom-in duration-300">
                             {scannerProgress.status === 'success' ? (
-                               <div className="text-neutral-700 dark:text-neutral-300 font-medium text-[13px] flex items-center gap-1.5">
+                               <div data-scanner-typography="field" className="flex items-center gap-1.5 font-sans text-[13px] font-normal tracking-normal text-[#202020] dark:text-[#EAEAEA]">
                                   <CheckCircle className="w-3.5 h-3.5 text-neutral-600 dark:text-neutral-400" strokeWidth={2.5} />
                                   <span>Scan completed</span>
                                </div>
                             ) : scannerProgress.status === 'stopping' ? (
-                               <div className="text-gray-800 dark:text-gray-200 font-medium text-[13px] flex items-center gap-2">
+                               <div data-scanner-typography="field" className="flex items-center gap-2 font-sans text-[13px] font-normal tracking-normal text-[#202020] dark:text-[#EAEAEA]">
                                   <Hand className="w-3.5 h-3.5" strokeWidth={2} />
                                   <span>Stopping scan...</span>
                                </div>
                             ) : scannerProgress.status === 'preflight' ? (
-                               <div className="text-gray-800 dark:text-gray-200 font-medium text-[13px] flex items-center gap-2">
+                               <div data-scanner-typography="field" className="flex items-center gap-2 font-sans text-[13px] font-normal tracking-normal text-[#202020] dark:text-[#EAEAEA]">
                                   <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin opacity-70" />
                                   <span>Preparing scan...</span>
                                </div>
                             ) : (
-                               <div className="text-gray-800 dark:text-gray-200 font-medium text-[13px] flex items-center gap-2">
+                               <div data-scanner-typography="field" className="flex items-center gap-2 font-sans text-[13px] font-normal tracking-normal text-[#202020] dark:text-[#EAEAEA]">
                                   <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin opacity-70" />
                                   <span>Scanning clip {scannerProgress.currentIndex + 1} of {scannerProgress.total}...</span>
                                </div>
@@ -1828,7 +1828,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                              <div className="absolute bottom-6 left-1/2 w-full max-w-[460px] -translate-x-1/2 px-4">
                                <div data-scanner-upload-command-strip className="flex items-center gap-3 px-4 py-1.5">
                                  <span className="flex h-8 w-8 shrink-0 items-center justify-center text-[#7868F4] dark:text-[#AAA1FF]"><Link className="h-4 w-4" strokeWidth={1.65} /></span>
-                                 <span className="min-w-0 flex-1"><span className="block truncate text-[12px] font-medium tracking-[-0.01em] text-[#454153] dark:text-white/85">Importing from link</span><span className="mt-0.5 flex items-center gap-1.5 text-[11px] font-medium text-[#8A8696] dark:text-white/45"><span className="h-2.5 w-2.5 rounded-full border-2 border-current border-t-transparent animate-spin" /> Retrieving document</span></span>
+                                 <span data-scanner-typography="field" className="min-w-0 flex-1 font-sans text-[13px] font-normal tracking-normal"><span className="block truncate font-sans text-[13px] font-normal tracking-normal text-[#202020] dark:text-[#EAEAEA]">Importing from link</span><span className="mt-0.5 flex items-center gap-1.5 font-sans text-[13px] font-normal tracking-normal text-[#202020]/60 dark:text-[#EAEAEA]/60"><span className="h-2.5 w-2.5 rounded-full border-2 border-current border-t-transparent animate-spin" /> Retrieving document</span></span>
                                  <span className="h-5 w-px bg-[#DCD9E6] dark:bg-white/[0.10]" aria-hidden="true" />
                                  <span className="relative h-1.5 w-16 shrink-0 overflow-hidden rounded-full bg-[#DEDCE6] dark:bg-white/[0.12]"><motion.span className="absolute inset-y-0 left-0 w-[45%] rounded-full bg-[#7868F4]" initial={{ x: "-130%" }} animate={{ x: "255%" }} transition={{ repeat: Infinity, duration: 1.05, ease: "linear" }} /></span>
                                </div>
@@ -1854,7 +1854,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                              <div className="absolute bottom-6 left-1/2 w-full max-w-[460px] -translate-x-1/2 px-4">
                                <div data-scanner-upload-command-strip className="flex items-center gap-3 px-4 py-1.5">
                                  <span className="flex h-8 w-8 shrink-0 items-center justify-center text-[#7868F4] dark:text-[#AAA1FF]"><CloudUpload className="h-4 w-4" strokeWidth={1.65} /></span>
-                                 <span className="min-w-0 flex-1"><span className="block truncate text-[12px] font-medium tracking-[-0.01em] text-[#454153] dark:text-white/85">{uploadPresentation.fileName}</span><span className="mt-0.5 flex items-center gap-1.5 text-[11px] font-medium text-[#8A8696] dark:text-white/45"><span className="h-2.5 w-2.5 rounded-full border-2 border-current border-t-transparent animate-spin" /> Preparing document</span></span>
+                                 <span data-scanner-typography="field" className="min-w-0 flex-1 font-sans text-[13px] font-normal tracking-normal"><span className="block truncate font-sans text-[13px] font-normal tracking-normal text-[#202020] dark:text-[#EAEAEA]">{uploadPresentation.fileName}</span><span className="mt-0.5 flex items-center gap-1.5 font-sans text-[13px] font-normal tracking-normal text-[#202020]/60 dark:text-[#EAEAEA]/60"><span className="h-2.5 w-2.5 rounded-full border-2 border-current border-t-transparent animate-spin" /> Preparing document</span></span>
                                  <span className="h-5 w-px bg-[#DCD9E6] dark:bg-white/[0.10]" aria-hidden="true" />
                                  <span className="relative h-1.5 w-16 shrink-0 overflow-hidden rounded-full bg-[#DEDCE6] dark:bg-white/[0.12]"><motion.span className="absolute inset-y-0 left-0 w-[45%] rounded-full bg-[#7868F4]" initial={{ x: "-130%" }} animate={{ x: "255%" }} transition={{ repeat: Infinity, duration: 1.05, ease: "linear" }} /></span>
                                </div>
@@ -1870,8 +1870,8 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                              >
                                <span className="pointer-events-none absolute left-1/2 top-[42%] flex -translate-x-1/2 -translate-y-1/2 flex-col items-center">
                                  <CloudUpload className={`h-[78px] w-[78px] transition-colors duration-300 ${isDragActive ? "text-[#6D5DE8] dark:text-[#B3AAFF]" : "text-[#A8A1BF]/58 dark:text-[#C6C0DE]/46"}`} strokeWidth={1.05} aria-hidden="true" />
-                                 <span className="mt-3 text-[12px] font-medium tracking-[-0.01em] text-[#514D5D] dark:text-white/72">{isDragActive ? "Release to add" : uploadPresentation.phase === "selected" ? "Document selected" : "Drop a document"}</span>
-                                 <span className="mt-1 text-[11px] font-medium text-[#9893A2] dark:text-white/38">{isDragActive ? "Release anywhere in this canvas" : uploadPresentation.phase === "selected" ? "Ready for the scanner" : "or choose a file from this device"}</span>
+                                 <span data-scanner-typography="field" className="mt-3 font-sans text-[13px] font-normal tracking-normal text-[#202020] dark:text-[#EAEAEA]">{isDragActive ? "Release to add" : uploadPresentation.phase === "selected" ? "Document selected" : "Drop a document"}</span>
+                                 <span data-scanner-typography="field" className="mt-1 font-sans text-[13px] font-normal tracking-normal text-[#202020]/60 dark:text-[#EAEAEA]/60">{isDragActive ? "Release anywhere in this canvas" : uploadPresentation.phase === "selected" ? "Ready for the scanner" : "or choose a file from this device"}</span>
                                </span>
                              </button>
 
@@ -1880,7 +1880,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                                  <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-[#F0EEFF] text-[#7868F4] dark:bg-[#7868F4]/15">
                                    {uploadPresentation.thumbnailUrl ? <img data-scanner-upload-thumbnail src={uploadPresentation.thumbnailUrl} alt="" className="h-full w-full object-cover" /> : <FileText data-scanner-upload-thumbnail className="h-4 w-4" strokeWidth={1.6} />}
                                  </span>
-                                 <span className="min-w-0 flex-1 text-left"><span className="block truncate text-[12px] font-medium tracking-[-0.01em] text-[#454153] dark:text-white/85">{uploadPresentation.file.name}</span><span className="mt-0.5 block text-[11px] font-medium text-[#9893A2] dark:text-white/40">{getScannerFileFormat(uploadPresentation.file)} · {formatUploadFileSize(uploadPresentation.file.size)}</span></span>
+                                 <span data-scanner-typography="field" className="min-w-0 flex-1 text-left font-sans text-[13px] font-normal tracking-normal"><span className="block truncate font-sans text-[13px] font-normal tracking-normal text-[#202020] dark:text-[#EAEAEA]">{uploadPresentation.file.name}</span><span className="mt-0.5 block font-sans text-[13px] font-normal tracking-normal text-[#202020]/60 dark:text-[#EAEAEA]/60">{getScannerFileFormat(uploadPresentation.file)} · {formatUploadFileSize(uploadPresentation.file.size)}</span></span>
                                  <button data-scanner-remove-selected-upload type="button" aria-label="Remove selected file" onClick={removeSelectedUploadFile} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[#AAA5B2] transition-colors hover:bg-[#F5F3F8] hover:text-[#5E5968] dark:hover:bg-white/[0.06]"><X className="h-3.5 w-3.5" strokeWidth={2} /></button>
                                </motion.div>
                              ) : null}
@@ -1890,16 +1890,16 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                                  data-scanner-local-upload
                                  type="button"
                                  onClick={() => uploadPresentation.phase === "selected" && uploadPresentation.file ? startLocalUploadPresentation(uploadPresentation.file) : localUploadInputRef.current?.click()}
-                                 className="inline-flex h-8 shrink-0 whitespace-nowrap items-center justify-center gap-1.5 rounded-full px-2 text-[12px] font-medium text-[#5E4FCD] transition-colors hover:text-[#4638B7] dark:text-[#C3BEFF] dark:hover:text-white"
+                                 className="inline-flex h-8 shrink-0 whitespace-nowrap items-center justify-center gap-1.5 rounded-full px-2 font-sans text-[13px] font-normal tracking-normal text-[#5E4FCD] transition-colors hover:text-[#4638B7] dark:text-[#C3BEFF] dark:hover:text-white"
                                >
                                  <CloudUpload className="h-3.5 w-3.5" strokeWidth={1.7} />
                                  {uploadPresentation.phase === "selected" ? "Add to scanner" : "Choose a file"}
                                </button>
                                <span className="mx-1 h-3 w-px bg-[#DDD9E6] dark:bg-white/[0.12]" aria-hidden="true" />
-                               <button data-scanner-import-url type="button" onClick={() => void beginUrlImport()} className="inline-flex h-8 shrink-0 whitespace-nowrap items-center gap-1.5 rounded-full px-2 text-[11px] font-medium text-[#777386] transition-colors hover:text-[#4B465C] dark:text-white/50 dark:hover:text-white"><Link className="h-3.5 w-3.5" strokeWidth={1.75} />From link</button>
-                               <button data-scanner-image-sequence type="button" onClick={() => imageSequenceInputRef.current?.click()} className="inline-flex h-8 shrink-0 whitespace-nowrap items-center gap-1.5 rounded-full px-2 text-[11px] text-[#777386] transition-colors hover:text-[#4B465C] dark:text-white/50 dark:hover:text-white"><Images className="h-3.5 w-3.5" strokeWidth={1.75} />Image sequence</button>
+                               <button data-scanner-import-url type="button" onClick={() => void beginUrlImport()} className="inline-flex h-8 shrink-0 whitespace-nowrap items-center gap-1.5 rounded-full px-2 font-sans text-[13px] font-normal tracking-normal text-[#202020]/60 transition-colors hover:text-[#202020] dark:text-[#EAEAEA]/60 dark:hover:text-[#EAEAEA]"><Link className="h-3.5 w-3.5" strokeWidth={1.75} />From link</button>
+                               <button data-scanner-image-sequence type="button" onClick={() => imageSequenceInputRef.current?.click()} className="inline-flex h-8 shrink-0 whitespace-nowrap items-center gap-1.5 rounded-full px-2 font-sans text-[13px] font-normal tracking-normal text-[#202020]/60 transition-colors hover:text-[#202020] dark:text-[#EAEAEA]/60 dark:hover:text-[#EAEAEA]"><Images className="h-3.5 w-3.5" strokeWidth={1.75} />Image sequence</button>
                              </div>
-                             <p className={`pointer-events-none absolute left-1/2 z-10 -translate-x-1/2 whitespace-nowrap text-[11px] font-medium tracking-[0.01em] text-[#AAA5B4] dark:text-white/30 ${uploadPresentation.phase === "selected" ? "-bottom-4" : "top-[87%]"}`}>PDF · Images · Text &nbsp;•&nbsp; Up to 50 MB</p>
+                             <p data-scanner-typography="field" className={`pointer-events-none absolute left-1/2 z-10 -translate-x-1/2 whitespace-nowrap font-sans text-[13px] font-normal tracking-normal text-[#202020]/60 dark:text-[#EAEAEA]/60 ${uploadPresentation.phase === "selected" ? "-bottom-4" : "top-[87%]"}`}>PDF · Images · Text &nbsp;•&nbsp; Up to 50 MB</p>
                            </motion.div>
                          )}
                        </AnimatePresence>
@@ -2094,17 +2094,17 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                             <button data-scanner-upload-dropzone type="button" onClick={() => localUploadInputRef.current?.click()} className={`absolute inset-0 flex cursor-pointer items-center justify-center rounded-[28px] transition-colors duration-200 ${isDragActive ? "bg-[#7868F4]/[0.055] dark:bg-[#7868F4]/[0.10]" : "bg-transparent"}`}>
                               <span className="pointer-events-none absolute left-1/2 top-[42%] flex -translate-x-1/2 -translate-y-1/2 flex-col items-center">
                                 <CloudUpload className={`h-[78px] w-[78px] transition-colors duration-300 ${isDragActive ? "text-[#6D5DE8] dark:text-[#B3AAFF]" : "text-[#A8A1BF]/58 dark:text-[#C6C0DE]/46"}`} strokeWidth={1.05} aria-hidden="true" />
-                                <span className="mt-3 text-[12px] font-medium tracking-[-0.01em] text-[#514D5D] dark:text-white/72">{isDragActive ? "Release to add" : "Drop a document"}</span>
-                                <span className="mt-1 text-[11px] font-medium text-[#9893A2] dark:text-white/38">{isDragActive ? "Release anywhere in this canvas" : "or choose a file from this device"}</span>
+                                <span data-scanner-typography="field" className="mt-3 font-sans text-[13px] font-normal tracking-normal text-[#202020] dark:text-[#EAEAEA]">{isDragActive ? "Release to add" : "Drop a document"}</span>
+                                <span data-scanner-typography="field" className="mt-1 font-sans text-[13px] font-normal tracking-normal text-[#202020]/60 dark:text-[#EAEAEA]/60">{isDragActive ? "Release anywhere in this canvas" : "or choose a file from this device"}</span>
                               </span>
                             </button>
                             <div data-scanner-upload-command-strip className="absolute left-1/2 top-[73%] z-10 flex -translate-x-1/2 items-center gap-1 px-4 py-1.5">
-                              <button data-scanner-local-upload type="button" onClick={() => localUploadInputRef.current?.click()} className="inline-flex h-8 shrink-0 whitespace-nowrap items-center justify-center gap-1.5 rounded-full px-2 text-[12px] font-medium text-[#5E4FCD] transition-colors hover:text-[#4638B7] dark:text-[#C3BEFF] dark:hover:text-white"><CloudUpload className="h-3.5 w-3.5" strokeWidth={1.7} />Choose a file</button>
+                              <button data-scanner-local-upload type="button" onClick={() => localUploadInputRef.current?.click()} className="inline-flex h-8 shrink-0 whitespace-nowrap items-center justify-center gap-1.5 rounded-full px-2 font-sans text-[13px] font-normal tracking-normal text-[#5E4FCD] transition-colors hover:text-[#4638B7] dark:text-[#C3BEFF] dark:hover:text-white"><CloudUpload className="h-3.5 w-3.5" strokeWidth={1.7} />Choose a file</button>
                               <span className="mx-1 h-3 w-px bg-[#DDD9E6] dark:bg-white/[0.12]" aria-hidden="true" />
-                              <button data-scanner-import-url type="button" onClick={() => void beginUrlImport()} className="inline-flex h-8 shrink-0 whitespace-nowrap items-center gap-1.5 rounded-full px-2 text-[11px] font-medium text-[#777386] transition-colors hover:text-[#4B465C] dark:text-white/50 dark:hover:text-white"><Link className="h-3.5 w-3.5" strokeWidth={1.75} />From link</button>
-                              <button data-scanner-image-sequence type="button" onClick={() => imageSequenceInputRef.current?.click()} className="inline-flex h-8 shrink-0 whitespace-nowrap items-center gap-1.5 rounded-full px-2 text-[11px] text-[#777386] transition-colors hover:text-[#4B465C] dark:text-white/50 dark:hover:text-white"><Images className="h-3.5 w-3.5" strokeWidth={1.75} />Image sequence</button>
+                              <button data-scanner-import-url type="button" onClick={() => void beginUrlImport()} className="inline-flex h-8 shrink-0 whitespace-nowrap items-center gap-1.5 rounded-full px-2 font-sans text-[13px] font-normal tracking-normal text-[#202020]/60 transition-colors hover:text-[#202020] dark:text-[#EAEAEA]/60 dark:hover:text-[#EAEAEA]"><Link className="h-3.5 w-3.5" strokeWidth={1.75} />From link</button>
+                              <button data-scanner-image-sequence type="button" onClick={() => imageSequenceInputRef.current?.click()} className="inline-flex h-8 shrink-0 whitespace-nowrap items-center justify-center gap-1.5 rounded-full px-2 font-sans text-[13px] font-normal tracking-normal text-[#202020]/60 transition-colors hover:text-[#202020] dark:text-[#EAEAEA]/60 dark:hover:text-[#EAEAEA]"><Images className="h-3.5 w-3.5" strokeWidth={1.75} />Image sequence</button>
                             </div>
-                            <p className="pointer-events-none absolute left-1/2 top-[87%] z-10 -translate-x-1/2 whitespace-nowrap text-[11px] font-medium tracking-[0.01em] text-[#AAA5B4] dark:text-white/30">PDF · Images · Text &nbsp;•&nbsp; Up to 50 MB</p>
+                            <p data-scanner-typography="field" className="pointer-events-none absolute left-1/2 top-[87%] z-10 -translate-x-1/2 whitespace-nowrap font-sans text-[13px] font-normal tracking-normal text-[#202020]/60 dark:text-[#EAEAEA]/60">PDF · Images · Text &nbsp;•&nbsp; Up to 50 MB</p>
                           </div>
                        )}
                        </div>
@@ -2169,7 +2169,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                  <div className="flex gap-1">
                     <button onClick={() => changeScannerZoom(z => Math.max(0.2, z - 0.1))} className="hover:bg-black/5 dark:hover:bg-white/10 p-1.5 rounded-md transition-colors"><ZoomOut className="w-4 h-4 text-gray-700 dark:text-gray-300"/></button>
                    <div className="flex items-center gap-1 bg-black/5 dark:bg-white/10 px-1 py-0.5 rounded h-7">
-                     <span className="text-[12px] font-mono text-gray-600 dark:text-gray-300 w-10 text-center select-none">{Math.round(scannerZoom * 100)}%</span>
+                     <span data-scanner-typography="field" className="w-10 select-none text-center font-sans text-[13px] font-normal tracking-normal text-[#202020] dark:text-[#EAEAEA]">{Math.round(scannerZoom * 100)}%</span>
                      <div className="flex flex-col justify-center items-center h-full -space-y-1">
                        <button
                           onClick={() => changeScannerZoom(z => Math.min(4.0, z + 0.05))}
@@ -2201,11 +2201,11 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                  {(hasDocumentLoaded && scannerTotalPages > 1) && (
                    <>
                      <div className="w-[1px] h-4 bg-gray-300 dark:bg-white/10 mx-1"></div>
-                     <div className="flex items-center gap-1 text-[13px] font-mono text-gray-700 dark:text-gray-300 select-none">
+                     <div data-scanner-typography="field" className="flex items-center gap-1 select-none font-sans text-[13px] font-normal tracking-normal text-[#202020] dark:text-[#EAEAEA]">
                         <button disabled={scannerPage <= 1} onClick={handlePrevPage} className="disabled:opacity-30 hover:bg-black/5 dark:hover:bg-white/10 p-1.5 rounded-md"><ChevronLeft className="w-4 h-4"/></button>
-                        <label className="flex items-center gap-0.5 text-[12px] text-gray-600 dark:text-gray-300" title="Enter a page number">
-                          <input data-scanner-page-jump aria-label="Go to page" inputMode="numeric" value={pageInputValue} onFocus={(event) => event.currentTarget.select()} onChange={(event) => setPageInputValue(event.target.value.replace(/[^0-9]/g, ""))} onBlur={commitPageInput} onKeyDown={(event) => { event.stopPropagation(); if (event.key === "Enter") { event.currentTarget.blur(); } }} className="w-7 bg-transparent p-0 text-right text-[12px] font-mono text-gray-700 outline-none dark:text-gray-200" />
-                          <span className="text-gray-400 dark:text-gray-500">/{scannerTotalPages}</span>
+                        <label className="flex items-center gap-0.5 font-sans text-[13px] font-normal tracking-normal text-[#202020] dark:text-[#EAEAEA]" title="Enter a page number">
+                          <input data-scanner-page-jump aria-label="Go to page" inputMode="numeric" value={pageInputValue} onFocus={(event) => event.currentTarget.select()} onChange={(event) => setPageInputValue(event.target.value.replace(/[^0-9]/g, ""))} onBlur={commitPageInput} onKeyDown={(event) => { event.stopPropagation(); if (event.key === "Enter") { event.currentTarget.blur(); } }} className="w-7 bg-transparent p-0 text-right font-sans text-[13px] font-normal tracking-normal text-[#202020] outline-none dark:text-[#EAEAEA]" />
+                          <span className="text-[#202020]/60 dark:text-[#EAEAEA]/60">/{scannerTotalPages}</span>
                         </label>
                         <button disabled={scannerPage >= scannerTotalPages} onClick={handleNextPage} className="disabled:opacity-30 hover:bg-black/5 dark:hover:bg-white/10 p-1.5 rounded-md"><ChevronRight className="w-4 h-4"/></button>
                      </div>
@@ -2236,7 +2236,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                     }}
                     disabled={scannerRunState === 'stopping' || (!isOcrLoading && ((isTextReady && !selectedDestinationFolder) || (!isTextReady && !canScan)))}
                     title={isOcrLoading ? "Stop scan" : isTextReady ? "Send extracted text" : canScan ? "Scan" : "No document or clips available"}
-                    className={`relative px-[24px] py-1.5 rounded-md text-[13px] font-medium transition-all duration-500 ease-out disabled:opacity-50 flex items-center justify-center min-w-[80px] shadow-sm ${
+                    className={`relative min-w-[80px] rounded-md px-[24px] py-1.5 font-sans text-[13px] font-normal tracking-normal transition-all duration-500 ease-out disabled:opacity-50 flex items-center justify-center shadow-sm ${
                       isOcrLoading
                         ? "bg-[#E81123] hover:bg-[#C8102E] dark:bg-[#E81123] dark:hover:bg-[#C8102E] text-white shadow-md"
                         : isTextReady

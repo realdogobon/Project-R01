@@ -68,4 +68,18 @@ describe("scanner action-bar layout contract", () => {
     expect(workspaceSource).toContain("type: importedContentType");
     expect(workspaceSource).toContain("lastModified: Date.now()");
   });
+
+  it("uses the left-rail field type system across scanner controls, upload states, and footer labels", () => {
+    const source = fs.readFileSync(scannerModalPath, "utf8");
+    const fieldTypographyMarkers = source.match(/data-scanner-typography="field"/g) ?? [];
+
+    expect(source).toContain('data-scanner-model-selector');
+    expect(source).toContain('font-sans text-[13px] font-normal tracking-normal text-[#202020] dark:text-[#EAEAEA]');
+    expect(source).toContain('data-scanner-file-type data-scanner-typography="field"');
+    expect(source).toContain('data-scanner-upload-command-strip');
+    expect(source).toContain('data-scanner-page-jump');
+    expect(source).toContain('data-scanner-primary-action');
+    expect(fieldTypographyMarkers.length).toBeGreaterThanOrEqual(14);
+    expect(source).not.toContain('text-[11px] font-medium tracking-[0.01em] text-[#AAA5B4]');
+  });
 });

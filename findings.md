@@ -8,6 +8,12 @@
 
 The focused local browser probe captured the selected PDF and public-link import states after the approved polish. The selected PDF shows a rendered first-page thumbnail rather than the prior cloud placeholder, and its metadata row reads `PDF · 1018 KB`. The public PDF URL shows a calm in-canvas `Importing from link` state with a small indeterminate progress treatment while the server fetch is active, then settles to a rendered document with the scanner file-type indicator reading `PDF`. The probe reported no visible error text or browser errors.
 
+## Scanner-wide field typography — two-theme verification
+
+The left-rail field system is now the scanner modal’s single typography reference: **Geist Mono**, 13 px, regular weight, and normal tracking. The model selector, file-format display, center upload and selected-file states, import controls, quiet capability text, progress captions, zoom/page controls, and primary action all inherit the same metrics while retaining their existing accent and muted-color hierarchy.
+
+The focused browser probe compared every marked scanner surface to a real left-rail label in both actual theme initializations. It found an exact computed match for font family, font size, font weight, and letter spacing in light and dark mode. The light capture confirms that the upload canvas now reads as one scanner-native surface rather than a separate widget; the dark capture retains the same aligned rhythm with the existing muted-amethyst cloud and restrained control accents. The probe also revalidated local thumbnails, PDF first-page thumbnails, URL-import feedback and PDF metadata, upload handoff, silent rejection, and no browser-visible error surfaces.
+
 ## Executive summary
 
 The scanner’s document-present workflow is visually stable for normal, tiny, flat, and awkward crops. Progress cards remain centered, the laser is visible during active scanning and stops after completion, the queue badge remains stable, and the action returns to `Send` after completion. The confirmed **retained-queue-after-document-discard** layout mismatch has been corrected by keeping the progress presentation in the established scanner stage rather than allowing the shorter empty-document shell to pull it upward.

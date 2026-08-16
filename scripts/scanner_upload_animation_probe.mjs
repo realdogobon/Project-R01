@@ -66,10 +66,35 @@ const measureState = async () => page.evaluate(() => {
       .filter(Boolean),
   };
 });
+const measureFieldTypography = async () => page.evaluate(() => {
+  const fingerprint = (element) => {
+    const styles = getComputedStyle(element);
+    return {
+      fontFamily: styles.fontFamily,
+      fontSize: styles.fontSize,
+      fontWeight: styles.fontWeight,
+      letterSpacing: styles.letterSpacing,
+    };
+  };
+  const reference = document.querySelector('label');
+  const surfaces = [...document.querySelectorAll('[data-scanner-typography="field"]')];
+  if (!reference || surfaces.length === 0) throw new Error('Scanner field typography surfaces were not found');
+  return { reference: fingerprint(reference), surfaces: surfaces.map(fingerprint) };
+});
+const assertFieldTypography = (state, theme, minimumSurfaces = 3) => {
+  if (state.surfaces.length < minimumSurfaces) throw new Error(`${theme} theme did not expose enough scanner field typography surfaces`);
+  for (const surface of state.surfaces) {
+    if (JSON.stringify(surface) !== JSON.stringify(state.reference)) {
+      throw new Error(`${theme} scanner field typography diverged: ${JSON.stringify({ reference: state.reference, surface })}`);
+    }
+  }
+};
 
 try {
   await openScanner("success");
   report.states.idle = await measureState();
+  report.states.lightTypography = await measureFieldTypography();
+  assertFieldTypography(report.states.lightTypography, "light");
   await capture("01-idle.png");
 
   const idleHoverBefore = await page.evaluate(() => {
@@ -107,6 +132,8 @@ try {
   await successfulInput.uploadFile(imageFixture);
   await page.waitForSelector("[data-scanner-upload-selected]", { timeout: 5_000 });
   await page.waitForSelector("[data-scanner-upload-thumbnail]", { timeout: 5_000 });
+  report.states.selectedTypography = await measureFieldTypography();
+  assertFieldTypography(report.states.selectedTypography, "light selected-file", 5);
   report.states.selected = { ...(await measureState()), hasLocalThumbnail: true };
   await capture("03-selected-file.png");
   await page.click("[data-scanner-local-upload]");
@@ -169,6 +196,13 @@ try {
   if (!report.states.pdfSelected.label?.includes("PDF")) throw new Error("PDF selection did not display a PDF label");
   if (!report.states.urlImportPending.urlImportPending) throw new Error("URL import did not expose its in-canvas loading state");
   if (report.states.urlImportSettled.format !== "PDF") throw new Error(`URL-imported PDF did not retain format metadata: ${report.states.urlImportSettled.format}`);
+
+  await page.evaluate(() => localStorage.setItem("theme", "dark"));
+  await openScanner("dark-typography");
+  await page.waitForFunction(() => document.documentElement.classList.contains("dark"), { timeout: 5_000 });
+  report.states.darkTypography = await measureFieldTypography();
+  assertFieldTypography(report.states.darkTypography, "dark");
+  await capture("05d-dark-typography.png");
 
   await openScanner("silent-rejection");
   const rejectedInput = await primaryInput();
