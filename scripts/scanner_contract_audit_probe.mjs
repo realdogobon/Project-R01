@@ -5,6 +5,7 @@ import puppeteer from "puppeteer-core";
 const url = process.argv[2] || process.env.PREVIEW_URL || "http://127.0.0.1:3000";
 const outputPath = process.argv[3] || "/tmp/scanner-contract-audit.json";
 const root = "/tmp/scanner-audit/fixtures";
+const publicTextUrl = "https://raw.githubusercontent.com/github/gitignore/main/Node.gitignore";
 const assets = {
   jpeg: path.join(root, "supported.jpg"),
   png: "/home/ubuntu/upload/pasted_file_mn5PFv_image.png",
@@ -98,6 +99,11 @@ const scannerFileInput = async (page) => {
   return input;
 };
 
+const confirmSelectedUpload = async (page) => {
+  await page.waitForSelector("[data-scanner-upload-selected]", { timeout: 15000 });
+  await page.click("[data-scanner-local-upload]");
+};
+
 const loadedVisualDocument = (page) => page.waitForFunction(
   () => [...document.querySelectorAll("#scanner-viewport img, #scanner-viewport canvas")]
     .some((candidate) => candidate instanceof HTMLImageElement && candidate.complete && candidate.naturalWidth > 0),
@@ -114,9 +120,11 @@ const recordFileCase = async (label, filePath, expectation) => {
     const input = await scannerFileInput(session.page);
     await input.uploadFile(filePath);
     if (expectation === "visual") {
+      await confirmSelectedUpload(session.page);
       await loadedVisualDocument(session.page);
       item.outcome = "visual-preview-ready";
     } else if (expectation === "text") {
+      await confirmSelectedUpload(session.page);
       await textIsReady(session.page);
       item.outcome = "text-ready";
     } else if (expectation === "rejected") {
@@ -124,7 +132,7 @@ const recordFileCase = async (label, filePath, expectation) => {
       item.outcome = await session.page.evaluate(() => ({
         sendReady: Boolean(document.querySelector('button[title="Send extracted text"]')),
         documentLoaded: Boolean(document.querySelector('#scanner-viewport img[alt="Scanned Document Paper Element"]')),
-        limitCopyVisible: document.body.innerText.includes("Images & PDFs: 20 MB per file · Text: 2 MB per file"),
+        limitCopyVisible: document.body.innerText.includes("Up to 50 MB"),
       }));
       if (item.outcome.sendReady || item.outcome.documentLoaded || !item.outcome.limitCopyVisible) throw new Error("Oversize file was not rejected before scanner ingestion");
     } else {
@@ -163,16 +171,16 @@ try {
   ]) await recordFileCase(label, filePath, expectation);
 
   {
-    const session = await setup("functional-import-controls", { linkedAsset: assets.markdown });
+    const session = await setup("functional-import-controls");
     try {
       const urlSelector = await session.page.evaluate(() => {
-        const button = [...document.querySelectorAll("button")].find((candidate) => candidate.textContent?.trim() === "Upload document from URL");
+        const button = document.querySelector("button[data-scanner-import-url]");
         if (!button) return null;
         button.id = "scanner-audit-url-import";
         return "#scanner-audit-url-import";
       });
       if (!urlSelector) throw new Error("URL import control unavailable");
-      session.page.once("dialog", (dialog) => void dialog.accept("https://scanner-audit.local/linked.md"));
+      session.page.once("dialog", (dialog) => void dialog.accept(publicTextUrl));
       await session.page.click(urlSelector);
       await textIsReady(session.page);
       report.cases.push({ label: "URL-import-Markdown", outcome: "text-ready", errors: session.errors });
@@ -185,7 +193,7 @@ try {
     const session = await setup("image-sequence");
     try {
       const sequenceSelector = await session.page.evaluate(() => {
-        const button = [...document.querySelectorAll("button")].find((candidate) => candidate.textContent?.trim() === "Extract text from image sequences");
+        const button = document.querySelector("button[data-scanner-image-sequence]");
         if (!button) return null;
         button.id = "scanner-audit-image-sequence";
         return "#scanner-audit-image-sequence";
@@ -196,7 +204,18 @@ try {
       const chooser = await chooserPromise;
       await chooser.accept([assets.jpeg, assets.webp]);
       await loadedVisualDocument(session.page);
-      const totalPages = await session.page.evaluate(() => document.body.innerText.match(/\b\d+\/(\d+)\b/)?.[1] || "");
+      await session.page.waitForFunction(
+        () => {
+          const pageInput = document.querySelector("[data-scanner-page-jump]");
+          const total = pageInput?.parentElement?.textContent?.trim().replace(/^.*\//, "");
+          return pageInput?.value === "1" && total === "2";
+        },
+        { timeout: 30000 },
+      );
+      const totalPages = await session.page.evaluate(() => {
+        const pageInput = document.querySelector("[data-scanner-page-jump]");
+        return pageInput?.parentElement?.textContent?.trim().replace(/^.*\//, "") || "";
+      });
       if (totalPages !== "2") throw new Error(`Expected a 2-page image sequence PDF, received ${totalPages || "unknown"} pages`);
       report.cases.push({ label: "image-sequence-two-page-PDF", outcome: { totalPages }, errors: session.errors });
     } finally {
@@ -210,7 +229,10 @@ try {
     try {
       const input = await scannerFileInput(session.page);
       await input.uploadFile(assets.png);
+      await confirmSelectedUpload(session.page);
       await loadedVisualDocument(session.page);
+      await session.page.waitForFunction(() => !document.querySelector("[data-scanner-upload-success]"), { timeout: 10000 });
+      await session.page.waitForSelector("[data-scanner-document-surface]", { timeout: 10000 });
       await session.page.click('[title="Crop Tool"]');
       const surface = await session.page.$("[data-scanner-document-surface]");
       const bounds = await surface?.boundingBox();

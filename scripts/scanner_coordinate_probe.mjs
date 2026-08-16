@@ -124,10 +124,12 @@ try {
   await page.waitForSelector('[title="AI Scanner"]', { timeout: 20000 });
   await page.click('[title="AI Scanner"]');
   await page.waitForSelector("#scanner-viewport", { timeout: 20000 });
-  await page.waitForSelector('input[type="file"]', { timeout: 20000 });
-  const fileInputs = await page.$$('input[type="file"]');
-  if (!fileInputs.length) throw new Error("No scanner file input found");
-  await fileInputs[fileInputs.length - 1].uploadFile(fixturePath);
+  await page.waitForSelector('input[type="file"][accept*=".pdf"]', { timeout: 20000 });
+  const primaryInput = await page.$('input[type="file"][accept*=".pdf"]');
+  if (!primaryInput) throw new Error("Primary scanner file input was not found");
+  await primaryInput.uploadFile(fixturePath);
+  await page.waitForSelector("[data-scanner-upload-selected]", { timeout: 10000 });
+  await page.click("[data-scanner-local-upload]");
   await page.waitForFunction(() => {
     const viewport = document.querySelector("#scanner-viewport");
     return Boolean(viewport?.querySelector('img[alt="Scanned Document Paper Element"]'));

@@ -85,14 +85,17 @@ const openScanner = async () => {
 };
 
 const upload = async (path) => {
-  const inputs = await page.$$('input[type="file"]');
-  if (!inputs.length) throw new Error("No scanner file input found");
-  await inputs.at(-1).uploadFile(path);
+  const input = await page.$('input[type="file"][accept*=".pdf"]');
+  if (!input) throw new Error("Primary scanner document input not found");
+  await input.uploadFile(path);
+  await page.waitForSelector("[data-scanner-upload-selected]", { timeout: 15000 });
+  await page.click("[data-scanner-local-upload]");
   await page.waitForFunction(
     () => Boolean(document.querySelector("#scanner-viewport img, #scanner-viewport canvas")),
     { timeout: 50000 },
   );
-  await sleep(900);
+  await page.waitForFunction(() => !document.querySelector("[data-scanner-upload-success]"), { timeout: 10000 });
+  await page.waitForSelector("[data-scanner-document-surface]", { timeout: 10000 });
 };
 
 const drag = async (from, to, steps = 100) => {

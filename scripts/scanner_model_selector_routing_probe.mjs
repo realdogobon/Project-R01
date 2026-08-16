@@ -166,10 +166,14 @@ try {
       const input = await page.$('input[type="file"][accept*=".pdf"]');
       if (!input) throw new Error("Primary scanner document input not found");
       await input.uploadFile(fixturePath);
+      await page.waitForSelector("[data-scanner-upload-selected]", { timeout: 15000 });
+      await page.click("[data-scanner-local-upload]");
       await page.waitForFunction(
         () => Boolean(document.querySelector('#scanner-viewport img[alt="Scanned Document Paper Element"], #scanner-viewport canvas')),
         { timeout: 30000 },
       );
+      await page.waitForFunction(() => !document.querySelector("[data-scanner-upload-success]"), { timeout: 10000 });
+      await page.waitForSelector("[data-scanner-document-surface]", { timeout: 10000 });
       await page.click('[title="Crop Tool"]');
       const surface = await page.$("[data-scanner-document-surface]");
       const bounds = await surface?.boundingBox();
