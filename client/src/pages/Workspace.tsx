@@ -151,30 +151,69 @@ function buildTabAccentPath(width: number, height: number, flushLeft: boolean): 
   return `M 0 ${height} L 0 ${r} A ${r} ${r} 0 0 1 ${r} 0 L ${width - r} 0 A ${r} ${r} 0 0 1 ${width} ${r} L ${width} ${height}`;
 }
 
-const ScannerLiveIcon = ({ className = "w-4 h-4" }: { className?: string }) => (
-  <div className={`relative flex items-center justify-center scanner-icon-wrapper ${className}`}>
-    <style>{`
-      @media (prefers-reduced-motion: no-preference) {
-        .scanner-icon-wrapper:hover .scanner-paper,
-        .scanner-icon-wrapper.is-selected-live .scanner-paper {
-          transform: translateY(-6px);
-          opacity: 0.9;
-        }
-      }
+const ScannerLiveIcon = ({ className = "w-4 h-4" }: { className?: string }) => {
+  const [paperFeedRun, setPaperFeedRun] = useState(0);
+  const [isPaperFeedActive, setIsPaperFeedActive] = useState(false);
 
-      .scanner-paper {
-        transform: translateY(0);
-        opacity: 0;
-        transition:
-          transform 0.35s cubic-bezier(0.23, 1, 0.32, 1),
-          opacity 0.35s cubic-bezier(0.23, 1, 0.32, 1);
-        will-change: transform, opacity;
-      }
-    `}</style>
-    <div className="scanner-paper absolute top-1/2 left-1/2 w-[55%] h-[60%] -translate-x-1/2 translate-y-1/2 z-0 rounded-[1.5px] pointer-events-none bg-current opacity-90" />
-    <Printer strokeWidth={1.75} className="relative z-10 w-full h-full text-current opacity-80" />
-  </div>
-);
+  return (
+    <div
+      className={`relative flex items-center justify-center scanner-icon-wrapper ${className}`}
+      data-scanner-toolbar-icon
+      onMouseEnter={() => {
+        setIsPaperFeedActive(true);
+        setPaperFeedRun((run) => run + 1);
+      }}
+    >
+      <style>{`
+        @keyframes scanner-toolbar-paper-feed {
+          0%, 10% {
+            transform: translate(-50%, -205%);
+            opacity: 0;
+          }
+          26% {
+            transform: translate(-50%, -105%);
+            opacity: 0.84;
+          }
+          52% {
+            transform: translate(-50%, -28%);
+            opacity: 0.9;
+          }
+          78% {
+            transform: translate(-50%, 54%);
+            opacity: 0.9;
+          }
+          92% {
+            transform: translate(-50%, 112%);
+            opacity: 0.84;
+          }
+          100% {
+            transform: translate(-50%, 155%);
+            opacity: 0;
+          }
+        }
+
+        .scanner-paper {
+          transform: translate(-50%, -205%);
+          opacity: 0;
+          will-change: transform, opacity;
+        }
+
+        @media (prefers-reduced-motion: no-preference) {
+          .scanner-paper--feeding {
+            animation: scanner-toolbar-paper-feed 0.68s cubic-bezier(0.23, 1, 0.32, 1) both;
+          }
+        }
+      `}</style>
+      <div
+        key={paperFeedRun}
+        aria-hidden="true"
+        data-scanner-toolbar-paper
+        className={`scanner-paper ${isPaperFeedActive ? "scanner-paper--feeding" : ""} absolute top-1/2 left-1/2 z-0 h-[60%] w-[55%] rounded-[1.5px] pointer-events-none bg-current`}
+      />
+      <Printer strokeWidth={1.75} className="relative z-10 w-full h-full text-current opacity-80" />
+    </div>
+  );
+};
 
 function safeRandomUUID(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {

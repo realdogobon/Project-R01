@@ -83,4 +83,22 @@ describe("scanner action-bar layout contract", () => {
     expect(fieldTypographyMarkers.length).toBeGreaterThanOrEqual(14);
     expect(source).not.toContain('text-[11px] font-medium tracking-[0.01em] text-[#AAA5B4]');
   });
+
+  it("replays the workspace scanner toolbar paper through a physical printer path on every mouse entry", () => {
+    const source = fs.readFileSync(path.resolve(import.meta.dirname, "../client/src/pages/Workspace.tsx"), "utf8");
+
+    expect(source).toContain("const [paperFeedRun, setPaperFeedRun] = useState(0);");
+    expect(source).toContain("const [isPaperFeedActive, setIsPaperFeedActive] = useState(false);");
+    expect(source).toContain("setIsPaperFeedActive(true);");
+    expect(source).toContain("setPaperFeedRun((run) => run + 1);");
+    expect(source).toContain("key={paperFeedRun}");
+    expect(source).toContain("data-scanner-toolbar-paper");
+    expect(source).toContain("@keyframes scanner-toolbar-paper-feed");
+    expect(source).toContain("translate(-50%, -205%)");
+    expect(source).toContain("translate(-50%, 155%)");
+    expect(source).toContain("scanner-paper--feeding");
+    expect(source).toContain('isPaperFeedActive ? "scanner-paper--feeding" : ""');
+    expect(source).toContain("prefers-reduced-motion: no-preference");
+    expect(source).not.toContain(".scanner-icon-wrapper:hover .scanner-paper");
+  });
 });
