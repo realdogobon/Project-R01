@@ -5,9 +5,12 @@ import puppeteer from "puppeteer-core";
 const previewUrl = process.argv[2] || process.env.PREVIEW_URL || "http://127.0.0.1:3000";
 const outputDir = process.argv[3] || "/tmp/scanner-upload-animation";
 const imageFixture = "/home/ubuntu/upload/pasted_file_mn5PFv_image.png";
+const pdfFixture = "/home/ubuntu/upload/file-example_PDF_1MB.pdf";
+const publicPdfUrl = "https://pdfobject.com/pdf/sample.pdf";
 const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
 if (!fs.existsSync(imageFixture)) throw new Error(`Image fixture missing: ${imageFixture}`);
+if (!fs.existsSync(pdfFixture)) throw new Error(`PDF fixture missing: ${pdfFixture}`);
 fs.mkdirSync(outputDir, { recursive: true });
 const oversizeFixture = path.join(outputDir, "silent-rejection.bin");
 fs.writeFileSync(oversizeFixture, Buffer.alloc(20 * 1024 * 1024 + 1));
@@ -55,6 +58,7 @@ const measureState = async () => page.evaluate(() => {
     dropzone: rect("[data-scanner-upload-dropzone]"),
     selected: rect("[data-scanner-upload-selected]"),
     pending: rect("[data-scanner-upload-pending]"),
+    urlImportPending: rect("[data-scanner-url-import-pending]"),
     success: rect("[data-scanner-upload-success]"),
     actionBar: rect("[data-scanner-action-bar]"),
     visibleErrorText: [...document.querySelectorAll("[role=alert], [data-error], .error")]
@@ -129,6 +133,42 @@ try {
   if (!report.states.success.success) throw new Error("Transient success overlay did not render");
   if (report.states.settled.success) throw new Error("Success overlay did not dismiss after its transient handoff");
   if (!previewReady) throw new Error("Loaded document preview was not visible after success handoff");
+
+  await openScanner("pdf-thumbnail");
+  const pdfInput = await primaryInput();
+  await pdfInput.uploadFile(pdfFixture);
+  await page.waitForSelector("[data-scanner-upload-selected]", { timeout: 5_000 });
+  await page.waitForFunction(() => {
+    const thumbnail = document.querySelector("[data-scanner-upload-thumbnail]");
+    return thumbnail instanceof HTMLImageElement && thumbnail.src.startsWith("data:image/");
+  }, { timeout: 15_000 });
+  report.states.pdfSelected = {
+    ...(await measureState()),
+    thumbnail: await page.$eval("[data-scanner-upload-thumbnail]", (thumbnail) => ({ tagName: thumbnail.tagName, src: thumbnail.getAttribute("src") })),
+    label: await page.$eval("[data-scanner-upload-selected]", (row) => row.textContent?.replace(/\s+/g, " ").trim()),
+  };
+  await capture("05a-selected-pdf-thumbnail.png");
+
+  await openScanner("url-import");
+  page.once("dialog", (dialog) => { void dialog.accept(publicPdfUrl); });
+  await page.click("[data-scanner-import-url]");
+  await page.waitForSelector("[data-scanner-url-import-pending]", { timeout: 5_000 });
+  report.states.urlImportPending = await measureState();
+  await capture("05b-url-import-pending.png");
+  await page.waitForFunction(() => [...document.querySelectorAll("#scanner-viewport img, #scanner-viewport canvas")]
+    .some((candidate) => candidate instanceof HTMLImageElement && candidate.complete && candidate.naturalWidth > 0), { timeout: 60_000 });
+  report.states.urlImportSettled = {
+    ...(await measureState()),
+    format: await page.$eval("[data-scanner-file-type]", (badge) => badge.textContent?.trim()),
+  };
+  await capture("05c-url-import-settled.png");
+
+  if (report.states.pdfSelected.thumbnail.tagName !== "IMG" || !report.states.pdfSelected.thumbnail.src?.startsWith("data:image/")) {
+    throw new Error("PDF selection did not render a first-page thumbnail");
+  }
+  if (!report.states.pdfSelected.label?.includes("PDF")) throw new Error("PDF selection did not display a PDF label");
+  if (!report.states.urlImportPending.urlImportPending) throw new Error("URL import did not expose its in-canvas loading state");
+  if (report.states.urlImportSettled.format !== "PDF") throw new Error(`URL-imported PDF did not retain format metadata: ${report.states.urlImportSettled.format}`);
 
   await openScanner("silent-rejection");
   const rejectedInput = await primaryInput();

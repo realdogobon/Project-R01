@@ -48,4 +48,24 @@ describe("scanner action-bar layout contract", () => {
     expect(source).not.toContain("scale-[1.08]");
     expect(source).not.toContain("border border-gray-200/70 bg-gradient-to-b");
   });
+
+  it("keeps URL imports legible and selected-file metadata truthful without changing the silent import boundary", () => {
+    const scannerSource = fs.readFileSync(scannerModalPath, "utf8");
+    const workspaceSource = fs.readFileSync(path.resolve(import.meta.dirname, "../client/src/pages/Workspace.tsx"), "utf8");
+
+    expect(scannerSource).toContain("data-scanner-url-import-pending");
+    expect(scannerSource).toContain("Importing from link");
+    expect(scannerSource).toContain("Retrieving document");
+    expect(scannerSource).toContain("beginUrlImport");
+    expect(scannerSource).toContain("getScannerFileFormat");
+    expect(scannerSource).toContain('"application/pdf": "PDF"');
+    expect(scannerSource).toContain('import("pdfjs-dist/legacy/build/pdf.mjs")');
+    expect(scannerSource).toContain("renderSelectedPdfThumbnail");
+    expect(scannerSource).toContain("data-scanner-upload-thumbnail");
+    expect(scannerSource).toContain("getScannerFileFormat(uploadPresentation.file)");
+    expect(scannerSource).toContain("font-sans");
+    expect(workspaceSource).toContain("const importedContentType = result.contentType.trim().toLowerCase()");
+    expect(workspaceSource).toContain("type: importedContentType");
+    expect(workspaceSource).toContain("lastModified: Date.now()");
+  });
 });

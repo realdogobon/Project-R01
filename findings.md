@@ -4,6 +4,10 @@
 **Scope:** Live UI/UX and lifecycle audit plus the approved scanner implementation pass
 **Production changes during audit:** Limited to scanner interaction, cancellation, alignment, sizing, and PDF/OCR lifecycle fixes documented below
 
+## Scanner URL import and selected-file polish — current visual verification
+
+The focused local browser probe captured the selected PDF and public-link import states after the approved polish. The selected PDF shows a rendered first-page thumbnail rather than the prior cloud placeholder, and its metadata row reads `PDF · 1018 KB`. The public PDF URL shows a calm in-canvas `Importing from link` state with a small indeterminate progress treatment while the server fetch is active, then settles to a rendered document with the scanner file-type indicator reading `PDF`. The probe reported no visible error text or browser errors.
+
 ## Executive summary
 
 The scanner’s document-present workflow is visually stable for normal, tiny, flat, and awkward crops. Progress cards remain centered, the laser is visible during active scanning and stops after completion, the queue badge remains stable, and the action returns to `Send` after completion. The confirmed **retained-queue-after-document-discard** layout mismatch has been corrected by keeping the progress presentation in the established scanner stage rather than allowing the shorter empty-document shell to pull it upward.

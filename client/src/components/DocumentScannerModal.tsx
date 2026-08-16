@@ -37,6 +37,35 @@ const formatUploadFileSize = (bytes: number) => {
   return `${(bytes / (1024 * 1024)).toFixed(bytes >= 10 * 1024 * 1024 ? 0 : 1)} MB`;
 };
 
+const getScannerFileFormat = (file?: File | null) => {
+  if (!file) return "—";
+  const extension = file.name.split(".").pop()?.toLowerCase() ?? "";
+  const extensionFormats: Record<string, string> = {
+    pdf: "PDF",
+    png: "PNG",
+    jpg: "JPEG",
+    jpeg: "JPEG",
+    webp: "WEBP",
+    md: "Markdown",
+    markdown: "Markdown",
+    html: "HTML",
+    htm: "HTML",
+    txt: "Text",
+  };
+  const mimeFormats: Record<string, string> = {
+    "application/pdf": "PDF",
+    "image/jpeg": "JPEG",
+    "image/png": "PNG",
+    "image/webp": "WEBP",
+    "text/markdown": "Markdown",
+    "text/html": "HTML",
+    "text/plain": "Text",
+  };
+  return extensionFormats[extension] ?? mimeFormats[file.type.toLowerCase()] ?? "File";
+};
+
+const isPdfUpload = (file: File) => getScannerFileFormat(file) === "PDF";
+
 interface ScannerCropSurfaceProps {
   crop?: Crop;
   onCommit: (crop: Crop) => void;
@@ -548,9 +577,12 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
   const [isFlipping, setIsFlipping] = useState(false);
   const [isDragActive, setIsDragActive] = useState(false);
   const [uploadPresentation, setUploadPresentation] = useState<{ phase: "idle" | "selected" | "pending" | "success"; file?: File; fileName?: string; thumbnailUrl?: string }>({ phase: "idle" });
+  const [isUrlImportLoading, setIsUrlImportLoading] = useState(false);
+  const [hasUrlImportSettled, setHasUrlImportSettled] = useState(false);
   const [isUploadPendingEntered, setIsUploadPendingEntered] = useState(false);
   const uploadPresentationTimerRef = React.useRef<number | null>(null);
   const selectedUploadThumbnailUrlRef = React.useRef<string | null>(null);
+  const selectedUploadThumbnailTokenRef = React.useRef(0);
   const uploadPresentationStartedAtRef = React.useRef(0);
   const uploadPresentationVisibleAtRef = React.useRef(0);
   const [flipDirection, setFlipDirection] = useState<"next" | "prev">("next");
@@ -574,9 +606,39 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
   };
 
   const resetSelectedUploadThumbnail = () => {
+    selectedUploadThumbnailTokenRef.current += 1;
     if (selectedUploadThumbnailUrlRef.current) {
       URL.revokeObjectURL(selectedUploadThumbnailUrlRef.current);
       selectedUploadThumbnailUrlRef.current = null;
+    }
+  };
+
+  const renderSelectedPdfThumbnail = async (file: File) => {
+    try {
+      const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
+      const loadingTask = pdfjsLib.getDocument({
+        data: await file.arrayBuffer(),
+        isImageDecoderSupported: false,
+        useWasm: true,
+      });
+      const pdfDocument = await loadingTask.promise;
+      try {
+        const page = await pdfDocument.getPage(1);
+        const naturalViewport = page.getViewport({ scale: 1 });
+        const scale = Math.min(1, 180 / Math.max(naturalViewport.width, naturalViewport.height));
+        const viewport = page.getViewport({ scale: Math.max(scale, 0.1) });
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round(viewport.width));
+        canvas.height = Math.max(1, Math.round(viewport.height));
+        const canvasContext = canvas.getContext("2d");
+        if (!canvasContext) return undefined;
+        await page.render({ canvas, canvasContext, viewport }).promise;
+        return canvas.toDataURL("image/jpeg", 0.86);
+      } finally {
+        await pdfDocument.destroy();
+      }
+    } catch {
+      return undefined;
     }
   };
 
@@ -596,6 +658,16 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
     const thumbnailUrl = file.type.startsWith("image/") ? URL.createObjectURL(file) : undefined;
     selectedUploadThumbnailUrlRef.current = thumbnailUrl || null;
     setUploadPresentation({ phase: "selected", file, fileName: file.name, thumbnailUrl });
+
+    if (isPdfUpload(file)) {
+      const token = selectedUploadThumbnailTokenRef.current;
+      void renderSelectedPdfThumbnail(file).then((pdfThumbnailUrl) => {
+        if (!pdfThumbnailUrl || token !== selectedUploadThumbnailTokenRef.current) return;
+        setUploadPresentation((current) => current.phase === "selected" && current.file === file
+          ? { ...current, thumbnailUrl: pdfThumbnailUrl }
+          : current);
+      });
+    }
   };
 
   const removeSelectedUploadFile = () => {
@@ -603,6 +675,22 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
     resetSelectedUploadThumbnail();
     if (localUploadInputRef.current) localUploadInputRef.current.value = "";
     setUploadPresentation({ phase: "idle" });
+  };
+
+  const beginUrlImport = async () => {
+    const rawUrl = window.prompt("Paste a public document link");
+    if (!rawUrl?.trim() || !onImportFromUrl || isUrlImportLoading) return;
+
+    resetUploadPresentationTimer();
+    resetSelectedUploadThumbnail();
+    setUploadPresentation({ phase: "idle" });
+    setHasUrlImportSettled(false);
+    setIsUrlImportLoading(true);
+    try {
+      await onImportFromUrl(rawUrl);
+    } finally {
+      setHasUrlImportSettled(true);
+    }
   };
 
   useEffect(() => {
@@ -631,6 +719,20 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
       }, silentResetDelay);
     }
   }, [hasDocumentLoaded, isDocumentLoading, isUploadPendingEntered, uploadPresentation.phase]);
+
+  useEffect(() => {
+    if (!isUrlImportLoading) return;
+    if ((hasDocumentLoaded && !isDocumentLoading) || (hasUrlImportSettled && !isDocumentLoading && !hasDocumentLoaded)) {
+      setIsUrlImportLoading(false);
+      setHasUrlImportSettled(false);
+    }
+  }, [hasDocumentLoaded, hasUrlImportSettled, isDocumentLoading, isUrlImportLoading]);
+
+  useEffect(() => {
+    if (isScannerOpen) return;
+    setIsUrlImportLoading(false);
+    setHasUrlImportSettled(false);
+  }, [isScannerOpen]);
 
   useEffect(() => () => {
     resetUploadPresentationTimer();
@@ -798,16 +900,8 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
     );
   }, [basePageHeight, documentWidth, fitToSize, hasDocumentLoaded, isNarrowPreview, isScannerOpen, isScannerProgressActive, isSingleBookPage, pageAspectRatio, progressDeckHeight, progressDeckWidth, stagePadding, windowSize.height, windowSize.width]);
 
-  // Auto-detected file type from the uploaded file's extension (read-only indicator)
-  const detectedFileType = React.useMemo(() => {
-    if (!scannerFile) return "—";
-    const ext = scannerFile.name.split(".").pop()?.toLowerCase() ?? "";
-    const map: Record<string, string> = {
-      pdf: "PDF", png: "PNG", jpg: "JPEG", jpeg: "JPEG",
-      webp: "WEBP", md: "Markdown", html: "HTML", txt: "Text"
-    };
-    return map[ext] ?? "Unknown";
-  }, [scannerFile]);
+  // Retain the server-detected MIME type for remote URLs whose filename is generic.
+  const detectedFileType = React.useMemo(() => getScannerFileFormat(scannerFile), [scannerFile]);
 
   const [showSaveAsDialog, setShowSaveAsDialog] = useState(false);
   const [saveAsName, setSaveAsName] = useState("");
@@ -1426,7 +1520,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
             <div className="flex flex-col gap-1.5 mb-5">
               <label className="text-[13px] text-[#202020] dark:text-[#EAEAEA] pl-0.5">File type</label>
               <div className="w-full bg-white dark:bg-[#2A2A35] border border-[#E5DCDA] dark:border-[#1A1A23] rounded-md px-3 py-1.5 text-[13px] outline-none shadow-sm flex items-center gap-2 h-[32px]">
-                 <span className={`font-medium tracking-wide ${
+                 <span data-scanner-file-type className={`font-medium tracking-wide ${
                    detectedFileType
                      ? 'text-[#202020] dark:text-[#EAEAEA]'
                      : 'text-gray-400 dark:text-gray-500'
@@ -1679,7 +1773,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                             )}
                          </div>
                       </div>
-                   ) : (!hasDocumentLoaded || uploadPresentation.phase === "selected" || uploadPresentation.phase === "pending") ? (
+                   ) : (!hasDocumentLoaded || uploadPresentation.phase === "selected" || uploadPresentation.phase === "pending" || isUrlImportLoading) ? (
                      <div
                        data-scanner-empty-upload-state
                        className="relative isolate translate-y-[46px] w-full max-w-[620px] min-h-[360px] mx-auto overflow-hidden bg-transparent px-6 py-5 transition-colors duration-300"
@@ -1718,7 +1812,29 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                          }}
                        />
                        <AnimatePresence mode="wait" initial={false}>
-                         {uploadPresentation.phase === "pending" ? (
+                         {isUrlImportLoading ? (
+                           <motion.div
+                             key="url-import-pending"
+                             data-scanner-url-import-pending
+                             initial={{ opacity: 0, y: 12 }}
+                             animate={{ opacity: 1, y: 0 }}
+                             exit={{ opacity: 0, y: -10 }}
+                             transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
+                             className="relative flex min-h-[320px] items-center justify-center font-sans"
+                           >
+                             <div className="pointer-events-none absolute left-1/2 top-[35%] -translate-x-1/2 -translate-y-1/2 text-[#7868F4]/[0.17] dark:text-[#AAA1FF]/[0.20]">
+                               <CloudUpload className="h-[74px] w-[74px]" strokeWidth={1.05} />
+                             </div>
+                             <div className="absolute bottom-6 left-1/2 w-full max-w-[460px] -translate-x-1/2 px-4">
+                               <div data-scanner-upload-command-strip className="flex items-center gap-3 px-4 py-1.5">
+                                 <span className="flex h-8 w-8 shrink-0 items-center justify-center text-[#7868F4] dark:text-[#AAA1FF]"><Link className="h-4 w-4" strokeWidth={1.65} /></span>
+                                 <span className="min-w-0 flex-1"><span className="block truncate text-[12px] font-medium tracking-[-0.01em] text-[#454153] dark:text-white/85">Importing from link</span><span className="mt-0.5 flex items-center gap-1.5 text-[11px] font-medium text-[#8A8696] dark:text-white/45"><span className="h-2.5 w-2.5 rounded-full border-2 border-current border-t-transparent animate-spin" /> Retrieving document</span></span>
+                                 <span className="h-5 w-px bg-[#DCD9E6] dark:bg-white/[0.10]" aria-hidden="true" />
+                                 <span className="relative h-1.5 w-16 shrink-0 overflow-hidden rounded-full bg-[#DEDCE6] dark:bg-white/[0.12]"><motion.span className="absolute inset-y-0 left-0 w-[45%] rounded-full bg-[#7868F4]" initial={{ x: "-130%" }} animate={{ x: "255%" }} transition={{ repeat: Infinity, duration: 1.05, ease: "linear" }} /></span>
+                               </div>
+                             </div>
+                           </motion.div>
+                         ) : uploadPresentation.phase === "pending" ? (
                            <motion.div
                              key="pending-upload"
                              data-scanner-upload-pending
@@ -1730,7 +1846,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                                uploadPresentationVisibleAtRef.current = performance.now();
                                setIsUploadPendingEntered(true);
                              }}
-                             className="relative flex min-h-[320px] items-center justify-center"
+                             className="relative flex min-h-[320px] items-center justify-center font-sans"
                            >
                              <div className="pointer-events-none absolute left-1/2 top-[35%] -translate-x-1/2 -translate-y-1/2 text-[#7868F4]/[0.17] dark:text-[#AAA1FF]/[0.20]">
                                <CloudUpload className="h-[74px] w-[74px]" strokeWidth={1.05} />
@@ -1738,14 +1854,14 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                              <div className="absolute bottom-6 left-1/2 w-full max-w-[460px] -translate-x-1/2 px-4">
                                <div data-scanner-upload-command-strip className="flex items-center gap-3 px-4 py-1.5">
                                  <span className="flex h-8 w-8 shrink-0 items-center justify-center text-[#7868F4] dark:text-[#AAA1FF]"><CloudUpload className="h-4 w-4" strokeWidth={1.65} /></span>
-                                 <span className="min-w-0 flex-1"><span className="block truncate text-[12px] font-medium text-[#454153] dark:text-white/85">{uploadPresentation.fileName}</span><span className="mt-0.5 flex items-center gap-1.5 text-[10px] text-[#8A8696] dark:text-white/45"><span className="h-2.5 w-2.5 rounded-full border-2 border-current border-t-transparent animate-spin" /> Preparing document</span></span>
+                                 <span className="min-w-0 flex-1"><span className="block truncate text-[12px] font-medium tracking-[-0.01em] text-[#454153] dark:text-white/85">{uploadPresentation.fileName}</span><span className="mt-0.5 flex items-center gap-1.5 text-[11px] font-medium text-[#8A8696] dark:text-white/45"><span className="h-2.5 w-2.5 rounded-full border-2 border-current border-t-transparent animate-spin" /> Preparing document</span></span>
                                  <span className="h-5 w-px bg-[#DCD9E6] dark:bg-white/[0.10]" aria-hidden="true" />
                                  <span className="relative h-1.5 w-16 shrink-0 overflow-hidden rounded-full bg-[#DEDCE6] dark:bg-white/[0.12]"><motion.span className="absolute inset-y-0 left-0 w-[45%] rounded-full bg-[#7868F4]" initial={{ x: "-130%" }} animate={{ x: "255%" }} transition={{ repeat: Infinity, duration: 1.05, ease: "linear" }} /></span>
                                </div>
                              </div>
                            </motion.div>
                          ) : (
-                           <motion.div key={uploadPresentation.phase === "selected" ? "selected-upload" : "idle-upload"} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.24, ease: [0.23, 1, 0.32, 1] }} className="relative min-h-[320px]">
+                           <motion.div key={uploadPresentation.phase === "selected" ? "selected-upload" : "idle-upload"} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.24, ease: [0.23, 1, 0.32, 1] }} className="relative min-h-[320px] font-sans">
                              <button
                                type="button"
                                data-scanner-upload-dropzone
@@ -1754,17 +1870,17 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                              >
                                <span className="pointer-events-none absolute left-1/2 top-[42%] flex -translate-x-1/2 -translate-y-1/2 flex-col items-center">
                                  <CloudUpload className={`h-[78px] w-[78px] transition-colors duration-300 ${isDragActive ? "text-[#6D5DE8] dark:text-[#B3AAFF]" : "text-[#A8A1BF]/58 dark:text-[#C6C0DE]/46"}`} strokeWidth={1.05} aria-hidden="true" />
-                                 <span className="mt-3 text-[13px] font-medium tracking-[-0.015em] text-[#514D5D] dark:text-white/72">{isDragActive ? "Release to add" : uploadPresentation.phase === "selected" ? "Document selected" : "Drop a document"}</span>
-                                 <span className="mt-1 text-[10px] text-[#9893A2] dark:text-white/38">{isDragActive ? "Release anywhere in this canvas" : uploadPresentation.phase === "selected" ? "Ready for the scanner" : "or choose a file from this device"}</span>
+                                 <span className="mt-3 text-[12px] font-medium tracking-[-0.01em] text-[#514D5D] dark:text-white/72">{isDragActive ? "Release to add" : uploadPresentation.phase === "selected" ? "Document selected" : "Drop a document"}</span>
+                                 <span className="mt-1 text-[11px] font-medium text-[#9893A2] dark:text-white/38">{isDragActive ? "Release anywhere in this canvas" : uploadPresentation.phase === "selected" ? "Ready for the scanner" : "or choose a file from this device"}</span>
                                </span>
                              </button>
 
                              {uploadPresentation.phase === "selected" && uploadPresentation.file ? (
                                <motion.div data-scanner-upload-selected initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.04, duration: 0.2 }} className="absolute bottom-[66px] left-1/2 z-10 flex w-full max-w-[432px] -translate-x-1/2 items-center gap-2.5 px-5">
                                  <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-[#F0EEFF] text-[#7868F4] dark:bg-[#7868F4]/15">
-                                   {uploadPresentation.thumbnailUrl ? <img data-scanner-upload-thumbnail src={uploadPresentation.thumbnailUrl} alt="" className="h-full w-full object-cover" /> : <CloudUpload className="h-4 w-4" strokeWidth={1.6} />}
+                                   {uploadPresentation.thumbnailUrl ? <img data-scanner-upload-thumbnail src={uploadPresentation.thumbnailUrl} alt="" className="h-full w-full object-cover" /> : <FileText data-scanner-upload-thumbnail className="h-4 w-4" strokeWidth={1.6} />}
                                  </span>
-                                 <span className="min-w-0 flex-1 text-left"><span className="block truncate text-[12px] font-medium text-[#454153] dark:text-white/85">{uploadPresentation.file.name}</span><span className="mt-0.5 block text-[10px] text-[#9893A2] dark:text-white/40">{uploadPresentation.file.type.startsWith("image/") ? "Image" : "Document"} · {formatUploadFileSize(uploadPresentation.file.size)}</span></span>
+                                 <span className="min-w-0 flex-1 text-left"><span className="block truncate text-[12px] font-medium tracking-[-0.01em] text-[#454153] dark:text-white/85">{uploadPresentation.file.name}</span><span className="mt-0.5 block text-[11px] font-medium text-[#9893A2] dark:text-white/40">{getScannerFileFormat(uploadPresentation.file)} · {formatUploadFileSize(uploadPresentation.file.size)}</span></span>
                                  <button data-scanner-remove-selected-upload type="button" aria-label="Remove selected file" onClick={removeSelectedUploadFile} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[#AAA5B2] transition-colors hover:bg-[#F5F3F8] hover:text-[#5E5968] dark:hover:bg-white/[0.06]"><X className="h-3.5 w-3.5" strokeWidth={2} /></button>
                                </motion.div>
                              ) : null}
@@ -1780,10 +1896,10 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                                  {uploadPresentation.phase === "selected" ? "Add to scanner" : "Choose a file"}
                                </button>
                                <span className="mx-1 h-3 w-px bg-[#DDD9E6] dark:bg-white/[0.12]" aria-hidden="true" />
-                               <button data-scanner-import-url type="button" onClick={() => { const rawUrl = window.prompt("Paste a public document link"); if (rawUrl?.trim()) void onImportFromUrl?.(rawUrl); }} className="inline-flex h-8 shrink-0 whitespace-nowrap items-center gap-1.5 rounded-full px-2 text-[11px] text-[#777386] transition-colors hover:text-[#4B465C] dark:text-white/50 dark:hover:text-white"><Link className="h-3.5 w-3.5" strokeWidth={1.75} />From link</button>
+                               <button data-scanner-import-url type="button" onClick={() => void beginUrlImport()} className="inline-flex h-8 shrink-0 whitespace-nowrap items-center gap-1.5 rounded-full px-2 text-[11px] font-medium text-[#777386] transition-colors hover:text-[#4B465C] dark:text-white/50 dark:hover:text-white"><Link className="h-3.5 w-3.5" strokeWidth={1.75} />From link</button>
                                <button data-scanner-image-sequence type="button" onClick={() => imageSequenceInputRef.current?.click()} className="inline-flex h-8 shrink-0 whitespace-nowrap items-center gap-1.5 rounded-full px-2 text-[11px] text-[#777386] transition-colors hover:text-[#4B465C] dark:text-white/50 dark:hover:text-white"><Images className="h-3.5 w-3.5" strokeWidth={1.75} />Image sequence</button>
                              </div>
-                             <p className={`pointer-events-none absolute left-1/2 z-10 -translate-x-1/2 whitespace-nowrap text-[10px] font-medium tracking-[0.01em] text-[#AAA5B4] dark:text-white/30 ${uploadPresentation.phase === "selected" ? "-bottom-4" : "top-[87%]"}`}>PDF · Images · Text &nbsp;•&nbsp; Up to 50 MB</p>
+                             <p className={`pointer-events-none absolute left-1/2 z-10 -translate-x-1/2 whitespace-nowrap text-[11px] font-medium tracking-[0.01em] text-[#AAA5B4] dark:text-white/30 ${uploadPresentation.phase === "selected" ? "-bottom-4" : "top-[87%]"}`}>PDF · Images · Text &nbsp;•&nbsp; Up to 50 MB</p>
                            </motion.div>
                          )}
                        </AnimatePresence>
@@ -1978,17 +2094,17 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                             <button data-scanner-upload-dropzone type="button" onClick={() => localUploadInputRef.current?.click()} className={`absolute inset-0 flex cursor-pointer items-center justify-center rounded-[28px] transition-colors duration-200 ${isDragActive ? "bg-[#7868F4]/[0.055] dark:bg-[#7868F4]/[0.10]" : "bg-transparent"}`}>
                               <span className="pointer-events-none absolute left-1/2 top-[42%] flex -translate-x-1/2 -translate-y-1/2 flex-col items-center">
                                 <CloudUpload className={`h-[78px] w-[78px] transition-colors duration-300 ${isDragActive ? "text-[#6D5DE8] dark:text-[#B3AAFF]" : "text-[#A8A1BF]/58 dark:text-[#C6C0DE]/46"}`} strokeWidth={1.05} aria-hidden="true" />
-                                <span className="mt-3 text-[13px] font-medium tracking-[-0.015em] text-[#514D5D] dark:text-white/72">{isDragActive ? "Release to add" : "Drop a document"}</span>
-                                <span className="mt-1 text-[10px] text-[#9893A2] dark:text-white/38">{isDragActive ? "Release anywhere in this canvas" : "or choose a file from this device"}</span>
+                                <span className="mt-3 text-[12px] font-medium tracking-[-0.01em] text-[#514D5D] dark:text-white/72">{isDragActive ? "Release to add" : "Drop a document"}</span>
+                                <span className="mt-1 text-[11px] font-medium text-[#9893A2] dark:text-white/38">{isDragActive ? "Release anywhere in this canvas" : "or choose a file from this device"}</span>
                               </span>
                             </button>
                             <div data-scanner-upload-command-strip className="absolute left-1/2 top-[73%] z-10 flex -translate-x-1/2 items-center gap-1 px-4 py-1.5">
                               <button data-scanner-local-upload type="button" onClick={() => localUploadInputRef.current?.click()} className="inline-flex h-8 shrink-0 whitespace-nowrap items-center justify-center gap-1.5 rounded-full px-2 text-[12px] font-medium text-[#5E4FCD] transition-colors hover:text-[#4638B7] dark:text-[#C3BEFF] dark:hover:text-white"><CloudUpload className="h-3.5 w-3.5" strokeWidth={1.7} />Choose a file</button>
                               <span className="mx-1 h-3 w-px bg-[#DDD9E6] dark:bg-white/[0.12]" aria-hidden="true" />
-                              <button data-scanner-import-url type="button" onClick={() => { const rawUrl = window.prompt("Paste a public document link"); if (rawUrl?.trim()) void onImportFromUrl?.(rawUrl); }} className="inline-flex h-8 shrink-0 whitespace-nowrap items-center gap-1.5 rounded-full px-2 text-[11px] text-[#777386] transition-colors hover:text-[#4B465C] dark:text-white/50 dark:hover:text-white"><Link className="h-3.5 w-3.5" strokeWidth={1.75} />From link</button>
+                              <button data-scanner-import-url type="button" onClick={() => void beginUrlImport()} className="inline-flex h-8 shrink-0 whitespace-nowrap items-center gap-1.5 rounded-full px-2 text-[11px] font-medium text-[#777386] transition-colors hover:text-[#4B465C] dark:text-white/50 dark:hover:text-white"><Link className="h-3.5 w-3.5" strokeWidth={1.75} />From link</button>
                               <button data-scanner-image-sequence type="button" onClick={() => imageSequenceInputRef.current?.click()} className="inline-flex h-8 shrink-0 whitespace-nowrap items-center gap-1.5 rounded-full px-2 text-[11px] text-[#777386] transition-colors hover:text-[#4B465C] dark:text-white/50 dark:hover:text-white"><Images className="h-3.5 w-3.5" strokeWidth={1.75} />Image sequence</button>
                             </div>
-                            <p className="pointer-events-none absolute left-1/2 top-[87%] z-10 -translate-x-1/2 whitespace-nowrap text-[10px] font-medium tracking-[0.01em] text-[#AAA5B4] dark:text-white/30">PDF · Images · Text &nbsp;•&nbsp; Up to 50 MB</p>
+                            <p className="pointer-events-none absolute left-1/2 top-[87%] z-10 -translate-x-1/2 whitespace-nowrap text-[11px] font-medium tracking-[0.01em] text-[#AAA5B4] dark:text-white/30">PDF · Images · Text &nbsp;•&nbsp; Up to 50 MB</p>
                           </div>
                        )}
                        </div>

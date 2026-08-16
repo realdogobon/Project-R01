@@ -1983,7 +1983,12 @@ export default function Workspace() {
       const binary = window.atob(result.base64);
       const bytes = new Uint8Array(binary.length);
       for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
-      await processUploadedFile(new File([bytes], result.fileName, { type: result.contentType }));
+      const importedFileName = result.fileName.trim() || "linked-document";
+      const importedContentType = result.contentType.trim().toLowerCase() || "application/octet-stream";
+      await processUploadedFile(new File([bytes], importedFileName, {
+        type: importedContentType,
+        lastModified: Date.now(),
+      }));
     } catch {
       setOcrError("");
       setScannerLogs(["The document link is not available for scanner import."]);
