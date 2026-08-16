@@ -157,60 +157,62 @@ const ScannerLiveIcon = ({ className = "w-4 h-4" }: { className?: string }) => {
 
   return (
     <div
-      className={`relative flex items-center justify-center scanner-icon-wrapper ${className}`}
+      className="relative flex h-full w-full items-center justify-center scanner-icon-wrapper"
       data-scanner-toolbar-icon
-      onMouseEnter={() => {
+      onPointerEnter={() => {
         setIsPaperFeedActive(true);
         setPaperFeedRun((run) => run + 1);
       }}
     >
       <style>{`
         @keyframes scanner-toolbar-paper-feed {
-          0%, 10% {
-            transform: translate(-50%, -205%);
+          0%, 12% {
+            transform: translate(-50%, -180%);
             opacity: 0;
           }
           26% {
-            transform: translate(-50%, -105%);
-            opacity: 0.84;
+            transform: translate(-50%, -120%);
+            opacity: 0.82;
           }
-          52% {
-            transform: translate(-50%, -28%);
+          50% {
+            transform: translate(-50%, -50%);
             opacity: 0.9;
           }
-          78% {
-            transform: translate(-50%, 54%);
+          72% {
+            transform: translate(-50%, 8%);
             opacity: 0.9;
           }
-          92% {
-            transform: translate(-50%, 112%);
-            opacity: 0.84;
+          90% {
+            transform: translate(-50%, 60%);
+            opacity: 0.82;
           }
           100% {
-            transform: translate(-50%, 155%);
+            transform: translate(-50%, 95%);
             opacity: 0;
           }
         }
 
         .scanner-paper {
-          transform: translate(-50%, -205%);
+          transform: translate(-50%, -180%);
           opacity: 0;
           will-change: transform, opacity;
         }
 
         @media (prefers-reduced-motion: no-preference) {
           .scanner-paper--feeding {
-            animation: scanner-toolbar-paper-feed 0.68s cubic-bezier(0.23, 1, 0.32, 1) both;
+            animation: scanner-toolbar-paper-feed 1.35s cubic-bezier(0.45, 0, 0.15, 1) both;
           }
         }
       `}</style>
-      <div
-        key={paperFeedRun}
-        aria-hidden="true"
-        data-scanner-toolbar-paper
-        className={`scanner-paper ${isPaperFeedActive ? "scanner-paper--feeding" : ""} absolute top-1/2 left-1/2 z-0 h-[60%] w-[55%] rounded-[1.5px] pointer-events-none bg-current`}
-      />
-      <Printer strokeWidth={1.75} className="relative z-10 w-full h-full text-current opacity-80" />
+      <div className={`relative flex items-center justify-center ${className}`}>
+        <div
+          key={paperFeedRun}
+          aria-hidden="true"
+          data-scanner-toolbar-paper
+          className={`scanner-paper ${isPaperFeedActive ? "scanner-paper--feeding" : ""} absolute top-1/2 left-1/2 z-0 h-[76%] w-[55%] rounded-[1.5px] pointer-events-none bg-current`}
+        />
+        <Printer strokeWidth={1.75} className="relative z-10 w-full h-full text-current opacity-80" />
+      </div>
     </div>
   );
 };

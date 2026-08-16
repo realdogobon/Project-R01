@@ -89,13 +89,18 @@ describe("scanner action-bar layout contract", () => {
 
     expect(source).toContain("const [paperFeedRun, setPaperFeedRun] = useState(0);");
     expect(source).toContain("const [isPaperFeedActive, setIsPaperFeedActive] = useState(false);");
+    expect(source).toContain('className="relative flex h-full w-full items-center justify-center scanner-icon-wrapper"');
+    expect(source).toContain("onPointerEnter={() => {");
     expect(source).toContain("setIsPaperFeedActive(true);");
     expect(source).toContain("setPaperFeedRun((run) => run + 1);");
     expect(source).toContain("key={paperFeedRun}");
     expect(source).toContain("data-scanner-toolbar-paper");
     expect(source).toContain("@keyframes scanner-toolbar-paper-feed");
-    expect(source).toContain("translate(-50%, -205%)");
-    expect(source).toContain("translate(-50%, 155%)");
+    expect(source).toContain("translate(-50%, -120%)");
+    expect(source).toContain("translate(-50%, -50%)");
+    expect(source).toContain("translate(-50%, 60%)");
+    expect(source).toContain("1.35s cubic-bezier(0.45, 0, 0.15, 1)");
+    expect(source).toContain("h-[76%] w-[55%]");
     expect(source).toContain("scanner-paper--feeding");
     expect(source).toContain('isPaperFeedActive ? "scanner-paper--feeding" : ""');
     expect(source).toContain("prefers-reduced-motion: no-preference");

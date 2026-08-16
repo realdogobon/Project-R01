@@ -47,8 +47,16 @@ async function readFrame(page) {
   });
 }
 
-async function saveToolbarCapture(button, destination) {
+async function saveToolbarCapture(page, button, destination) {
+  await page.evaluate(() => {
+    const paper = document.querySelector("[data-scanner-toolbar-paper]");
+    if (paper instanceof HTMLElement) paper.style.animationPlayState = "paused";
+  });
   await button.screenshot({ path: destination });
+  await page.evaluate(() => {
+    const paper = document.querySelector("[data-scanner-toolbar-paper]");
+    if (paper instanceof HTMLElement) paper.style.animationPlayState = "";
+  });
 }
 
 mkdirSync(evidenceDir, { recursive: true });
@@ -78,7 +86,7 @@ if (!wrapper || !button) {
   ok("scanner toolbar entry is visible");
 
   const idle = await readFrame(page);
-  await saveToolbarCapture(button, `${evidenceDir}/01-light-idle.png`);
+  await saveToolbarCapture(page, button, `${evidenceDir}/01-light-idle.png`);
   if (idle?.opacity === 0 && idle.animationName === "none") {
     ok("paper stays hidden before hover", { idle });
   } else {
@@ -98,27 +106,27 @@ if (!wrapper || !button) {
     };
 
     await hoverIcon();
-    await sleep(140);
+    await sleep(350);
     const entering = await readFrame(page);
 
-    await sleep(215);
+    await sleep(325);
     const throughBody = await readFrame(page);
 
-    await sleep(210);
+    await sleep(525);
     const exiting = await readFrame(page);
 
     await leaveIcon();
     await hoverIcon();
-    await sleep(140);
-    await saveToolbarCapture(button, `${evidenceDir}/02-light-entering.png`);
+    await sleep(350);
+    await saveToolbarCapture(page, button, `${evidenceDir}/02-light-entering.png`);
     await leaveIcon();
     await hoverIcon();
-    await sleep(355);
-    await saveToolbarCapture(button, `${evidenceDir}/03-light-through-body.png`);
+    await sleep(675);
+    await saveToolbarCapture(page, button, `${evidenceDir}/03-light-through-body.png`);
     await leaveIcon();
     await hoverIcon();
-    await sleep(565);
-    await saveToolbarCapture(button, `${evidenceDir}/04-light-exiting.png`);
+    await sleep(1_200);
+    await saveToolbarCapture(page, button, `${evidenceDir}/04-light-exiting.png`);
 
     const feedCenters = [entering, throughBody, exiting].map((frame) => frame?.paperCenterY ?? NaN);
     const visibleFrames = [entering, throughBody, exiting].every((frame) => (frame?.opacity ?? 0) > 0.3);
@@ -152,13 +160,13 @@ if (!wrapper || !button) {
 
     await leaveIcon();
     await hoverIcon();
-    await sleep(130);
+    await sleep(350);
     const interrupted = await readFrame(page);
     await leaveIcon();
     await hoverIcon();
-    await sleep(330);
+    await sleep(675);
     const replay = await readFrame(page);
-    await saveToolbarCapture(button, `${evidenceDir}/05-light-replay.png`);
+    await saveToolbarCapture(page, button, `${evidenceDir}/05-light-replay.png`);
     if (
       (interrupted?.opacity ?? 0) > 0.3 &&
       (replay?.opacity ?? 0) > 0.3 &&
@@ -173,7 +181,7 @@ if (!wrapper || !button) {
     for (let cycle = 1; cycle <= 3; cycle += 1) {
       await leaveIcon();
       await hoverIcon();
-      await sleep(300);
+      await sleep(675);
       repeatedHovers.push(await readFrame(page));
     }
     if (
@@ -186,14 +194,48 @@ if (!wrapper || !button) {
       fail("paper feed reliably replays across repeated hovers", { repeatedHovers });
     }
 
+    const libraryButton = await page.$('button[title="Library"]');
+    const scannerButtonBox = await button.boundingBox();
+    const libraryButtonBox = await libraryButton?.boundingBox();
+    if (scannerButtonBox && libraryButtonBox) {
+      const scannerTargetPoints = [
+        { label: "upper-left", x: scannerButtonBox.x + 3, y: scannerButtonBox.y + 3 },
+        { label: "upper-right", x: scannerButtonBox.x + scannerButtonBox.width - 3, y: scannerButtonBox.y + 3 },
+        { label: "lower-left", x: scannerButtonBox.x + 3, y: scannerButtonBox.y + scannerButtonBox.height - 3 },
+        { label: "lower-right", x: scannerButtonBox.x + scannerButtonBox.width - 3, y: scannerButtonBox.y + scannerButtonBox.height - 3 },
+      ];
+      const fullButtonReplays = [];
+      for (const point of scannerTargetPoints) {
+        await page.mouse.move(
+          libraryButtonBox.x + libraryButtonBox.width / 2,
+          libraryButtonBox.y + libraryButtonBox.height / 2
+        );
+        await sleep(90);
+        await page.mouse.move(point.x, point.y);
+        await sleep(675);
+        fullButtonReplays.push({ point: point.label, frame: await readFrame(page) });
+      }
+      if (
+        fullButtonReplays.every(
+          ({ frame }) => (frame?.opacity ?? 0) > 0.3 && frame?.animationName === "scanner-toolbar-paper-feed"
+        )
+      ) {
+        ok("paper feed starts from every scanner-button hover zone after Library", { fullButtonReplays });
+      } else {
+        fail("paper feed starts from every scanner-button hover zone after Library", { fullButtonReplays });
+      }
+    } else {
+      fail("toolbar scanner and Library buttons have measurable hover targets");
+    }
+
     await sleep(400);
     await leaveIcon();
     await page.evaluate(() => document.documentElement.classList.add("dark"));
     await sleep(100);
     await hoverIcon();
-    await sleep(330);
+    await sleep(675);
     const dark = await readFrame(page);
-    await saveToolbarCapture(button, `${evidenceDir}/06-dark-through-body.png`);
+    await saveToolbarCapture(page, button, `${evidenceDir}/06-dark-through-body.png`);
     if (
       (dark?.opacity ?? 0) > 0.3 &&
       dark?.backgroundColor === dark?.printerColor &&
