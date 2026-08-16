@@ -564,6 +564,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
   const [windowSize, setWindowSize] = useState(() => ({ width: window.innerWidth, height: window.innerHeight }));
   const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
   const [pageAspectRatio, setPageAspectRatio] = useState(1 / 1.414);
+  const [pageInputValue, setPageInputValue] = useState(() => String(scannerPage));
 
   const resetUploadPresentationTimer = () => {
     if (uploadPresentationTimerRef.current !== null) {
@@ -658,7 +659,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
     image.src = sourceUrl;
   }, [scannerPreviewUrl, scannerPreviewUrl2]);
 
-  const isSingleBookPage = scannerTotalPages <= 1 || scannerPage === 1 || (scannerPage === scannerTotalPages && scannerPage % 2 === 0);
+  const isSingleBookPage = scannerTotalPages <= 1 || scannerPage === 1 || scannerPage === scannerTotalPages;
   const isScannerProgressActive = Boolean(scannerProgress && scannerProgress.status !== 'idle' && cropQueue.length > 0);
   const activeProgressIndex = scannerProgress?.status === 'success'
     ? cropQueue.length - 1
@@ -1091,25 +1092,49 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
     return () => clearTimeout(tmr);
   }, [scannerPage]);
 
+  useEffect(() => {
+    setPageInputValue(String(scannerPage));
+  }, [scannerPage]);
+
+  const navigateToPage = (requestedPage: number) => {
+    const nextPage = Math.min(Math.max(requestedPage, 1), scannerTotalPages);
+    if (nextPage === scannerPage) return;
+    setFlipDirection(nextPage > scannerPage ? "next" : "prev");
+    void handlePageChange(nextPage);
+  };
+
+  const commitPageInput = () => {
+    const requestedPage = Number.parseInt(pageInputValue, 10);
+    if (!Number.isFinite(requestedPage)) {
+      setPageInputValue(String(scannerPage));
+      return;
+    }
+    const nextPage = Math.min(Math.max(requestedPage, 1), scannerTotalPages);
+    setPageInputValue(String(nextPage));
+    navigateToPage(nextPage);
+  };
+
   const handleNextPage = () => {
     if (scannerPage < scannerTotalPages) {
-      setFlipDirection("next");
       const currentSpreadBase = scannerPage === 1 ? 1 : (scannerPage % 2 === 0 ? scannerPage : scannerPage - 1);
       let nextBase = currentSpreadBase === 1 ? 2 : currentSpreadBase + 2;
       if (nextBase > scannerTotalPages) {
          nextBase = scannerTotalPages;
       }
-      handlePageChange(nextBase);
+      navigateToPage(nextBase);
     }
   };
 
   const handlePrevPage = () => {
     if (scannerPage > 1) {
-      setFlipDirection("prev");
+      if (scannerPage === scannerTotalPages && scannerTotalPages % 2 !== 0) {
+        navigateToPage(Math.max(1, scannerPage - 1));
+        return;
+      }
       const currentSpreadBase = scannerPage === 1 ? 1 : (scannerPage % 2 === 0 ? scannerPage : scannerPage - 1);
       let prevBase = currentSpreadBase === 2 ? 1 : currentSpreadBase - 2;
       if (prevBase < 1) prevBase = 1;
-      handlePageChange(prevBase);
+      navigateToPage(prevBase);
     }
   };
 
@@ -1728,7 +1753,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                              className={`absolute inset-0 flex cursor-pointer items-center justify-center rounded-[28px] text-center transition-colors duration-200 ${isDragActive ? "bg-[#7868F4]/[0.055] dark:bg-[#7868F4]/[0.10]" : "bg-transparent"}`}
                              >
                                <span className="pointer-events-none absolute left-1/2 top-[42%] flex -translate-x-1/2 -translate-y-1/2 flex-col items-center">
-                                 <CloudUpload className={`h-[78px] w-[78px] transition-colors duration-300 ${isDragActive ? "text-[#6D5DE8] dark:text-[#B3AAFF]" : "text-[#78B8E6]/70 dark:text-[#9ED4F5]/58"}`} strokeWidth={1.05} aria-hidden="true" />
+                                 <CloudUpload className={`h-[78px] w-[78px] transition-colors duration-300 ${isDragActive ? "text-[#6D5DE8] dark:text-[#B3AAFF]" : "text-[#A8A1BF]/58 dark:text-[#C6C0DE]/46"}`} strokeWidth={1.05} aria-hidden="true" />
                                  <span className="mt-3 text-[13px] font-medium tracking-[-0.015em] text-[#514D5D] dark:text-white/72">{isDragActive ? "Release to add" : uploadPresentation.phase === "selected" ? "Document selected" : "Drop a document"}</span>
                                  <span className="mt-1 text-[10px] text-[#9893A2] dark:text-white/38">{isDragActive ? "Release anywhere in this canvas" : uploadPresentation.phase === "selected" ? "Ready for the scanner" : "or choose a file from this device"}</span>
                                </span>
@@ -1758,7 +1783,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                                <button data-scanner-import-url type="button" onClick={() => { const rawUrl = window.prompt("Paste a public document link"); if (rawUrl?.trim()) void onImportFromUrl?.(rawUrl); }} className="inline-flex h-8 shrink-0 whitespace-nowrap items-center gap-1.5 rounded-full px-2 text-[11px] text-[#777386] transition-colors hover:text-[#4B465C] dark:text-white/50 dark:hover:text-white"><Link className="h-3.5 w-3.5" strokeWidth={1.75} />From link</button>
                                <button data-scanner-image-sequence type="button" onClick={() => imageSequenceInputRef.current?.click()} className="inline-flex h-8 shrink-0 whitespace-nowrap items-center gap-1.5 rounded-full px-2 text-[11px] text-[#777386] transition-colors hover:text-[#4B465C] dark:text-white/50 dark:hover:text-white"><Images className="h-3.5 w-3.5" strokeWidth={1.75} />Image sequence</button>
                              </div>
-                             <p className={`pointer-events-none absolute left-1/2 z-10 -translate-x-1/2 whitespace-nowrap text-[10px] font-medium tracking-[0.01em] text-[#AAA5B4] dark:text-white/30 ${uploadPresentation.phase === "selected" ? "-bottom-4" : "top-[87%]"}`}>PDF · Images · Text &nbsp;•&nbsp; Up to 20 MB</p>
+                             <p className={`pointer-events-none absolute left-1/2 z-10 -translate-x-1/2 whitespace-nowrap text-[10px] font-medium tracking-[0.01em] text-[#AAA5B4] dark:text-white/30 ${uploadPresentation.phase === "selected" ? "-bottom-4" : "top-[87%]"}`}>PDF · Images · Text &nbsp;•&nbsp; Up to 50 MB</p>
                            </motion.div>
                          )}
                        </AnimatePresence>
@@ -1802,20 +1827,20 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                                 </div>
                               </div>
                             )}
+                            {isSingleBookPage ? (
+                               <div className="flex-1 relative overflow-hidden flex flex-col bg-white dark:bg-[#f2f2f2] rounded-sm z-0">
+                                  {scannerPreviewUrl && <img src={scannerPreviewUrl || undefined} className="w-full h-full object-contain pointer-events-none block" style={{ filter: getImageFilterStyle() }} />}
+                               </div>
+                            ) : (
+                              <>
                             {/* Left Page */}
                             {scannerPage > 1 && (
                                <>
                                  <div className="book-binding" />
                                  <div className={`flex-1 relative overflow-hidden flex flex-col bg-white dark:bg-[#eaeaea] rounded-l-sm border-r border-black/5 z-0 ${isFlipping && flipDirection === 'next' ? 'book-flip-next-left' : ''}`}>
-                                    {scannerPage % 2 === 0 ? (
-                                       <div className="w-full h-full relative">
-                                          {scannerPreviewUrl && <img src={scannerPreviewUrl || undefined} className="w-full h-full object-contain pointer-events-none block" style={{ filter: getImageFilterStyle() }} />}
-                                       </div>
-                                    ) : (
-                                       <div className="w-full h-full relative">
-                                          {scannerPreviewUrl2 && <img src={scannerPreviewUrl2 || undefined} className="w-full h-full object-contain pointer-events-none block" style={{ filter: getImageFilterStyle() }} />}
-                                       </div>
-                                    )}
+                                    <div className="w-full h-full relative">
+                                       {scannerPreviewUrl && <img src={scannerPreviewUrl || undefined} className="w-full h-full object-contain pointer-events-none block" style={{ filter: getImageFilterStyle() }} />}
+                                    </div>
                                  </div>
                                </>
                             )}
@@ -1823,16 +1848,12 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                             {/* Right Page */}
                             {(scannerPage < scannerTotalPages || scannerPage % 2 !== 0) && (
                                <div className={`flex-1 relative overflow-hidden flex flex-col bg-white dark:bg-[#f2f2f2] rounded-r-sm z-0 ${isFlipping && flipDirection === 'prev' ? 'book-flip-prev-right' : ''}`}>
-                                  {scannerPage % 2 !== 0 ? (
-                                     <div className="w-full h-full relative">
-                                        {scannerPreviewUrl && <img src={scannerPreviewUrl || undefined} className="w-full h-full object-contain pointer-events-none block" style={{ filter: getImageFilterStyle() }} />}
-                                     </div>
-                                  ) : (
-                                     <div className="w-full h-full relative">
-                                        {scannerPreviewUrl2 && <img src={scannerPreviewUrl2 || undefined} className="w-full h-full object-contain pointer-events-none block" style={{ filter: getImageFilterStyle() }} />}
-                                     </div>
-                                  )}
+                                  <div className="w-full h-full relative">
+                                     {scannerPreviewUrl2 && <img src={scannerPreviewUrl2 || undefined} className="w-full h-full object-contain pointer-events-none block" style={{ filter: getImageFilterStyle() }} />}
+                                  </div>
                                </div>
+                            )}
+                              </>
                             )}
                           </>
                         );
@@ -1956,7 +1977,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                             <input ref={imageSequenceInputRef} type="file" className="hidden" accept=".jpeg,.jpg,.png,.webp" multiple onChange={(event) => { const files = Array.from(event.target.files || []); event.target.value = ""; void onImageSequenceUpload?.(files); }} />
                             <button data-scanner-upload-dropzone type="button" onClick={() => localUploadInputRef.current?.click()} className={`absolute inset-0 flex cursor-pointer items-center justify-center rounded-[28px] transition-colors duration-200 ${isDragActive ? "bg-[#7868F4]/[0.055] dark:bg-[#7868F4]/[0.10]" : "bg-transparent"}`}>
                               <span className="pointer-events-none absolute left-1/2 top-[42%] flex -translate-x-1/2 -translate-y-1/2 flex-col items-center">
-                                <CloudUpload className={`h-[78px] w-[78px] transition-colors duration-300 ${isDragActive ? "text-[#6D5DE8] dark:text-[#B3AAFF]" : "text-[#78B8E6]/70 dark:text-[#9ED4F5]/58"}`} strokeWidth={1.05} aria-hidden="true" />
+                                <CloudUpload className={`h-[78px] w-[78px] transition-colors duration-300 ${isDragActive ? "text-[#6D5DE8] dark:text-[#B3AAFF]" : "text-[#A8A1BF]/58 dark:text-[#C6C0DE]/46"}`} strokeWidth={1.05} aria-hidden="true" />
                                 <span className="mt-3 text-[13px] font-medium tracking-[-0.015em] text-[#514D5D] dark:text-white/72">{isDragActive ? "Release to add" : "Drop a document"}</span>
                                 <span className="mt-1 text-[10px] text-[#9893A2] dark:text-white/38">{isDragActive ? "Release anywhere in this canvas" : "or choose a file from this device"}</span>
                               </span>
@@ -1967,7 +1988,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                               <button data-scanner-import-url type="button" onClick={() => { const rawUrl = window.prompt("Paste a public document link"); if (rawUrl?.trim()) void onImportFromUrl?.(rawUrl); }} className="inline-flex h-8 shrink-0 whitespace-nowrap items-center gap-1.5 rounded-full px-2 text-[11px] text-[#777386] transition-colors hover:text-[#4B465C] dark:text-white/50 dark:hover:text-white"><Link className="h-3.5 w-3.5" strokeWidth={1.75} />From link</button>
                               <button data-scanner-image-sequence type="button" onClick={() => imageSequenceInputRef.current?.click()} className="inline-flex h-8 shrink-0 whitespace-nowrap items-center gap-1.5 rounded-full px-2 text-[11px] text-[#777386] transition-colors hover:text-[#4B465C] dark:text-white/50 dark:hover:text-white"><Images className="h-3.5 w-3.5" strokeWidth={1.75} />Image sequence</button>
                             </div>
-                            <p className="pointer-events-none absolute left-1/2 top-[87%] z-10 -translate-x-1/2 whitespace-nowrap text-[10px] font-medium tracking-[0.01em] text-[#AAA5B4] dark:text-white/30">PDF · Images · Text &nbsp;•&nbsp; Up to 20 MB</p>
+                            <p className="pointer-events-none absolute left-1/2 top-[87%] z-10 -translate-x-1/2 whitespace-nowrap text-[10px] font-medium tracking-[0.01em] text-[#AAA5B4] dark:text-white/30">PDF · Images · Text &nbsp;•&nbsp; Up to 50 MB</p>
                           </div>
                        )}
                        </div>
@@ -2066,8 +2087,11 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                      <div className="w-[1px] h-4 bg-gray-300 dark:bg-white/10 mx-1"></div>
                      <div className="flex items-center gap-1 text-[13px] font-mono text-gray-700 dark:text-gray-300 select-none">
                         <button disabled={scannerPage <= 1} onClick={handlePrevPage} className="disabled:opacity-30 hover:bg-black/5 dark:hover:bg-white/10 p-1.5 rounded-md"><ChevronLeft className="w-4 h-4"/></button>
-                        <span className="w-10 text-center text-[12px]">{scannerPage}/{scannerTotalPages}</span>
-                        <button disabled={scannerPage >= scannerTotalPages || (scannerPage > 1 && scannerPage % 2 === 0 && scannerPage + 1 >= scannerTotalPages)} onClick={handleNextPage} className="disabled:opacity-30 hover:bg-black/5 dark:hover:bg-white/10 p-1.5 rounded-md"><ChevronRight className="w-4 h-4"/></button>
+                        <label className="flex items-center gap-0.5 text-[12px] text-gray-600 dark:text-gray-300" title="Enter a page number">
+                          <input data-scanner-page-jump aria-label="Go to page" inputMode="numeric" value={pageInputValue} onFocus={(event) => event.currentTarget.select()} onChange={(event) => setPageInputValue(event.target.value.replace(/[^0-9]/g, ""))} onBlur={commitPageInput} onKeyDown={(event) => { event.stopPropagation(); if (event.key === "Enter") { event.currentTarget.blur(); } }} className="w-7 bg-transparent p-0 text-right text-[12px] font-mono text-gray-700 outline-none dark:text-gray-200" />
+                          <span className="text-gray-400 dark:text-gray-500">/{scannerTotalPages}</span>
+                        </label>
+                        <button disabled={scannerPage >= scannerTotalPages} onClick={handleNextPage} className="disabled:opacity-30 hover:bg-black/5 dark:hover:bg-white/10 p-1.5 rounded-md"><ChevronRight className="w-4 h-4"/></button>
                      </div>
                    </>
                  )}

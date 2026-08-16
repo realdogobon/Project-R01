@@ -88,7 +88,7 @@ import { ExportEngine } from "../lib/ExportEngine";
 import { ingestDocument, searchIntelligence, syncRagIndex, ScanDocument, getAllScans, deleteScan, updateDocument, restoreScan } from "../lib/rag-search";
 import { trpc } from "../lib/trpc";
 const globalScannerEngine = new ScannerEngine();
-const SCANNER_MAX_VISUAL_FILE_BYTES = 20_000_000;
+const SCANNER_MAX_VISUAL_FILE_BYTES = 50_000_000;
 const SCANNER_MAX_TEXT_FILE_BYTES = 2_000_000;
 const SCANNER_TEXT_EXTENSIONS = ["txt", "md", "html", "htm", "css", "json", "js", "ts", "csv", "xml", "yaml", "yml"];
 
@@ -1755,7 +1755,7 @@ export default function Workspace() {
         }
       };
 
-      if (pdfDoc.numPages <= 1 || pageNum === 1 || (pageNum === pdfDoc.numPages && pageNum % 2 === 0)) {
+      if (pdfDoc.numPages <= 1 || pageNum === 1 || pageNum === pdfDoc.numPages) {
 
          const pageResult = await getPageCanvas(pageNum);
          const c1 = pageResult?.canvas;
@@ -1845,7 +1845,7 @@ export default function Workspace() {
     const maximumBytes = isPlaintext ? SCANNER_MAX_TEXT_FILE_BYTES : SCANNER_MAX_VISUAL_FILE_BYTES;
     if (file.size > maximumBytes) {
       setOcrError("");
-      setScannerLogs([`File is larger than the scanner's ${isPlaintext ? "2 MB text" : "20 MB"} per-file limit.`]);
+      setScannerLogs([`File is larger than the scanner's ${isPlaintext ? "2 MB text" : "50 MB"} per-file limit.`]);
       return;
     }
     const uploadToken = ++pdfRenderTokenRef.current;

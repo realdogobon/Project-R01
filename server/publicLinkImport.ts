@@ -3,7 +3,7 @@ import http from "node:http";
 import https from "node:https";
 import net from "node:net";
 
-export const MAX_PUBLIC_VISUAL_BYTES = 20_000_000;
+export const MAX_PUBLIC_VISUAL_BYTES = 50_000_000;
 export const MAX_PUBLIC_TEXT_BYTES = 2_000_000;
 const MAX_REDIRECTS = 4;
 const REQUEST_TIMEOUT_MS = 15_000;

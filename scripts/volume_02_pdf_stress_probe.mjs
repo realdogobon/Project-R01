@@ -102,7 +102,8 @@ const readVisiblePaint = async () => page.evaluate(() => {
 const readState = async () => page.evaluate(() => {
   const viewport = document.querySelector("#scanner-viewport");
   const surface = viewport?.querySelector("[data-scanner-document-surface]");
-  const counter = [...document.querySelectorAll("span")].find((node) => /^\d+\/\d+$/.test(node.textContent?.trim() || ""));
+  const pageInput = document.querySelector("[data-scanner-page-jump]");
+  const totalPages = pageInput?.parentElement?.textContent?.trim().replace(/^.*\//, "") || null;
   const image = viewport?.querySelector('img[alt="Scanned Document Paper Element"]') || viewport?.querySelector("img, canvas");
   const rect = (element) => {
     if (!element) return null;
@@ -110,7 +111,7 @@ const readState = async () => page.evaluate(() => {
     return { left: value.left, top: value.top, width: value.width, height: value.height };
   };
   return {
-    counter: counter?.textContent?.trim() || null,
+    counter: pageInput && totalPages ? `${pageInput.value}/${totalPages}` : null,
     loading: document.body.innerText.includes("Loading document"),
     errorText: document.body.innerText.includes("Unable to load this PDF") || document.body.innerText.includes("Failed to render PDF page"),
     viewport: viewport ? {
@@ -127,10 +128,15 @@ const readState = async () => page.evaluate(() => {
 });
 
 const upload = async () => {
-  const inputs = await page.$$('input[type="file"]');
-  if (!inputs.length) throw new Error("No scanner file input found");
-  await inputs.at(-1).uploadFile(pdfPath);
-  await page.waitForFunction(() => /\b1\/\d+\b/.test(document.body.innerText), { timeout: 50000 });
+  const input = await page.$('input[type="file"][accept*=".pdf"]');
+  if (!input) throw new Error("No primary scanner document input found");
+  await input.uploadFile(pdfPath);
+  await page.waitForSelector("[data-scanner-upload-selected]", { timeout: 15000 });
+  await page.click("[data-scanner-local-upload]");
+  await page.waitForFunction(() => {
+    const pageInput = document.querySelector("[data-scanner-page-jump]");
+    return pageInput?.value === "1" && /\/\d+/.test(pageInput.parentElement?.textContent || "");
+  }, { timeout: 50000 });
   await page.waitForFunction(() => {
     const image = document.querySelector('#scanner-viewport img[alt="Scanned Document Paper Element"]') || document.querySelector("#scanner-viewport img, #scanner-viewport canvas");
     return image instanceof HTMLImageElement ? image.complete && image.naturalWidth > 0 : Boolean(image?.width && image?.height);
@@ -146,12 +152,16 @@ const openScanner = async (query) => {
 };
 
 const getPageButton = async (index) => page.evaluateHandle((buttonIndex) => {
-  const counter = [...document.querySelectorAll("span")].find((node) => /^\d+\/\d+$/.test(node.textContent?.trim() || ""));
-  return counter?.parentElement?.querySelectorAll("button")?.[buttonIndex] || null;
+  const pageInput = document.querySelector("[data-scanner-page-jump]");
+  return pageInput?.parentElement?.parentElement?.querySelectorAll("button")?.[buttonIndex] || null;
 }, index);
 
 const waitForCounter = async (value) => {
-  await page.waitForFunction((expected) => document.body.innerText.includes(expected), { timeout: 25000 }, value);
+  await page.waitForFunction((expected) => {
+    const pageInput = document.querySelector("[data-scanner-page-jump]");
+    const total = pageInput?.parentElement?.textContent?.trim().replace(/^.*\//, "");
+    return Boolean(pageInput && total && `${pageInput.value}/${total}` === expected);
+  }, { timeout: 25000 }, value);
   await sleep(420);
   return { state: await readState(), paint: await readVisiblePaint() };
 };
@@ -169,12 +179,26 @@ const navigateToCounter = async (target, direction) => {
     if (!button) throw new Error(`${direction} button not found while targeting ${target}`);
     await button.click();
     await page.waitForFunction((previous) => {
-      const counter = [...document.querySelectorAll("span")].find((node) => /^\d+\/\d+$/.test(node.textContent?.trim() || ""));
-      return counter?.textContent?.trim() !== previous;
+      const pageInput = document.querySelector("[data-scanner-page-jump]");
+      const total = pageInput?.parentElement?.textContent?.trim().replace(/^.*\//, "");
+      return pageInput && total ? `${pageInput.value}/${total}` !== previous : false;
     }, { timeout: 25000 }, current.counter);
     await sleep(120);
   }
   throw new Error(`Navigation exceeded 60 steps while targeting ${target}`);
+};
+
+const jumpToCounter = async (target) => {
+  const expectedPage = target.split("/")[0];
+  await page.click("[data-scanner-page-jump]", { clickCount: 3 });
+  await page.keyboard.type(expectedPage);
+  await page.keyboard.press("Tab");
+  await sleep(600);
+  const afterCommit = await readState();
+  if (afterCommit.counter !== target) {
+    throw new Error(`Direct page entry requested ${target}; input settled at ${afterCommit.counter || "unknown"}`);
+  }
+  return waitForCounter(target);
 };
 
 const isolatedPageRender = async (pageNumber, intent = "display") => page.evaluate(async ({ num, renderIntent }) => {
@@ -246,11 +270,14 @@ try {
   await upload();
   results.sessions.push({ name: "initial-open", state: await readState(), paint: await readVisiblePaint(), canvasTrace: await page.evaluate(() => window.__volume02CanvasTrace), appPdfTrace: await page.evaluate(() => window.__royscriptPdfProbeTrace), isolatedPage1: await isolatedPageRender(1), isolatedPage1Print: await isolatedPageRender(1, "print"), isolatedPage2: await isolatedPageRender(2), isolatedPage50: await isolatedPageRender(50), isolatedPage51: await isolatedPageRender(51) });
 
-  // Volume_02 has an odd page count, so the scanner’s final valid book state is
-  // the 50/51 spread; there is no standalone 51/51 state in the spread contract.
-  for (const target of ["2/51", "4/51", "6/51", "8/51", "10/51", "12/51", "24/51", "50/51"]) {
+  // Volume_02 has an odd page count. Its last page must leave the preceding
+  // spread and render as an independent 51/51 terminal sheet.
+  for (const target of ["2/51", "4/51", "6/51", "8/51", "10/51", "12/51", "24/51", "50/51", "51/51"]) {
     results.transitions.push({ target, ...(await navigateToCounter(target, "next")), canvasTrace: await page.evaluate(() => window.__volume02CanvasTrace.slice(-8)) });
   }
+
+  results.transitions.push({ target: "jump-37/51", ...(await jumpToCounter("37/51")), canvasTrace: await page.evaluate(() => window.__volume02CanvasTrace.slice(-8)) });
+  results.transitions.push({ target: "jump-51/51", ...(await jumpToCounter("51/51")), canvasTrace: await page.evaluate(() => window.__volume02CanvasTrace.slice(-8)) });
 
   for (const target of ["50/51", "24/51", "12/51", "10/51", "8/51", "6/51", "4/51", "2/51", "1/51"]) {
     results.transitions.push({ target, ...(await navigateToCounter(target, "previous")), canvasTrace: await page.evaluate(() => window.__volume02CanvasTrace.slice(-8)) });

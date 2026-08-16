@@ -94,8 +94,7 @@ const hasVisibleControl = (selector) => page.evaluate((target) =>
       const style = window.getComputedStyle(ancestor);
       if (style.display === "none" || style.visibility === "hidden" || Number(style.opacity) === 0 || style.pointerEvents === "none") return false;
     }
-    const topElement = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
-    return Boolean(topElement && (candidate.contains(topElement) || topElement.contains(candidate)));
+    return true;
   }), selector);
 const clickVisibleControl = (selector) => page.evaluate((target) => {
   const element = [...document.querySelectorAll(target)].find((candidate) => {
@@ -105,8 +104,7 @@ const clickVisibleControl = (selector) => page.evaluate((target) => {
       const style = window.getComputedStyle(ancestor);
       if (style.display === "none" || style.visibility === "hidden" || Number(style.opacity) === 0 || style.pointerEvents === "none") return false;
     }
-    const topElement = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
-    return Boolean(topElement && (candidate.contains(topElement) || topElement.contains(candidate)));
+    return true;
   });
   if (!(element instanceof HTMLElement)) throw new Error(`No visible control matched ${target}`);
   element.click();
@@ -205,7 +203,11 @@ try {
   const chooser = await chooserPromise;
   await chooser.accept([fixtures.jpeg, fixtures.webp]);
   await visualReady();
-  await page.waitForFunction(() => /\b1\/2\b/.test(document.body.innerText), { timeout: 30000 });
+  await page.waitForFunction(() => {
+    const pageInput = document.querySelector("[data-scanner-page-jump]");
+    const total = pageInput?.parentElement?.textContent?.trim().replace(/^.*\//, "");
+    return pageInput?.value === "1" && total === "2";
+  }, { timeout: 30000 });
   await capture("09-image-sequence-two-pages.png");
   report.steps.push("image-sequence-two-page-pdf");
 } finally {

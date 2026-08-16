@@ -35,9 +35,11 @@ describe("scanner action-bar layout contract", () => {
     expect(source).toContain("Drop a document");
     expect(source).toContain("Release anywhere in this canvas");
     expect(source).toContain("Add to scanner");
-    expect(source).toContain("Up to 20 MB");
+    expect(source).toContain("Up to 50 MB");
     expect(source).toContain("CloudUpload");
     expect(source).toContain("data-scanner-upload-command-strip");
+    expect(source).toContain("data-scanner-page-jump");
+    expect(source).toContain("event.currentTarget.select()");
     expect(source).toContain("max-w-[620px]");
     expect(source).toContain("min-h-[360px]");
     expect(source).toContain("gap-1 px-4 py-1.5");
