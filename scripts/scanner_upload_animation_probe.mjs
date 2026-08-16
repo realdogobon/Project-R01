@@ -74,6 +74,10 @@ const measureFieldTypography = async () => page.evaluate(() => {
       fontSize: styles.fontSize,
       fontWeight: styles.fontWeight,
       letterSpacing: styles.letterSpacing,
+      lineHeight: styles.lineHeight,
+      fontStyle: styles.fontStyle,
+      textTransform: styles.textTransform,
+      textDecorationLine: styles.textDecorationLine,
     };
   };
   const reference = document.querySelector('label');
@@ -81,6 +85,89 @@ const measureFieldTypography = async () => page.evaluate(() => {
   if (!reference || surfaces.length === 0) throw new Error('Scanner field typography surfaces were not found');
   return { reference: fingerprint(reference), surfaces: surfaces.map(fingerprint) };
 });
+const measureScannerStyleSpecification = async () => page.evaluate(() => {
+  const text = (selector, predicate = () => true) => [...document.querySelectorAll(selector)].find((element) => predicate(element.textContent?.replace(/\s+/g, " ").trim() || ""));
+  const fingerprint = (element) => {
+    if (!element) return null;
+    const styles = getComputedStyle(element);
+    return {
+      fontFamily: styles.fontFamily,
+      fontSize: styles.fontSize,
+      fontWeight: styles.fontWeight,
+      letterSpacing: styles.letterSpacing,
+      lineHeight: styles.lineHeight,
+      fontStyle: styles.fontStyle,
+      textTransform: styles.textTransform,
+      textDecorationLine: styles.textDecorationLine,
+      color: styles.color,
+    };
+  };
+  const controlFingerprint = (element) => {
+    if (!element) return null;
+    const styles = getComputedStyle(element);
+    return {
+      ...fingerprint(element),
+      height: styles.height,
+      borderRadius: styles.borderRadius,
+      backgroundColor: styles.backgroundColor,
+      borderTopColor: styles.borderTopColor,
+      boxShadow: styles.boxShadow,
+    };
+  };
+  const fileType = document.querySelector("[data-scanner-file-type]");
+  const footerScan = text("button", (value) => value === "Scan");
+  const helper = text('[data-scanner-typography="field"]', (value) => value.includes("Up to 50 MB"));
+  const fields = [...document.querySelectorAll('[data-scanner-typography="field"]')];
+  const selected = document.querySelector("[data-scanner-upload-selected]");
+  const selectedLines = selected ? [...selected.querySelectorAll('span')].filter((element) => element.textContent?.trim()) : [];
+  return {
+    reference: fingerprint(text("label", (value) => value === "Scanner")),
+    normalSurfaces: {
+      model: fingerprint(document.querySelector("[data-scanner-model-selector]")),
+      fileType: fingerprint(fileType),
+      resolution: fingerprint([...document.querySelectorAll("select")].find((element) => element.value === "200 dpi")),
+      canvasPrimary: fingerprint(fields.find((element) => ["Drop a document", "Document selected"].includes(element.textContent?.trim() || ""))),
+      canvasSecondary: fingerprint(fields.find((element) => ["or choose a file from this device", "Ready for the scanner"].includes(element.textContent?.trim() || ""))),
+      canvasHelper: fingerprint(helper),
+      footerZoom: fingerprint(fields.find((element) => (element.textContent || "").includes("%"))),
+      footerPage: fingerprint(document.querySelector("[data-scanner-page-jump]")),
+      footerScan: fingerprint(footerScan),
+      selectedTitle: fingerprint(selectedLines[0]),
+      selectedMetadata: fingerprint(selectedLines[1]),
+    },
+    fieldControls: {
+      fileType: controlFingerprint(fileType?.parentElement),
+      model: controlFingerprint(document.querySelector("[data-scanner-model-selector]")),
+      resolution: controlFingerprint([...document.querySelectorAll("select")].find((element) => element.value === "200 dpi")),
+    },
+    accents: {
+      railSelection: getComputedStyle(text("label", (value) => value === "Colour")?.querySelector("div") || document.body).borderTopColor,
+      canvasPrimaryAction: fingerprint(document.querySelector("[data-scanner-local-upload]"))?.color || null,
+      canvasUtilityAction: fingerprint(document.querySelector("[data-scanner-import-url]"))?.color || null,
+      canvasGlyph: getComputedStyle(document.querySelector("[data-scanner-upload-dropzone] svg") || document.body).color,
+    },
+  };
+});
+const assertScannerStyleSpecification = (specification, theme, { selected = false } = {}) => {
+  const required = ["model", "fileType", "resolution", "canvasPrimary", "canvasSecondary", "canvasHelper", "footerZoom", "footerScan"];
+  if (specification.normalSurfaces.footerPage) required.push("footerPage");
+  if (selected) required.push("selectedTitle", "selectedMetadata");
+  for (const surface of required) {
+    const actual = specification.normalSurfaces[surface];
+    if (!actual) throw new Error(`${theme} scanner style audit could not locate ${surface}`);
+    const { color: _color, ...metrics } = actual;
+    const { color: _referenceColor, ...referenceMetrics } = specification.reference;
+    if (JSON.stringify(metrics) !== JSON.stringify(referenceMetrics)) {
+      throw new Error(`${theme} scanner typography diverged at ${surface}: ${JSON.stringify({ reference: referenceMetrics, actual: metrics })}`);
+    }
+  }
+  const stripIntentionalControlTextColor = ({ color: _color, ...control }) => control;
+  const { fileType, model, resolution } = specification.fieldControls;
+  const referenceControl = stripIntentionalControlTextColor(fileType);
+  if (JSON.stringify(stripIntentionalControlTextColor(model)) !== JSON.stringify(referenceControl) || JSON.stringify(stripIntentionalControlTextColor(resolution)) !== JSON.stringify(referenceControl)) {
+    throw new Error(`${theme} scanner field-control geometry or styling diverged from File type: ${JSON.stringify({ fileType, model, resolution })}`);
+  }
+};
 const assertFieldTypography = (state, theme, minimumSurfaces = 3) => {
   if (state.surfaces.length < minimumSurfaces) throw new Error(`${theme} theme did not expose enough scanner field typography surfaces`);
   for (const surface of state.surfaces) {
@@ -95,6 +182,8 @@ try {
   report.states.idle = await measureState();
   report.states.lightTypography = await measureFieldTypography();
   assertFieldTypography(report.states.lightTypography, "light");
+  report.states.lightStyleSpecification = await measureScannerStyleSpecification();
+  assertScannerStyleSpecification(report.states.lightStyleSpecification, "light");
   await capture("01-idle.png");
 
   const idleHoverBefore = await page.evaluate(() => {
@@ -134,6 +223,8 @@ try {
   await page.waitForSelector("[data-scanner-upload-thumbnail]", { timeout: 5_000 });
   report.states.selectedTypography = await measureFieldTypography();
   assertFieldTypography(report.states.selectedTypography, "light selected-file", 5);
+  report.states.selectedStyleSpecification = await measureScannerStyleSpecification();
+  assertScannerStyleSpecification(report.states.selectedStyleSpecification, "light selected-file", { selected: true });
   report.states.selected = { ...(await measureState()), hasLocalThumbnail: true };
   await capture("03-selected-file.png");
   await page.click("[data-scanner-local-upload]");
@@ -202,6 +293,8 @@ try {
   await page.waitForFunction(() => document.documentElement.classList.contains("dark"), { timeout: 5_000 });
   report.states.darkTypography = await measureFieldTypography();
   assertFieldTypography(report.states.darkTypography, "dark");
+  report.states.darkStyleSpecification = await measureScannerStyleSpecification();
+  assertScannerStyleSpecification(report.states.darkStyleSpecification, "dark");
   await capture("05d-dark-typography.png");
 
   await openScanner("silent-rejection");

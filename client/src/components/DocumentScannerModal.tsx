@@ -1465,7 +1465,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                    onChange={e => setSelectedScanner(e.target.value)}
                    disabled={!hasAnyConfiguredProvider}
                    data-scanner-model-selector
-                   className="w-full appearance-none bg-white dark:bg-[#2A2A35] border border-[#E5DCDA] dark:border-[#1A1A23] rounded-md px-3 py-1.5 font-sans text-[13px] font-normal tracking-normal text-[#202020] dark:text-[#EAEAEA] outline-none shadow-sm focus:border-[#C28181] dark:focus:border-[#60C5EA] disabled:cursor-not-allowed disabled:opacity-50"
+                   className="h-8 w-full appearance-none bg-white dark:bg-[#2A2A35] border border-[#E5DCDA] dark:border-[#1A1A23] rounded-md px-3 py-1.5 font-sans text-[13px] font-normal tracking-normal text-[#202020] dark:text-[#EAEAEA] outline-none shadow-sm focus:border-[#C28181] dark:focus:border-[#60C5EA] disabled:cursor-not-allowed disabled:opacity-50"
                   >
                      <optgroup label="Google Gemini" disabled={!configuredProviders.gemini}>
                       <option value="gemini-3.7-flash">Gemini 3.7 Flash</option>
@@ -1557,7 +1557,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
                  <select
                    value={selectedResolution}
                    onChange={e => setSelectedResolution(e.target.value)}
-                   className="w-full appearance-none bg-white dark:bg-[#2A2A35] border border-[#E5DCDA] dark:border-[#1A1A23] rounded-md px-3 py-1.5 font-sans text-[13px] font-normal tracking-normal text-[#202020] dark:text-[#EAEAEA] outline-none shadow-sm focus:border-[#C28181] dark:focus:border-[#60C5EA]"
+                   className="h-8 w-full appearance-none bg-white dark:bg-[#2A2A35] border border-[#E5DCDA] dark:border-[#1A1A23] rounded-md px-3 py-1.5 font-sans text-[13px] font-normal tracking-normal text-[#202020] dark:text-[#EAEAEA] outline-none shadow-sm focus:border-[#C28181] dark:focus:border-[#60C5EA]"
                  >
                     <option>150 dpi</option>
                     <option>200 dpi</option>

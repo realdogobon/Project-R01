@@ -75,6 +75,7 @@ describe("scanner action-bar layout contract", () => {
 
     expect(source).toContain('data-scanner-model-selector');
     expect(source).toContain('font-sans text-[13px] font-normal tracking-normal text-[#202020] dark:text-[#EAEAEA]');
+    expect(source.match(/h-8 w-full appearance-none bg-white dark:bg-\[#2A2A35\] border border-\[#E5DCDA\]/g)?.length).toBeGreaterThanOrEqual(2);
     expect(source).toContain('data-scanner-file-type data-scanner-typography="field"');
     expect(source).toContain('data-scanner-upload-command-strip');
     expect(source).toContain('data-scanner-page-jump');
