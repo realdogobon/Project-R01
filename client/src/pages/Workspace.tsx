@@ -151,45 +151,30 @@ function buildTabAccentPath(width: number, height: number, flushLeft: boolean): 
   return `M 0 ${height} L 0 ${r} A ${r} ${r} 0 0 1 ${r} 0 L ${width - r} 0 A ${r} ${r} 0 0 1 ${width} ${r} L ${width} ${height}`;
 }
 
-const ScannerLiveIcon = ({ className = "w-4 h-4" }: { className?: string }) => {
-  let themeAccentColor = "#3b82f6"; // default blue
-  try {
-    const { accent } = useSettings();
-    const currentThemeObj = THEME_OPTIONS.find((t) => t.id === accent) || THEME_OPTIONS[0];
-    themeAccentColor = currentThemeObj.colors[2];
-  } catch {}
-
-  return (
-    <div className={`relative flex items-center justify-center scanner-icon-wrapper ${className}`}>
-      <style>{`
-        @keyframes scanMini {
-          0%, 100% { transform: translateY(-7px); }
-          50% { transform: translateY(7px); }
+const ScannerLiveIcon = ({ className = "w-4 h-4" }: { className?: string }) => (
+  <div className={`relative flex items-center justify-center scanner-icon-wrapper ${className}`}>
+    <style>{`
+      @media (prefers-reduced-motion: no-preference) {
+        .scanner-icon-wrapper:hover .scanner-paper,
+        .scanner-icon-wrapper.is-selected-live .scanner-paper {
+          transform: translateY(-6px);
+          opacity: 0.9;
         }
+      }
 
-        .scanner-line {
-          opacity: 0;
-          transition: opacity 0.5s ease-in-out;
-        }
-
-        /* The animation should always run but we only see it when opacity is 1 */
-        .scanner-icon-wrapper:hover .scanner-line,
-        .is-selected-live .scanner-line {
-          opacity: 1;
-          animation: scanMini 1.5s cubic-bezier(0.4, 0.0, 0.2, 1) infinite;
-        }
-      `}</style>
-      <FileText strokeWidth={1.5} className="w-full h-full text-current opacity-80" />
-      <div
-        className="scanner-line absolute left-[-15%] right-[-15%] h-[1.5px] z-10 rounded-full pointer-events-none"
-        style={{
-          backgroundColor: themeAccentColor,
-          boxShadow: `0 0 8px ${themeAccentColor}`
-        }}
-      />
-    </div>
-  );
-};
+      .scanner-paper {
+        transform: translateY(0);
+        opacity: 0;
+        transition:
+          transform 0.35s cubic-bezier(0.23, 1, 0.32, 1),
+          opacity 0.35s cubic-bezier(0.23, 1, 0.32, 1);
+        will-change: transform, opacity;
+      }
+    `}</style>
+    <div className="scanner-paper absolute top-1/2 left-1/2 w-[55%] h-[60%] -translate-x-1/2 translate-y-1/2 z-0 rounded-[1.5px] pointer-events-none bg-current opacity-90" />
+    <Printer strokeWidth={1.75} className="relative z-10 w-full h-full text-current opacity-80" />
+  </div>
+);
 
 function safeRandomUUID(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
