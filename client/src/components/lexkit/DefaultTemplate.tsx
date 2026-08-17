@@ -37,7 +37,8 @@ import {
   type BaseCommands,
   RichText,
 } from "@lexkit/editor";
-import { LexicalEditor, $getRoot, $createParagraphNode, $getSelection, $isRangeSelection, $isNodeSelection, $setSelection, $createNodeSelection, $createRangeSelection, $isTextNode } from "lexical";
+import { LexicalEditor, $getRoot, $createParagraphNode, $getSelection, $isRangeSelection, $isNodeSelection, $setSelection, $createNodeSelection, $createRangeSelection, $isTextNode, $isElementNode } from "lexical";
+import type { EditorSelectionStatus } from "../../lib/statusBar";
 import { Bold, Italic, Underline, Strikethrough, List, ListOrdered, Undo, Redo, Sun, Moon, Image as ImageIcon, AlignLeft, AlignCenter, AlignRight, Upload, Link, Unlink, Minus, Code, Terminal, Table as TableIcon, FileCode, Eye, Pencil, Command, Type, Quote, Indent, Outdent } from "lucide-react";
 import { Select, Dropdown, Dialog } from "./components";
 import {
@@ -625,6 +626,7 @@ function EditorContent({
   toggleTheme,
   onReady,
   onChange,
+  onStatusChange,
   readOnly,
   examActive,
   toolbarLeftAddon,
@@ -633,12 +635,15 @@ function EditorContent({
   toolbarLocked,
   sealedVisual,
   onReadOnlyEditorDoubleClick,
+  indentMode,
+  tabSize,
 }: {
   className?: string;
   isDark: boolean;
   toggleTheme: () => void;
   onReady?: (methods: DefaultTemplateRef) => void;
   onChange?: () => void;
+  onStatusChange?: (status: EditorSelectionStatus) => void;
   readOnly?: boolean;
   examActive?: boolean;
   toolbarLeftAddon?: React.ReactNode;
@@ -647,6 +652,8 @@ function EditorContent({
   toolbarLocked?: boolean;
   sealedVisual?: boolean;
   onReadOnlyEditorDoubleClick?: () => void;
+  indentMode?: "tabs" | "spaces";
+  tabSize?: 2 | 4 | 8;
 }) {
   const alert = (message: string) => {
     try {
@@ -883,35 +890,52 @@ function EditorContent({
         setTimeout(() => {
           editor.update(() => {
             const root = $getRoot();
-            const textNodes: any[] = [];
-            const collectTextNodes = (node: any) => {
-              if ($isTextNode(node)) {
-                textNodes.push(node);
-              } else if (typeof node.getChildren === "function") {
-                node.getChildren().forEach(collectTextNodes);
-              }
-            };
-            root.getChildren().forEach(collectTextNodes);
-
             const locate = (offset: number) => {
-              let remaining = offset;
-              for (const node of textNodes) {
-                const len = node.getTextContentSize();
-                if (remaining <= len) {
-                  return { node, offset: remaining };
+              const target = Math.max(0, offset);
+              let blockStart = 0;
+              const blocks = root.getChildren();
+
+              for (let blockIndex = 0; blockIndex < blocks.length; blockIndex += 1) {
+                const block = blocks[blockIndex];
+                const blockText = block.getTextContent();
+                const blockEnd = blockStart + blockText.length;
+                const isLastBlock = blockIndex === blocks.length - 1;
+
+                if (target <= blockEnd || isLastBlock) {
+                  let remaining = Math.max(0, Math.min(target - blockStart, blockText.length));
+                  const textNodes: any[] = [];
+                  const collectTextNodes = (node: any) => {
+                    if ($isTextNode(node)) {
+                      textNodes.push(node);
+                    } else if (typeof node.getChildren === "function") {
+                      node.getChildren().forEach(collectTextNodes);
+                    }
+                  };
+                  collectTextNodes(block);
+
+                  for (const node of textNodes) {
+                    const len = node.getTextContentSize();
+                    if (remaining <= len) {
+                      return { node, offset: remaining, type: "text" as const };
+                    }
+                    remaining -= len;
+                  }
+
+                  if ($isElementNode(block)) {
+                    return { node: block, offset: 0, type: "element" as const };
+                  }
                 }
-                remaining -= len;
+                blockStart = blockEnd + 1;
               }
-              const last = textNodes[textNodes.length - 1];
-              return last ? { node: last, offset: last.getTextContentSize() } : null;
+              return null;
             };
 
             const anchorPos = locate(range.start);
             const focusPos = locate(range.end);
             if (anchorPos && focusPos) {
               const selection = $createRangeSelection();
-              selection.anchor.set(anchorPos.node.getKey(), anchorPos.offset, "text");
-              selection.focus.set(focusPos.node.getKey(), focusPos.offset, "text");
+              selection.anchor.set(anchorPos.node.getKey(), anchorPos.offset, anchorPos.type);
+              selection.focus.set(focusPos.node.getKey(), focusPos.offset, focusPos.type);
               $setSelection(selection);
             }
           });
@@ -933,13 +957,70 @@ function EditorContent({
 
   useEffect(() => {
     if (!editor) return;
-    // OPTION A: no caret JS — Lexical's update listener only notifies onChange.
-    return editor.registerUpdateListener(({ dirtyElements, dirtyLeaves }) => {
+    return editor.registerUpdateListener(({ editorState, dirtyElements, dirtyLeaves }) => {
       if (dirtyElements.size > 0 || dirtyLeaves.size > 0) {
         if (onChange) onChange();
       }
+      if (onStatusChange) {
+        editorState.read(() => {
+          const root = $getRoot();
+          const selection = $getSelection();
+          const blocks = root.getChildren();
+          const textNodes: Array<{ key: string; text: string; start: number }> = [];
+          const blockStarts = new Map<string, number>();
+          let documentOffset = 0;
+
+          const collectTextNodes = (node: any, blockStart: number, cursor: { value: number }) => {
+            if ($isTextNode(node)) {
+              textNodes.push({ key: node.getKey(), text: node.getTextContent(), start: blockStart + cursor.value });
+              cursor.value += node.getTextContent().length;
+            } else if (typeof node.getChildren === "function") {
+              node.getChildren().forEach((child: any) => collectTextNodes(child, blockStart, cursor));
+            }
+          };
+
+          const text = blocks.map((block, index) => {
+            const blockText = block.getTextContent();
+            blockStarts.set(block.getKey(), documentOffset);
+            collectTextNodes(block, documentOffset, { value: 0 });
+            documentOffset += blockText.length + (index < blocks.length - 1 ? 1 : 0);
+            return blockText;
+          }).join("\n");
+
+          if (!$isRangeSelection(selection)) {
+            onStatusChange({ text, anchor: null, focus: null });
+            return;
+          }
+
+          const toGlobalOffset = (point: any): number | null => {
+            const node = point.getNode();
+            if ($isTextNode(node)) {
+              const textNode = textNodes.find((entry) => entry.key === node.getKey());
+              if (!textNode) return null;
+              return Math.min(text.length, textNode.start + Math.max(0, Math.min(point.offset, textNode.text.length)));
+            }
+
+            if ($isElementNode(node)) {
+              let block: any = node;
+              while (block.getParent?.() && block.getParent() !== root) block = block.getParent();
+              const blockStart = blockStarts.get(block.getKey());
+              if (blockStart === undefined) return null;
+
+              if (node === block && typeof node.getChildren === "function") {
+                const childCount = Math.max(0, Math.min(point.offset, node.getChildrenSize?.() ?? 0));
+                const precedingText = node.getChildren().slice(0, childCount).map((child: any) => child.getTextContent()).join("");
+                return Math.min(text.length, blockStart + precedingText.length);
+              }
+              return blockStart;
+            }
+            return null;
+          };
+
+          onStatusChange({ text, anchor: toGlobalOffset(selection.anchor), focus: toGlobalOffset(selection.focus) });
+        });
+      }
     });
-  }, [editor, onChange]);
+  }, [editor, onChange, onStatusChange]);
 
   useEffect(() => {
     if (!editor) return;
@@ -1037,7 +1118,16 @@ function EditorContent({
         onContextMenuCapture={(e) => { if (examActive || readOnly) { e.preventDefault(); e.stopPropagation(); } }}
         onMouseDownCapture={(e) => { if (readOnly) { e.preventDefault(); e.stopPropagation(); } }}
         onPointerDownCapture={(e) => { if (readOnly) { e.preventDefault(); e.stopPropagation(); } }}
-        onKeyDownCapture={(e) => { if (readOnly) { e.preventDefault(); e.stopPropagation(); } }}
+        onKeyDownCapture={(e) => {
+          if (readOnly) { e.preventDefault(); e.stopPropagation(); return; }
+          if (e.key !== "Tab" || e.ctrlKey || e.metaKey || e.altKey || !(e.target as HTMLElement).closest(".lexkit-content-editable")) return;
+          e.preventDefault();
+          e.stopPropagation();
+          editor?.update(() => {
+            const selection = $getSelection();
+            if ($isRangeSelection(selection)) selection.insertText(indentMode === "tabs" ? "\t" : " ".repeat(tabSize ?? 4));
+          });
+        }}
         onDoubleClick={() => { if (readOnly) onReadOnlyEditorDoubleClick?.(); }}
       >
         <div className="flex flex-col flex-1 min-h-0">
@@ -1126,6 +1216,7 @@ interface DefaultTemplateProps {
   className?: string;
   onReady?: (methods: DefaultTemplateRef) => void;
   onChange?: () => void;
+  onStatusChange?: (status: EditorSelectionStatus) => void;
   readOnly?: boolean;
   examActive?: boolean;
   toolbarLeftAddon?: React.ReactNode;
@@ -1134,9 +1225,11 @@ interface DefaultTemplateProps {
   toolbarLocked?: boolean;
   sealedVisual?: boolean;
   onReadOnlyEditorDoubleClick?: () => void;
+  indentMode?: "tabs" | "spaces";
+  tabSize?: 2 | 4 | 8;
 }
 
-export const DefaultTemplate = forwardRef<DefaultTemplateRef, DefaultTemplateProps>(({ className, onReady, onChange, readOnly, examActive, toolbarLeftAddon, toolbarWorkspaceAddon, toolbarRightAddon, toolbarLocked, sealedVisual, onReadOnlyEditorDoubleClick }, ref) => {
+export const DefaultTemplate = forwardRef<DefaultTemplateRef, DefaultTemplateProps>(({ className, onReady, onChange, onStatusChange, readOnly, examActive, toolbarLeftAddon, toolbarWorkspaceAddon, toolbarRightAddon, toolbarLocked, sealedVisual, onReadOnlyEditorDoubleClick, indentMode, tabSize }, ref) => {
   const { theme: globalTheme, resolvedTheme } = useTheme();
   const [editorTheme, setEditorTheme] = useState<"light" | "dark">("light");
 
@@ -1173,7 +1266,7 @@ export const DefaultTemplate = forwardRef<DefaultTemplateRef, DefaultTemplatePro
   return (
     <div className={`lexkit-editor-wrapper flex flex-col h-full border-none rounded-none shadow-none !bg-transparent ${className || ""}`} data-editor-theme={editorTheme}>
       <Provider extensions={extensions} config={{ theme: defaultTheme }}>
-        <EditorContent className={className} isDark={isDark} toggleTheme={toggleTheme} onReady={handleReady} onChange={onChange} readOnly={readOnly} examActive={examActive} toolbarLeftAddon={toolbarLeftAddon} toolbarWorkspaceAddon={toolbarWorkspaceAddon} toolbarRightAddon={toolbarRightAddon} toolbarLocked={toolbarLocked} sealedVisual={sealedVisual} onReadOnlyEditorDoubleClick={onReadOnlyEditorDoubleClick} />
+        <EditorContent className={className} isDark={isDark} toggleTheme={toggleTheme} onReady={handleReady} onChange={onChange} onStatusChange={onStatusChange} readOnly={readOnly} examActive={examActive} toolbarLeftAddon={toolbarLeftAddon} toolbarWorkspaceAddon={toolbarWorkspaceAddon} toolbarRightAddon={toolbarRightAddon} toolbarLocked={toolbarLocked} sealedVisual={sealedVisual} onReadOnlyEditorDoubleClick={onReadOnlyEditorDoubleClick} indentMode={indentMode} tabSize={tabSize} />
       </Provider>
     </div>
   );

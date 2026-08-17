@@ -109,6 +109,13 @@
     transform: none !important;
   }
 
+  [data-workspace-statusbar] button,
+  [data-workspace-statusbar] button:hover:not(:disabled),
+  [data-workspace-statusbar] button:active:not(:disabled) {
+    animation: none !important;
+    transform: none !important;
+  }
+
   /* A completed exam remains visibly distinct without dimming its toolbar or
      the floating Task View that lives in the toolbar slot. */
   .lexkit-sealed-document .lexkit-content-editable,
@@ -302,6 +309,81 @@
 
   .dark .range-slider-custom::-webkit-slider-runnable-track {
     background: rgba(255,255,255,0.1);
+  }
+
+  /* Windows/Notepads-inspired Zoom flyout: the input paints the complete
+     two-tone rail itself, preventing the native WebKit track from masking the
+     current-progress fill. The narrow thumb follows Notepads' accent control. */
+  .statusbar-zoom-slider {
+    height: 24px;
+    background: linear-gradient(90deg, #0078d4 0 var(--statusbar-zoom-progress, 0%), #8e8e8e var(--statusbar-zoom-progress, 0%) 100%) center / 100% 4px no-repeat;
+  }
+
+  .statusbar-zoom-slider::-webkit-slider-thumb {
+    -webkit-appearance: none !important;
+    appearance: none;
+    height: 14px;
+    width: 8px;
+    margin-top: -5px;
+    border: 0;
+    border-radius: 3px;
+    background: #0078d4 !important;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.12);
+    transition: background-color 120ms ease-out, transform 120ms ease-out;
+  }
+
+  .statusbar-zoom-slider:hover::-webkit-slider-thumb,
+  .statusbar-zoom-slider:focus-visible::-webkit-slider-thumb {
+    background: #006cbd;
+  }
+
+  .statusbar-zoom-slider:active::-webkit-slider-thumb {
+    transform: none;
+  }
+
+  .statusbar-zoom-slider::-webkit-slider-runnable-track {
+    height: 4px;
+    border-radius: 2px;
+    background: transparent;
+  }
+
+  .dark .statusbar-zoom-slider {
+    background: linear-gradient(90deg, #60a5fa 0 var(--statusbar-zoom-progress, 0%), #737373 var(--statusbar-zoom-progress, 0%) 100%) center / 100% 4px no-repeat;
+  }
+
+  .dark .statusbar-zoom-slider::-webkit-slider-thumb {
+    background: #60a5fa !important;
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.16);
+  }
+
+  .statusbar-zoom-slider::-moz-range-track {
+    height: 4px;
+    border-radius: 2px;
+    background: #8e8e8e;
+  }
+
+  .statusbar-zoom-slider::-moz-range-progress {
+    height: 4px;
+    border-radius: 2px;
+    background: #0078d4;
+  }
+
+  .statusbar-zoom-slider::-moz-range-thumb {
+    height: 14px;
+    width: 8px;
+    border: 0;
+    border-radius: 3px;
+    background: #0078d4;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.12);
+  }
+
+  .dark .statusbar-zoom-slider::-moz-range-track {
+    background: #737373;
+  }
+
+  .dark .statusbar-zoom-slider::-moz-range-progress,
+  .dark .statusbar-zoom-slider::-moz-range-thumb {
+    background: #60a5fa;
   }
 
 

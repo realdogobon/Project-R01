@@ -88,6 +88,20 @@ import { transcribeWithModel, hasApiKeyFor, getProviderOf } from "../lib/AiVisio
 import { ExportEngine } from "../lib/ExportEngine";
 import { ingestDocument, searchIntelligence, syncRagIndex, ScanDocument, getAllScans, deleteScan, updateDocument, restoreScan } from "../lib/rag-search";
 import { trpc } from "../lib/trpc";
+import {
+  DEFAULT_TAB_FORMAT,
+  createFormattedTextBlob,
+  encodingLabel,
+  getLineColumn,
+  getSelectionRange,
+  lineEndingLabel,
+  normalizeTabFormat,
+  readFormattedTextFile,
+  type EditorSelectionStatus,
+  type LineEnding,
+  type TabFormat,
+  type TextEncoding,
+} from "../lib/statusBar";
 const globalScannerEngine = new ScannerEngine();
 const SCANNER_MAX_VISUAL_FILE_BYTES = 50_000_000;
 const SCANNER_MAX_TEXT_FILE_BYTES = 2_000_000;
@@ -521,7 +535,7 @@ export default function Workspace() {
     const uid = user?.uid ?? guestUid;
     try { localStorage.removeItem(`typing_suite_state_${uid}`); } catch {}
     const newId = String(Date.now());
-    setTabs([{ id: newId, name: "New Document", content: "", isDirty: false, isAutoNamed: true, examSealed: false }]);
+    setTabs([{ id: newId, name: "New Document", content: "", isDirty: false, isAutoNamed: true, examSealed: false, format: DEFAULT_TAB_FORMAT, savedContent: "", savedFormat: DEFAULT_TAB_FORMAT }]);
     setActiveTabId(newId);
     setFileName("New Document");
     setIsDirty(false);
@@ -603,8 +617,8 @@ export default function Workspace() {
 
 
 
-  const [tabs, setTabs] = useState<Array<{ id: string; name: string; content: string; fileHandle?: any; isDirty?: boolean; isAutoNamed?: boolean; examSealed?: boolean; hasGlowedOnce?: boolean; lastActiveAt?: number }>>([
-    { id: "1", name: "New Document", content: "", isDirty: false, isAutoNamed: true, examSealed: false, hasGlowedOnce: false }
+  const [tabs, setTabs] = useState<Array<{ id: string; name: string; content: string; fileHandle?: any; isDirty?: boolean; isAutoNamed?: boolean; examSealed?: boolean; hasGlowedOnce?: boolean; lastActiveAt?: number; format?: TabFormat; savedContent?: string; savedFormat?: TabFormat }>>([
+    { id: "1", name: "New Document", content: "", isDirty: false, isAutoNamed: true, examSealed: false, hasGlowedOnce: false, format: DEFAULT_TAB_FORMAT, savedContent: "", savedFormat: DEFAULT_TAB_FORMAT }
   ]);
   const [activeTabId, setActiveTabId] = useState<string>("1");
   const [glowingTabId, setGlowingTabId] = useState<string | null>(null);
@@ -897,7 +911,7 @@ export default function Workspace() {
     setTabs(prev => prev.map(t => t.id === activeTabId ? { ...t, content: currentText, isDirty: isDirty } : t));
 
     const newId = String(Date.now());
-    const newTab = { id: newId, name, content, fileHandle, isDirty: false, isAutoNamed: true, hasGlowedOnce: false };
+    const newTab = { id: newId, name, content, fileHandle, isDirty: false, isAutoNamed: true, hasGlowedOnce: false, format: DEFAULT_TAB_FORMAT, savedContent: content, savedFormat: DEFAULT_TAB_FORMAT };
     setTabs(prev => [...prev, newTab]);
     setActiveTabId(newId);
     setFileName(name);
@@ -1161,6 +1175,22 @@ export default function Workspace() {
     else if (action === "closeAllTabs") {
       closeAllTabsNow();
     }
+    else if (action === "revertActiveTab") {
+      const tab = tabs.find((candidate) => candidate.id === activeTabId);
+      if (!tab || tab.examSealed) return;
+      const savedContent = tab.savedContent ?? "";
+      if (tab.name.toLowerCase().endsWith(".html")) {
+        editorRef.current?.injectHTML(savedContent);
+      } else {
+        editorRef.current?.injectMarkdown(savedContent);
+      }
+      setEditorContent(savedContent);
+      setTabs((previous) => previous.map((candidate) => candidate.id === activeTabId
+        ? { ...candidate, content: savedContent, format: normalizeTabFormat(candidate.savedFormat), isDirty: false }
+        : candidate));
+      setIsDirty(false);
+      requestAnimationFrame(() => editorRef.current?.focus());
+    }
     else if (action.startsWith("animatedCloseTab:")) {
       const tabId = action.replace("animatedCloseTab:", "");
       pendingCloseTabIdRef.current = tabId;
@@ -1240,7 +1270,7 @@ export default function Workspace() {
     examTotalSeconds?: number;
     examReplayLog?: { t: number; s: string; c?: { start: number; end: number } }[];
     examSealed?: boolean;
-    tabs?: Array<{ id: string; name: string; content: string; isDirty?: boolean; isAutoNamed?: boolean; examSealed?: boolean }>;
+    tabs?: Array<{ id: string; name: string; content: string; isDirty?: boolean; isAutoNamed?: boolean; examSealed?: boolean; format?: TabFormat; savedContent?: string }>;
     activeTabId?: string;
     workspaceTabCacheResetVersion?: number;
   }
@@ -1261,7 +1291,7 @@ export default function Workspace() {
       return saved;
     }
 
-    const cleanTab = { id: "1", name: "New Document", content: "", isDirty: false, isAutoNamed: true, examSealed: false };
+    const cleanTab = { id: "1", name: "New Document", content: "", isDirty: false, isAutoNamed: true, examSealed: false, format: DEFAULT_TAB_FORMAT, savedContent: "", savedFormat: DEFAULT_TAB_FORMAT };
     const resetSnapshot: AccountStateSnapshot = {
       ...(saved ?? { editorContent: "", mode: "Write" as const }),
       editorContent: "",
@@ -1316,8 +1346,8 @@ export default function Workspace() {
         // Restore every tab that was open — dirty scratch docs AND the exam
         // tab — so a crash never silently drops in-progress documents.
         const restoredTabs = (snap.tabs && snap.tabs.length > 0)
-          ? snap.tabs
-          : [{ id: "1", name: restoredName, content, isDirty: false, isAutoNamed: !snap.fileName, examSealed: !!snap.examSealed }];
+          ? snap.tabs.map((tab) => ({ ...tab, format: normalizeTabFormat(tab.format), savedContent: tab.savedContent ?? tab.content }))
+          : [{ id: "1", name: restoredName, content, isDirty: false, isAutoNamed: !snap.fileName, examSealed: !!snap.examSealed, format: DEFAULT_TAB_FORMAT, savedContent: content, savedFormat: DEFAULT_TAB_FORMAT }];
         const restoredActiveId = (snap.activeTabId && restoredTabs.some(t => t.id === snap.activeTabId))
           ? snap.activeTabId
           : restoredTabs[0].id;
@@ -1353,7 +1383,7 @@ export default function Workspace() {
       // No saved state — fresh blank slate
       setMode("Write");
       setEditorContent("");
-      setTabs([{ id: "1", name: "New Document", content: "", isDirty: false, isAutoNamed: true, examSealed: false }]);
+      setTabs([{ id: "1", name: "New Document", content: "", isDirty: false, isAutoNamed: true, examSealed: false, format: DEFAULT_TAB_FORMAT, savedContent: "", savedFormat: DEFAULT_TAB_FORMAT }]);
       setActiveTabId("1");
       setFileName("New Document");
       setIsDirty(false);
@@ -1433,6 +1463,38 @@ export default function Workspace() {
   };
 
   const [editorContent, setEditorContent] = useState("");
+  const [editorStatus, setEditorStatus] = useState<EditorSelectionStatus>({ text: "", anchor: null, focus: null });
+  const [statusMenu, setStatusMenu] = useState<"zoom" | "lineEnding" | "encoding" | null>(null);
+  const activeWorkspaceTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0];
+  const activeTabFormat = normalizeTabFormat(activeWorkspaceTab?.format);
+  const updateActiveTabFormat = useCallback((next: Partial<TabFormat>) => {
+    setTabs((previous) => previous.map((tab) => tab.id === activeTabId
+      ? { ...tab, format: { ...normalizeTabFormat(tab.format), ...next }, isDirty: true }
+      : tab));
+    setIsDirty(true);
+  }, [activeTabId]);
+  const setStatusZoom = useCallback((percentage: number) => {
+    const bounded = Math.max(20, Math.min(300, percentage));
+    setEditorZoom(Math.round(bounded / 10) * 0.1);
+  }, []);
+
+  useEffect(() => {
+    if (!statusMenu) return;
+    const dismiss = (event: PointerEvent) => {
+      if (!(event.target as HTMLElement | null)?.closest("[data-statusbar-control]")) {
+        setStatusMenu(null);
+      }
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setStatusMenu(null);
+    };
+    document.addEventListener("pointerdown", dismiss, true);
+    document.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("pointerdown", dismiss, true);
+      document.removeEventListener("keydown", escape);
+    };
+  }, [statusMenu]);
   const [sidebarTab, setSidebarTab] = useState<"file" | "stats" | "ai" | "rag">("file");
   const [recentFiles, setRecentFiles] = useState<Array<{ name: string; content: string; handle?: any }>>([]);
   const [customPracticeText, setCustomPracticeText] = useState("");
@@ -1493,6 +1555,10 @@ export default function Workspace() {
         font-size: 15px !important;
         font-weight: normal !important;
         font-style: normal !important;
+      }
+
+      .lexkit-content-editable {
+        font-size: var(--royscript-editor-zoom, 100%) !important;
       }
     `;
   }, [fontCssFamily]);
@@ -2987,7 +3053,8 @@ export default function Workspace() {
     }
 
     const loadFileData = async (file: File, fileHandle?: any) => {
-      const contents = await file.text();
+      const loaded = await readFormattedTextFile(file);
+      const contents = loaded.text;
 
       const currentActiveTab = tabs.find(t => t.id === activeTabId);
       const isCurrentEmptyAndNotDirty = currentActiveTab && currentActiveTab.content.trim() === "" && !currentActiveTab.isDirty && currentActiveTab.name === "New Document";
@@ -2997,7 +3064,7 @@ export default function Workspace() {
         setIsDirty(false);
         setCurrentFileHandle(fileHandle || null);
         setEditorContent(contents);
-        setTabs(prev => prev.map(t => t.id === activeTabId ? { ...t, name: file.name, content: contents, fileHandle: fileHandle || null, isDirty: false, isAutoNamed: false } : t));
+        setTabs(prev => prev.map(t => t.id === activeTabId ? { ...t, name: file.name, content: contents, fileHandle: fileHandle || null, isDirty: false, isAutoNamed: false, format: loaded.format, savedContent: contents, savedFormat: loaded.format } : t));
         if (editorRef.current) {
           if (file.name.endsWith(".html")) {
             editorRef.current.injectHTML(contents);
@@ -3007,7 +3074,7 @@ export default function Workspace() {
         }
       } else {
         const newId = String(Date.now());
-        const newTab = { id: newId, name: file.name, content: contents, fileHandle: fileHandle || null, isDirty: false, isAutoNamed: false };
+        const newTab = { id: newId, name: file.name, content: contents, fileHandle: fileHandle || null, isDirty: false, isAutoNamed: false, format: loaded.format, savedContent: contents, savedFormat: loaded.format };
         setTabs(prev => [...prev, newTab]);
         setActiveTabId(newId);
         setFileName(file.name);
@@ -3083,13 +3150,13 @@ export default function Workspace() {
       const content = editorRef.current ? editorRef.current.getMarkdown() : "";
       if (currentFileHandle) {
         const writable = await currentFileHandle.createWritable();
-        await writable.write(content);
+        await writable.write(createFormattedTextBlob(content, activeTabFormat));
         await writable.close();
         setIsDirty(false);
         setEditorContent(content);
 
 
-        setTabs(prev => prev.map(t => t.id === activeTabId ? { ...t, content, isDirty: false, isAutoNamed: false } : t));
+        setTabs(prev => prev.map(t => t.id === activeTabId ? { ...t, content, isDirty: false, isAutoNamed: false, savedContent: content, savedFormat: activeTabFormat } : t));
 
         addToRecent(fileName, content, currentFileHandle);
 
@@ -3138,6 +3205,7 @@ export default function Workspace() {
           setFileName(fileHandle.name);
 
           const extension = fileHandle.name.split('.').pop()?.toLowerCase();
+          // Native picker path: plain-text output respects the active tab format.
           let blob: Blob;
 
           if (extension === "pdf") {
@@ -3169,12 +3237,12 @@ export default function Workspace() {
           }
 
           const writable = await fileHandle.createWritable();
-          await writable.write(blob);
+          await writable.write(["txt", "md", "html"].includes(extension ?? "") ? createFormattedTextBlob(content, activeTabFormat) : blob);
           await writable.close();
           setEditorContent(content);
 
 
-          setTabs(prev => prev.map(t => t.id === activeTabId ? { ...t, name: fileHandle.name, content, fileHandle, isDirty: false, isAutoNamed: false } : t));
+          setTabs(prev => prev.map(t => t.id === activeTabId ? { ...t, name: fileHandle.name, content, fileHandle, isDirty: false, isAutoNamed: false, savedContent: content, savedFormat: activeTabFormat } : t));
 
           addToRecent(fileHandle.name, content, fileHandle);
           setIsDirty(false);
@@ -3200,7 +3268,7 @@ export default function Workspace() {
           setEditorContent(content);
 
 
-          setTabs(prev => prev.map(t => t.id === activeTabId ? { ...t, name: formattedName, content, isDirty: false, isAutoNamed: false } : t));
+          setTabs(prev => prev.map(t => t.id === activeTabId ? { ...t, name: formattedName, content, isDirty: false, isAutoNamed: false, savedContent: content, savedFormat: activeTabFormat } : t));
 
           addToRecent(formattedName, content);
           setIsDirty(false);
@@ -3235,7 +3303,7 @@ export default function Workspace() {
             blob = new Blob([content], { type: "text/markdown;charset=utf-8" });
           }
 
-          const url = URL.createObjectURL(blob);
+          const url = URL.createObjectURL(["txt", "md", "html"].includes(extension ?? "") ? createFormattedTextBlob(content, activeTabFormat) : blob);
           const link = document.createElement("a");
           link.href = url;
           link.download = formattedName;
@@ -3600,6 +3668,16 @@ export default function Workspace() {
                 <button onClick={() => closeMenusAndExecute(() => setIsSettingsOpen(true))} className="w-full text-left px-4 py-1.5 hover:bg-black/5 hover:text-neutral-900 dark:hover:bg-white/10 dark:hover:text-white text-[14px] font-medium text-neutral-700 dark:text-neutral-300 transition-colors flex items-center justify-between">
                   <span>Font...</span>
                 </button>
+                <div className="h-px bg-black/5 dark:bg-white/5 my-1.5 mx-3" />
+                <div className="px-4 py-1 text-[10px] font-bold uppercase tracking-widest text-neutral-400 dark:text-neutral-400">Indentation</div>
+                <button onClick={() => closeMenusAndExecute(() => updateActiveTabFormat({ indentMode: "tabs" }))} className="w-full text-left px-4 py-1.5 hover:bg-black/5 hover:text-neutral-900 dark:hover:bg-white/10 dark:hover:text-white text-[14px] font-medium text-neutral-700 dark:text-neutral-300 transition-colors flex items-center justify-between">
+                  <span>Tabs</span><span className="text-[10px] opacity-40">{activeTabFormat.indentMode === "tabs" ? "Current" : ""}</span>
+                </button>
+                {[2, 4, 8].map((size) => (
+                  <button key={size} onClick={() => closeMenusAndExecute(() => updateActiveTabFormat({ indentMode: "spaces", tabSize: size as 2 | 4 | 8 }))} className="w-full text-left px-4 py-1.5 hover:bg-black/5 hover:text-neutral-900 dark:hover:bg-white/10 dark:hover:text-white text-[14px] font-medium text-neutral-700 dark:text-neutral-300 transition-colors flex items-center justify-between">
+                    <span>Spaces: {size}</span><span className="text-[10px] opacity-40">{activeTabFormat.indentMode === "spaces" && activeTabFormat.tabSize === size ? "Current" : ""}</span>
+                  </button>
+                ))}
               </div>
             )}
 
@@ -4507,7 +4585,7 @@ export default function Workspace() {
 
             {mode === "Write" && (
               <div
-                style={{ fontSize: `${editorZoom}rem` }}
+                style={{ "--royscript-editor-zoom": `${Math.round(editorZoom * 100)}%`, tabSize: activeTabFormat.tabSize } as React.CSSProperties}
                 className={`relative w-full h-full overflow-hidden flex flex-col ${isExamSealed ? "sealed-editor-container" : ""}`}
               >
                 <DefaultTemplate
@@ -4589,38 +4667,66 @@ export default function Workspace() {
                       }
                     }, 250);
                   }}
+                  onStatusChange={setEditorStatus}
                   examActive={examStatus === "running" || examStatus === "countdown"}
+                  indentMode={activeTabFormat.indentMode}
+                  tabSize={activeTabFormat.tabSize}
                 />
 
-                {/* Developer Status Bar (Phase 4) */}
+                {/* Windows-style workspace status bar */}
                 {isStatusBarVisible && (
                   <div
                     data-workspace-statusbar
-                    className="h-8 shrink-0 bg-[#f9f9f9] dark:bg-[#141414] text-neutral-500 dark:text-neutral-400 flex items-center justify-between px-4 select-none border-t border-black/[0.08] dark:border-white/[0.06] z-10 w-full relative transition-colors duration-300"
+                    className="h-7 shrink-0 bg-[#f9f9f9] dark:bg-[#141414] text-neutral-500 dark:text-neutral-400 flex items-stretch justify-between select-none border-t border-black/[0.08] dark:border-white/[0.06] z-10 w-full relative transition-colors duration-300"
                     style={{ fontFamily: '"Segoe UI Variable", "Segoe UI", system-ui, sans-serif', fontSize: "12px", letterSpacing: "normal" }}
                   >
-                    <div className="flex items-center gap-4">
-                      <div className="px-2 py-0.5 flex items-center gap-1 cursor-default font-medium">
-                        <div className="flex items-center">
-                          <span>Ln {getStats().lines || 1}, Col {getStats().charsNoSpaces || 1}</span>
-                          <span className="mx-3 opacity-20 text-[10px]">|</span>
-                          <span className="opacity-85">Chars {getStats().charsWithSpaces || 0}, Words {getStats().words || 0}</span>
-                        </div>
+                    <div className="flex flex-1 min-w-0 items-stretch overflow-hidden">
+                      <div data-statusbar-position className="flex shrink-0 items-center px-2 font-normal whitespace-nowrap cursor-default">
+                          {(() => { const position = getLineColumn(editorStatus.text, editorStatus.focus); return <><span>Ln {position.line},</span><span className="ml-2.5">Col {position.column}</span></>; })()}
+                      </div>
+                      <div className="flex min-w-0 items-center border-l border-black/[0.06] px-2 font-normal dark:border-white/[0.08]">
+                        <span className="truncate whitespace-nowrap">{(() => { const range = getSelectionRange(editorStatus); return range && range.count > 0 ? `${range.count} ${range.count === 1 ? "char" : "chars"} selected` : `Chars ${getStats().charsWithSpaces || 0}, Words ${getStats().words || 0}`; })()}</span>
                       </div>
                       {(examStatus === "running" || examStatus === "countdown") && (
-                        <div className="px-2 py-0.5 flex items-center gap-1 cursor-default font-medium">
-                          <span>WPM: {
+                        <div data-statusbar-exam-wpm className="flex shrink-0 items-center border-l border-black/[0.06] px-2 font-normal whitespace-nowrap dark:border-white/[0.08]">
+                          <span>WPM {
                             Math.round(((editorContent?.length || 0) / 5) / (Math.max(0.1, (examTotalSeconds - examRemainingSeconds) / 60))) || 0
                           }</span>
                         </div>
                       )}
                     </div>
-                    <div className="flex items-center gap-2">
-                      <div className="px-2 py-0.5 cursor-default font-medium">
-                        Zoom {Math.round(editorZoom * 100)}%
+                    <div className="flex shrink-0 items-stretch">
+                      <div data-statusbar-control className="relative flex items-stretch border-l border-black/[0.06] dark:border-white/[0.08]">
+                        <button type="button" onClick={() => setStatusMenu(statusMenu === "zoom" ? null : "zoom")} className="h-full px-2 font-normal whitespace-nowrap hover:bg-black/[0.045] dark:hover:bg-white/[0.06] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-[#0078d4]" aria-haspopup="dialog" aria-expanded={statusMenu === "zoom"}>Zoom {Math.round(editorZoom * 100)}%</button>
+                        {statusMenu === "zoom" && (
+                          <div data-statusbar-zoom-flyout className="absolute bottom-[calc(100%+4px)] right-0 z-50 w-64 rounded-[2px] bg-white py-1.5 shadow-[0_8px_24px_rgba(0,0,0,0.18)] dark:bg-[#202020] dark:shadow-[0_8px_24px_rgba(0,0,0,0.46)]">
+                            <div className="flex h-8 items-center px-3 text-[12px] text-neutral-700 dark:text-neutral-100"><span>Zoom</span><span className="ml-auto tabular-nums text-[12px] text-neutral-900 dark:text-white">{Math.round(editorZoom * 100)}%</span></div>
+                            <div className="flex h-9 items-center gap-2 px-3">
+                              <button type="button" title="Zoom out" aria-label="Zoom out" onClick={() => setStatusZoom(Math.round(editorZoom * 100) - 10)} className="flex h-7 w-7 shrink-0 items-center justify-center text-neutral-600 hover:bg-black/[0.06] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-[#0078d4] dark:text-neutral-300 dark:hover:bg-white/[0.08]"><ZoomOut className="h-[15px] w-[15px]" strokeWidth={1.65} /></button>
+                              <input aria-label="Editor zoom" type="range" min="20" max="300" step="10" value={Math.round(editorZoom * 100)} onChange={(event) => setStatusZoom(Number(event.target.value))} style={{ "--statusbar-zoom-progress": `${Math.round(((Math.round(editorZoom * 100) - 20) / 280) * 100)}%` } as React.CSSProperties} className="range-slider-custom statusbar-zoom-slider min-w-0 flex-1" />
+                              <button type="button" title="Zoom in" aria-label="Zoom in" onClick={() => setStatusZoom(Math.round(editorZoom * 100) + 10)} className="flex h-7 w-7 shrink-0 items-center justify-center text-neutral-600 hover:bg-black/[0.06] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-[#0078d4] dark:text-neutral-300 dark:hover:bg-white/[0.08]"><ZoomIn className="h-[15px] w-[15px]" strokeWidth={1.65} /></button>
+                            </div>
+                            <div className="-mt-0.5 mb-1 flex justify-between pl-[47px] pr-[47px] text-[10px] text-neutral-500 dark:text-neutral-400"><span>20%</span><span>300%</span></div>
+                            <button type="button" onClick={() => setStatusZoom(100)} className="mt-0.5 flex h-8 w-full items-center px-3 text-left text-[12px] font-normal text-neutral-700 hover:bg-black/[0.06] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-[#0078d4] dark:text-neutral-100 dark:hover:bg-white/[0.08]">Restore default zoom</button>
+                          </div>
+                        )}
                       </div>
-                      <div className="px-2 py-0.5 cursor-default font-medium">Windows (CRLF)</div>
-                      <div className="px-2 py-0.5 cursor-default font-medium">UTF-8</div>
+                      <div data-statusbar-control className="relative flex items-stretch border-l border-black/[0.06] dark:border-white/[0.08]">
+                        <button type="button" onClick={() => setStatusMenu(statusMenu === "lineEnding" ? null : "lineEnding")} className="h-full px-2 font-normal whitespace-nowrap hover:bg-black/[0.045] dark:hover:bg-white/[0.06] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-[#0078d4]" aria-haspopup="menu" aria-expanded={statusMenu === "lineEnding"}>{lineEndingLabel(activeTabFormat.lineEnding)}</button>
+                        {statusMenu === "lineEnding" && (
+                          <div role="menu" className="absolute bottom-[calc(100%+7px)] right-0 z-50 min-w-40 rounded-md border border-black/10 bg-white p-1 shadow-xl dark:border-white/10 dark:bg-[#202020]">
+                            {(["crlf", "lf", "cr"] as LineEnding[]).map((lineEnding) => <button key={lineEnding} role="menuitemradio" aria-checked={activeTabFormat.lineEnding === lineEnding} onClick={() => { updateActiveTabFormat({ lineEnding }); setStatusMenu(null); requestAnimationFrame(() => editorRef.current?.focus()); }} className="flex w-full items-center justify-between rounded px-2.5 py-1 text-left text-[12px] text-neutral-700 hover:bg-neutral-100 dark:text-neutral-200 dark:hover:bg-white/10"><span>{lineEndingLabel(lineEnding)}</span><span className="opacity-70">{activeTabFormat.lineEnding === lineEnding ? "✓" : ""}</span></button>)}
+                          </div>
+                        )}
+                      </div>
+                      <div data-statusbar-control className="relative flex items-stretch border-l border-black/[0.06] dark:border-white/[0.08]">
+                        <button type="button" onClick={() => setStatusMenu(statusMenu === "encoding" ? null : "encoding")} className="h-full px-2 font-normal whitespace-nowrap hover:bg-black/[0.045] dark:hover:bg-white/[0.06] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-[#0078d4]" aria-haspopup="menu" aria-expanded={statusMenu === "encoding"}>{encodingLabel(activeTabFormat.encoding)}</button>
+                        {statusMenu === "encoding" && (
+                          <div role="menu" className="absolute bottom-[calc(100%+7px)] right-0 z-50 min-w-40 rounded-md border border-black/10 bg-white p-1 shadow-xl dark:border-white/10 dark:bg-[#202020]">
+                            {(["utf-8", "utf-8-bom", "utf-16le", "utf-16be"] as TextEncoding[]).map((encoding) => <button key={encoding} role="menuitemradio" aria-checked={activeTabFormat.encoding === encoding} onClick={() => { updateActiveTabFormat({ encoding }); setStatusMenu(null); requestAnimationFrame(() => editorRef.current?.focus()); }} className="flex w-full items-center justify-between rounded px-2.5 py-1 text-left text-[12px] text-neutral-700 hover:bg-neutral-100 dark:text-neutral-200 dark:hover:bg-white/10"><span>{encodingLabel(encoding)}</span><span className="opacity-70">{activeTabFormat.encoding === encoding ? "✓" : ""}</span></button>)}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 )}

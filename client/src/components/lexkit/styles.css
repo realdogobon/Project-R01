@@ -493,7 +493,7 @@
   outline: none;
   color: var(--lexkit-fg);
   line-height: 1.7;
-  font-size: 16px;
+  font-size: var(--royscript-editor-zoom, 100%) !important;
   background-color: var(--lexkit-bg);
   transition: background-color 0.2s ease;
   overflow: auto;
@@ -540,7 +540,7 @@
   position: absolute;
   top: 20px;
   left: 20px;
-  font-size: 16px;
+  font-size: var(--royscript-editor-zoom, 100%) !important;
   line-height: 1.7;
   z-index: 1;
 }
@@ -795,7 +795,7 @@
 
   .lexkit-content-editable {
     padding: 16px 16px;
-    font-size: 16px;
+    font-size: var(--royscript-editor-zoom, 100%) !important;
   }
 
   .lexkit-placeholder {
@@ -1487,4 +1487,3 @@ table td[data-lexical-table-cell-selection] {
   opacity: 0.3;
   transition: opacity 0.2s, background-color 0.2s;
 }
-
