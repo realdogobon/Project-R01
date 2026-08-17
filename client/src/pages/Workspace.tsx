@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
+import { hasRoyScriptDesktopExitBridge, requestRoyScriptExit } from "../lib/platformExit";
 import { jsPDF } from "jspdf";
 import { Document, Packer, Paragraph, TextRun } from "docx";
 import {
@@ -114,6 +115,69 @@ export function cleanOcrText(text: string): string {
 }
 
 type AppMode = "Write" | "Practice";
+
+// Literal code port of the user-supplied Windows 11 Task View artwork. Its
+// three window frames, right rail, and sky-to-orchid square are kept as SVG
+// geometry so the browser renders the same mark without relying on a system font.
+function WindowsTaskViewGlyph() {
+  return (
+    <svg
+      data-openeditor-taskview-artwork
+      aria-hidden="true"
+      viewBox="0 0 1200 1200"
+      className="h-[20px] w-[20px]"
+      fill="none"
+      preserveAspectRatio="xMidYMid meet"
+    >
+      <defs>
+        <linearGradient id="taskview-frame-gradient" x1="0" y1="187" x2="0" y2="1013" gradientUnits="userSpaceOnUse">
+          <stop offset="0" stopColor="#196dff" />
+          <stop offset="1" stopColor="#ca20ff" />
+        </linearGradient>
+        <linearGradient id="taskview-tile-gradient" x1="975" y1="394" x2="975" y2="506" gradientUnits="userSpaceOnUse">
+          <stop offset="0" stopColor="#6fc8ff" />
+          <stop offset="1" stopColor="#e5abff" />
+        </linearGradient>
+      </defs>
+      <path
+        data-taskview-top-frame
+        d="M169 187H206V319H826V187H863V338C863 348 855 356 845 356H187C177 356 169 348 169 338V187Z"
+        fill="url(#taskview-frame-gradient)"
+      />
+      <path
+        data-taskview-middle-frame
+        d="M188 394H844C855 394 863 402 863 413V787C863 798 855 806 844 806H188C177 806 169 798 169 787V413C169 402 177 394 188 394ZM206 432V769H826V432H206Z"
+        fill="url(#taskview-frame-gradient)"
+        fillRule="evenodd"
+      />
+      <path
+        data-taskview-bottom-frame
+        d="M169 1013V864C169 853 177 845 188 845H844C855 845 863 853 863 864V1013H826V882H206V1013H169Z"
+        fill="url(#taskview-frame-gradient)"
+      />
+      <rect data-taskview-top-rail x="956" y="187" width="38" height="151" fill="url(#taskview-frame-gradient)" />
+      <rect data-taskview-gradient-tile x="919" y="394" width="112" height="112" fill="url(#taskview-tile-gradient)" />
+      <rect data-taskview-bottom-rail x="956" y="563" width="38" height="450" fill="url(#taskview-frame-gradient)" />
+    </svg>
+  );
+}
+
+function OpenEditorMdl2AddGlyph() {
+  return (
+    <svg
+      data-openeditor-mdl2-outline="add"
+      aria-hidden="true"
+      viewBox="0 0 2048 2048"
+      className="h-4 w-4"
+      fill="currentColor"
+      shapeRendering="crispEdges"
+    >
+      <g transform="translate(0 2048) scale(1 -1)">
+        <path d="M2048 1088V960H1088V0H960V960H0V1088H960V2048H1088V1088Z" fillRule="evenodd" />
+      </g>
+    </svg>
+  );
+}
 
 function ThemeToggle({ disabled }: { disabled?: boolean }) {
   const { theme, setTheme } = useTheme();
@@ -411,6 +475,9 @@ export default function Workspace() {
   const [examStatus, setExamStatus] = useState<
     "idle" | "countdown" | "running" | "timeout"
   >("idle");
+  // A completed exam is sealed on its own tab. No workspace-wide review state
+  // is kept: switching away from a sealed document must immediately restore
+  // the ordinary behavior of every other tab.
 
   // Crash-recovery: when a saved snapshot shows the exam was mid-flight,
   // we hold examStatus at "idle" (so the timer/fullscreen locks and the
@@ -502,72 +569,6 @@ export default function Workspace() {
     };
   }, []);
 
-  useEffect(() => {
-    const handleGlobalKeyDown = (e: KeyboardEvent) => {
-      const isCtrlOrMeta = e.ctrlKey || e.metaKey;
-      const isCtrlK = isCtrlOrMeta && e.key.toLowerCase() === "k";
-      const isEscape = e.key === "Escape";
-      const key = e.key.toLowerCase();
-      const examLocked = examStatus === "running" || examStatus === "countdown";
-
-      const isCtrlN = isCtrlOrMeta && !e.shiftKey && key === "n";
-      const isCtrlShiftN = isCtrlOrMeta && e.shiftKey && key === "n";
-      const isCtrlO = isCtrlOrMeta && key === "o";
-      const isCtrlS = isCtrlOrMeta && !e.shiftKey && key === "s";
-      const isCtrlShiftS = isCtrlOrMeta && e.shiftKey && key === "s";
-      const isCtrlP = isCtrlOrMeta && key === "p";
-      const isCtrlShiftW = isCtrlOrMeta && e.shiftKey && key === "w";
-
-      if (isCtrlN || isCtrlShiftN || isCtrlO || isCtrlS || isCtrlShiftS || isCtrlP || isCtrlShiftW) {
-        e.preventDefault();
-
-        if (examLocked) {
-          return;
-        }
-
-        if (isCtrlN) {
-          handleNewClick();
-        } else if (isCtrlShiftN) {
-          window.open(window.location.href, "_blank");
-        } else if (isCtrlO) {
-          openFile();
-        } else if (isCtrlShiftS) {
-          saveAsFile();
-        } else if (isCtrlS) {
-          saveFile();
-        } else if (isCtrlP) {
-          handlePrint();
-        } else if (isCtrlShiftW) {
-          closeTab(activeTabId);
-        }
-        return;
-      }
-
-      if (mode === "Practice") {
-        if (isCtrlK || isEscape) {
-          e.preventDefault();
-        }
-        return;
-      }
-
-      if (isEscape && examLocked) {
-
-        e.preventDefault();
-        e.stopPropagation();
-        return;
-      }
-
-      if (isCtrlK || isEscape) {
-        if (!examLocked) {
-          e.preventDefault();
-          setIsSettingsOpen((prev) => !prev);
-        }
-      }
-    };
-    window.addEventListener("keydown", handleGlobalKeyDown, true);
-    return () => window.removeEventListener("keydown", handleGlobalKeyDown, true);
-  }, [examStatus, mode]);
-
   // --- Accent bar idle tracking: dims the tab accent bar after inactivity, ---
   // --- restores it quietly on the next input. Does not touch tab-glow logic. ---
   useEffect(() => {
@@ -607,13 +608,19 @@ export default function Workspace() {
   ]);
   const [activeTabId, setActiveTabId] = useState<string>("1");
   const [glowingTabId, setGlowingTabId] = useState<string | null>(null);
+  // The first keystroke must finish its existing sweep before the steady tube
+  // can render. This separate lifecycle marker prevents a first-frame overlap.
+  const firstKeyGlowPendingTabIdRef = useRef<string | null>(null);
   const [closingTabId, setClosingTabId] = useState<string | null>(null);
+  const [isTabOverviewOpen, setIsTabOverviewOpen] = useState(false);
   const [isAccentBarIdle, setIsAccentBarIdle] = useState(false);
   const lastActivityAtRef = useRef<number>(Date.now());
   // Real pixel box of the currently-active tab, measured directly from the DOM so the
   // neon-glow outline's curve radius matches the tab's actual rendered corner exactly
   // (no distorted viewBox stretching a square arc onto a rectangular tab).
   const activeTabElRef = useRef<HTMLDivElement | null>(null);
+  const tabStripScrollRef = useRef<HTMLDivElement | null>(null);
+  const tabOverviewRef = useRef<HTMLDivElement | null>(null);
   const [activeTabBox, setActiveTabBox] = useState({ width: 176, height: 40 });
 
   // Measures the active tab's real rendered box so the neon-glow outline can be built
@@ -632,9 +639,144 @@ export default function Workspace() {
     window.addEventListener("resize", measure);
     return () => window.removeEventListener("resize", measure);
   }, [activeTabId]);
+
+  // Tab cards may overflow, but the active document should always be revealed
+  // inside the dedicated scrolling region after creation or activation.
+  useEffect(() => {
+    const revealActiveTab = (behavior: "smooth" | "instant") => {
+      const activeEl = activeTabElRef.current;
+      const stripEl = tabStripScrollRef.current;
+      if (!activeEl || !stripEl) return;
+
+      const tabRect = activeEl.getBoundingClientRect();
+      const stripRect = stripEl.getBoundingClientRect();
+      const correction = tabRect.left < stripRect.left
+        ? tabRect.left - stripRect.left
+        : tabRect.right > stripRect.right
+          ? tabRect.right - stripRect.right
+          : 0;
+      if (!correction) return;
+
+      if (behavior === "instant") {
+        // The strip uses Tailwind's `scroll-smooth`, so `behavior: "auto"`
+        // would still animate. A numeric correction guarantees the final
+        // measured pass clears the fixed trailing controls.
+        stripEl.scrollLeft += correction;
+      } else {
+        stripEl.scrollBy({ left: correction, behavior });
+      }
+    };
+
+    const frame = window.requestAnimationFrame(() => revealActiveTab("smooth"));
+    // Entering an exam creates its protected tab while adjacent editor chrome is
+    // still settling. A second, immediate measured pass completes any final
+    // few-pixel correction after the first smooth movement has started.
+    const settledFrame = window.setTimeout(() => revealActiveTab("instant"), 180);
+    // A later read accounts for the finished smooth-scroll and any late tab-width
+    // settlement. It keeps the active card fully inside the scroll region rather
+    // than fractionally underneath the fixed overview/new-tab controls.
+    const finalFrame = window.setTimeout(() => revealActiveTab("instant"), 520);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.clearTimeout(settledFrame);
+      window.clearTimeout(finalFrame);
+    };
+  }, [activeTabId, tabs.length]);
+
+  // The overview behaves like a quiet document switcher: it closes when the
+  // user escapes or clicks elsewhere, without affecting editor focus or tabs.
+  useEffect(() => {
+    if (!isTabOverviewOpen) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!tabOverviewRef.current?.contains(event.target as Node)) {
+        setIsTabOverviewOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setIsTabOverviewOpen(false);
+    };
+    document.addEventListener("pointerdown", handlePointerDown, true);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown, true);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isTabOverviewOpen]);
   const pendingCloseTabIdRef = useRef<string | null>(null);
   const activeTab = tabs.find(t => t.id === activeTabId);
   const isExamSealed = !!activeTab?.examSealed;
+
+  const reopenTimesUpForSealedTab = () => {
+    if (!isExamSealed || examStatus === "timeout") return;
+    setExamStatus("timeout");
+    setIsExamMode(false);
+  };
+
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      const isCtrlOrMeta = e.ctrlKey || e.metaKey;
+      const isCtrlK = isCtrlOrMeta && e.key.toLowerCase() === "k";
+      const isEscape = e.key === "Escape";
+      const key = e.key.toLowerCase();
+      const examLocked = examStatus === "running" || examStatus === "countdown";
+
+      const isCtrlN = isCtrlOrMeta && !e.shiftKey && key === "n";
+      const isCtrlShiftN = isCtrlOrMeta && e.shiftKey && key === "n";
+      const isCtrlO = isCtrlOrMeta && key === "o";
+      const isCtrlS = isCtrlOrMeta && !e.shiftKey && key === "s";
+      const isCtrlShiftS = isCtrlOrMeta && e.shiftKey && key === "s";
+      const isCtrlP = isCtrlOrMeta && key === "p";
+      const isCtrlShiftW = isCtrlOrMeta && e.shiftKey && key === "w";
+
+      if (isCtrlN || isCtrlShiftN || isCtrlO || isCtrlS || isCtrlShiftS || isCtrlP || isCtrlShiftW) {
+        e.preventDefault();
+
+        if (examLocked || isExamSealed) {
+          return;
+        }
+
+        if (isCtrlN) {
+          handleNewClick();
+        } else if (isCtrlShiftN) {
+          window.open(window.location.href, "_blank");
+        } else if (isCtrlO) {
+          openFile();
+        } else if (isCtrlShiftS) {
+          saveAsFile();
+        } else if (isCtrlS) {
+          saveFile();
+        } else if (isCtrlP) {
+          handlePrint();
+        } else if (isCtrlShiftW) {
+          closeTab(activeTabId);
+        }
+        return;
+      }
+
+      if (mode === "Practice") {
+        if (isCtrlK || isEscape) {
+          e.preventDefault();
+        }
+        return;
+      }
+
+      if (isEscape && (examLocked || isExamSealed)) {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+
+      if (isCtrlK || isEscape) {
+        if (!examLocked && !isExamSealed) {
+          e.preventDefault();
+          setIsSettingsOpen((prev) => !prev);
+        }
+      }
+    };
+    window.addEventListener("keydown", handleGlobalKeyDown, true);
+    return () => window.removeEventListener("keydown", handleGlobalKeyDown, true);
+  }, [activeTabId, examStatus, isExamSealed, mode]);
+
   const sealActiveTab = (sealed: boolean) => {
     setTabs(prev => prev.map(t => t.id === activeTabId ? { ...t, examSealed: sealed } : t));
   };
@@ -679,6 +821,20 @@ export default function Workspace() {
     return cleaned;
   };
 
+  // Mirrors OpenEditor's BuildOverviewPreview contract: build from the first
+  // ten source lines, remove CR artifacts, and cap the transfer at 900 chars.
+  // The card's XAML-equivalent preview inset then applies the visual 8-line crop.
+  const buildTabOverviewPreview = (text: string) => {
+    if (!text) return "";
+    const preview = text
+      .split("\n")
+      .slice(0, 10)
+      .map(line => line.replace(/\r$/, ""))
+      .join("\n")
+      .trimEnd();
+    return preview.length > 900 ? preview.slice(0, 900) : preview;
+  };
+
   const updateActiveTabContent = (content: string) => {
     setEditorContent(content);
     setTabs(prev => prev.map(t => t.id === activeTabId ? { ...t, content } : t));
@@ -688,9 +844,18 @@ export default function Workspace() {
   const GLOW_LONG_ABSENCE_MS  = 5 * 60 * 1000;  // 5 min  → always glow
   const GLOW_SHORT_ABSENCE_MS = 45 * 1000;       // 45 sec → glow if tab has content
 
-  const fireTabGlow = (tabId: string) => {
+  const fireTabGlow = (tabId: string, options?: { firstKey?: boolean }) => {
+    if (options?.firstKey) firstKeyGlowPendingTabIdRef.current = tabId;
     setGlowingTabId(null);
     requestAnimationFrame(() => setGlowingTabId(tabId));
+  };
+
+  const completeTabGlow = (tabId: string) => {
+    setGlowingTabId(currentId => currentId === tabId ? null : currentId);
+    if (firstKeyGlowPendingTabIdRef.current === tabId) {
+      firstKeyGlowPendingTabIdRef.current = null;
+      setTabs(prev => prev.map(tab => tab.id === tabId ? { ...tab, hasGlowedOnce: true } : tab));
+    }
   };
 
   const shouldGlowOnReturn = (tab: { isDirty?: boolean; lastActiveAt?: number; content?: string }): boolean => {
@@ -713,13 +878,13 @@ export default function Workspace() {
     const tabToClose = tabs.find(t => t.id === tabId);
     if (!tabToClose) return;
     if (tabToClose.isDirty && (tabToClose.content || "").trim() !== "") {
-      // Show unsaved prompt first; animation fires after user confirms
-      setPendingAction(`animatedCloseTab:${tabId}`);
+      // The permanent tab strip is no longer rendered, so there is no close
+      // animation to await. Reuse the normal guarded close action directly.
+      setPendingAction(`closeTab:${tabId}`);
       setIsUnsavedPopupOpen(true);
       return;
     }
-    pendingCloseTabIdRef.current = tabId;
-    setClosingTabId(tabId);
+    void doCloseTab(tabId);
   };
   // --------------------------------
 
@@ -739,6 +904,7 @@ export default function Workspace() {
     setIsDirty(false);
     setCurrentFileHandle(fileHandle);
     setEditorContent(content);
+    setIsTabOverviewOpen(false);
 
     setEditorKey(k => k + 1);
     setExamStatus("idle");
@@ -764,6 +930,12 @@ export default function Workspace() {
     const nextTab = tabs.find(t => t.id === tabId);
     if (!nextTab) return;
 
+    // An interrupted first-key sweep should remain eligible to replay cleanly
+    // when the user returns, rather than latching a static partial outline.
+    if (firstKeyGlowPendingTabIdRef.current === activeTabId) {
+      firstKeyGlowPendingTabIdRef.current = null;
+    }
+
     // Smart return-glow: fire only after meaningful absence
     if (shouldGlowOnReturn(nextTab)) fireTabGlow(tabId);
 
@@ -772,7 +944,9 @@ export default function Workspace() {
     setIsDirty(!!nextTab.isDirty);
     setCurrentFileHandle(nextTab.fileHandle || null);
     setEditorContent(nextTab.content);
-    setExamStatus(nextTab.examSealed ? "timeout" : "idle");
+    // A returned sealed tab is read-only through its own persistent flag;
+    // ordinary tabs never inherit that restriction.
+    setExamStatus("idle");
     setIsExamMode(false);
 
     if (editorRef.current) {
@@ -825,7 +999,7 @@ export default function Workspace() {
         setIsDirty(!!nextTab.isDirty);
         setCurrentFileHandle(nextTab.fileHandle || null);
         setEditorContent(nextTab.content);
-        setExamStatus(nextTab.examSealed ? "timeout" : "idle");
+        setExamStatus("idle");
         setIsExamMode(false);
 
         if (editorRef.current) {
@@ -859,7 +1033,13 @@ export default function Workspace() {
 
   useEffect(() => {
     const handleTabKeyDown = (e: KeyboardEvent) => {
-      if (examStatus === "running" || examStatus === "countdown") return;
+      if (examStatus === "running" || examStatus === "countdown" || isExamSealed) {
+        if (isExamSealed) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+        return;
+      }
 
       const isAltT = e.altKey && e.key.toLowerCase() === "t";
       const isAltW = e.altKey && e.key.toLowerCase() === "w";
@@ -910,10 +1090,43 @@ export default function Workspace() {
 
     window.addEventListener("keydown", handleTabKeyDown);
     return () => window.removeEventListener("keydown", handleTabKeyDown);
-  }, [tabs, activeTabId, examStatus]);
+  }, [tabs, activeTabId, examStatus, isExamSealed]);
 
   const [isUnsavedPopupOpen, setIsUnsavedPopupOpen] = useState(false);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
+
+  // Close all tabs + request platform exit (Electron app.quit / Tauri exit).
+  // Reuses the existing unsaved popup for the consolidated dirty confirmation,
+  // never exits during an active exam, and fails silently.
+  const closeAllTabsAndRequestExit = () => {
+    if (examStatus === "running" || examStatus === "countdown" || isExamSealed) return;
+    // Browser preview cannot close the app; never allow it to enter a
+    // zero-tab editor state. Packaged Electron/Tauri shells inject this bridge.
+    if (!hasRoyScriptDesktopExitBridge()) return;
+
+    const dirtyCount = tabs.filter(t => t.isDirty && (t.content || "").trim() !== "").length;
+    if (dirtyCount > 0) {
+      setPendingAction("closeAllTabs");
+      setIsUnsavedPopupOpen(true);
+      return;
+    }
+
+    closeAllTabsNow();
+  };
+
+  const closeAllTabsNow = () => {
+    if (examStatus === "running" || examStatus === "countdown") return;
+    try {
+      const nativeExitRequested = requestRoyScriptExit("closeAllTabs");
+      if (!nativeExitRequested) return;
+      setTabs([]);
+      setActiveTabId("");
+      setIsUnsavedPopupOpen(false);
+      setIsTabOverviewOpen(false);
+    } catch {
+      // Silent failure.
+    }
+  };
 
   const hasRealUnsavedContent = () => {
     const content = editorRef.current ? editorRef.current.getMarkdown() : editorContent;
@@ -944,6 +1157,9 @@ export default function Workspace() {
     else if (action.startsWith("closeTab:")) {
       const tabId = action.replace("closeTab:", "");
       doCloseTab(tabId);
+    }
+    else if (action === "closeAllTabs") {
+      closeAllTabsNow();
     }
     else if (action.startsWith("animatedCloseTab:")) {
       const tabId = action.replace("animatedCloseTab:", "");
@@ -1026,12 +1242,43 @@ export default function Workspace() {
     examSealed?: boolean;
     tabs?: Array<{ id: string; name: string; content: string; isDirty?: boolean; isAutoNamed?: boolean; examSealed?: boolean }>;
     activeTabId?: string;
+    workspaceTabCacheResetVersion?: number;
   }
+  const WORKSPACE_TAB_CACHE_RESET_VERSION = 1;
   const saveAccountState = (uid: string, snap: AccountStateSnapshot) => {
     try { localStorage.setItem(`typing_suite_state_${uid}`, JSON.stringify(snap)); } catch {}
   };
   const loadAccountState = (uid: string): AccountStateSnapshot | null => {
     try { const r = localStorage.getItem(`typing_suite_state_${uid}`); return r ? JSON.parse(r) : null; } catch { return null; }
+  };
+  // The user explicitly requested that their accidental tab collection be
+  // flushed. This one-time migration touches only the per-account workspace
+  // snapshot; preferences, practice data, scanner records, credentials, and
+  // every other localStorage entry remain untouched.
+  const resetPersistedWorkspaceTabs = (uid: string): AccountStateSnapshot => {
+    const saved = loadAccountState(uid);
+    if (saved?.workspaceTabCacheResetVersion === WORKSPACE_TAB_CACHE_RESET_VERSION) {
+      return saved;
+    }
+
+    const cleanTab = { id: "1", name: "New Document", content: "", isDirty: false, isAutoNamed: true, examSealed: false };
+    const resetSnapshot: AccountStateSnapshot = {
+      ...(saved ?? { editorContent: "", mode: "Write" as const }),
+      editorContent: "",
+      fileName: "New Document",
+      cursor: null,
+      isExamMode: false,
+      examStatus: "idle",
+      examRemainingSeconds: 0,
+      examTotalSeconds: 0,
+      examReplayLog: [],
+      examSealed: false,
+      tabs: [cleanTab],
+      activeTabId: cleanTab.id,
+      workspaceTabCacheResetVersion: WORKSPACE_TAB_CACHE_RESET_VERSION,
+    };
+    saveAccountState(uid, resetSnapshot);
+    return resetSnapshot;
   };
 
   // Derived synchronously during render (not via a ref set inside a
@@ -1053,11 +1300,14 @@ export default function Workspace() {
       restoreTimeoutRef.current = null;
     }
     if (snap) {
+      // Practice configuration is independent from workspace tabs. Hydrate it
+      // for every snapshot mode so the tab-only reset and a normal Write-mode
+      // reload can never silently overwrite saved Practice data on autosave.
+      setCustomPracticeText(snap.practiceText || "");
+      setCustomPracticeTitle(snap.practiceTitle || "");
       if (snap.mode === "Practice") {
         // PracticeMode owns its own per-account restore via its own
         // localStorage key; we only need to route to the right screen.
-        setCustomPracticeText(snap.practiceText || "");
-        setCustomPracticeTitle(snap.practiceTitle || "");
         setMode("Practice");
       } else {
         setMode("Write");
@@ -1081,12 +1331,6 @@ export default function Workspace() {
           restoreTimeoutRef.current = null;
           if (editorRef.current) {
             editorRef.current.injectMarkdown(restoredActiveTab.content);
-            if (snap.cursor) {
-              // injectMarkdown defers its own DOM update internally, so
-              // give it a head start before restoring the exact cursor
-              // position, otherwise the selection targets stale/empty text.
-              setTimeout(() => editorRef.current?.setSelection(snap.cursor!), 250);
-            }
           }
         }, 80);
 
@@ -1099,6 +1343,10 @@ export default function Workspace() {
           pendingExamRestoreRef.current = { status: snap.examStatus === "countdown" ? "countdown" : "running" };
           setExamRecoverySeconds(10);
           setExamRecoveryPending(true);
+        } else {
+          setIsExamMode(false);
+          setExamStatus("idle");
+          setExamRecoveryPending(false);
         }
       }
     } else {
@@ -1123,7 +1371,7 @@ export default function Workspace() {
   // though a full snapshot is sitting in localStorage.
   useEffect(() => {
     const uid = user?.uid ?? guestUid;
-    applySnapshot(loadAccountState(uid));
+    applySnapshot(resetPersistedWorkspaceTabs(uid));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -1138,7 +1386,7 @@ export default function Workspace() {
     }
     if (newUid === prevAccountUidRef.current) return;
     prevAccountUidRef.current = newUid;
-    applySnapshot(loadAccountState(newUid));
+    applySnapshot(resetPersistedWorkspaceTabs(newUid));
   }, [user?.uid, guestUid]);
 
   // Builds a complete, crash-safe snapshot of everything needed to restore
@@ -1167,6 +1415,7 @@ export default function Workspace() {
       examSealed: isExamSealed,
       tabs: tabsSnapshot,
       activeTabId,
+      workspaceTabCacheResetVersion: WORKSPACE_TAB_CACHE_RESET_VERSION,
     };
   };
 
@@ -2628,14 +2877,7 @@ export default function Workspace() {
   };
 
   useEffect(() => {
-    if (editorRef.current) {
-      if (examStatus === "timeout" || isExamSealed) {
-        editorRef.current.setReadOnly(true);
-      } else {
-        editorRef.current.setReadOnly(false);
-      }
-    }
-    if (examStatus === "running") {
+    if (examStatus === "running" && !isExamSealed) {
       setTimeout(() => {
         editorRef.current?.focus();
       }, 50);
@@ -3619,6 +3861,43 @@ export default function Workspace() {
     </div>
   );
 
+  const workspaceToolbarAddon = (
+    <div ref={tabOverviewRef} data-workspace-toolbar-controls className="relative ml-1 flex h-full items-center border-l border-black/[0.055] pl-2 dark:border-white/[0.07]" style={{ fontFamily: '"Segoe UI Variable", "Segoe UI", system-ui, sans-serif' }}>
+      <button type="button" data-workspace-tab-overview-trigger onClick={() => setIsTabOverviewOpen(open => !open)} disabled={examStatus === "running" || examStatus === "countdown"} className={`lexkit-toolbar-button flex h-8 w-8 items-center justify-center rounded-[6px] border-0 bg-transparent p-0 text-neutral-500 transition-colors hover:bg-black/[0.045] hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-white/[0.06] dark:hover:text-neutral-100 ${(examStatus === "running" || examStatus === "countdown") ? "cursor-not-allowed opacity-30" : "cursor-pointer"}`} title={(examStatus === "running" || examStatus === "countdown") ? "Locked while an exam is in progress" : "Open tabs"} aria-label="Open tabs" aria-expanded={isTabOverviewOpen}>
+        <span data-openeditor-taskview-glyph className="inline-flex items-center"><WindowsTaskViewGlyph /></span>
+      </button>
+      <button type="button" data-workspace-new-tab-trigger onClick={() => createNewTab(`New Document ${tabs.length + 1}`, "")} disabled={examStatus === "running" || examStatus === "countdown"} className={`lexkit-toolbar-button flex h-8 w-8 items-center justify-center rounded-[6px] border-0 bg-transparent p-0 text-neutral-500 transition-colors hover:bg-black/[0.045] hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-white/[0.06] dark:hover:text-neutral-100 ${(examStatus === "running" || examStatus === "countdown") ? "cursor-not-allowed opacity-30" : "cursor-pointer"}`} title={(examStatus === "running" || examStatus === "countdown") ? "Locked while an exam is in progress" : "New tab"} aria-label="New tab">
+        <span data-openeditor-add-glyph><OpenEditorMdl2AddGlyph /></span>
+      </button>
+      <span data-tab-count className="ml-1.5 select-none whitespace-nowrap text-[12px] leading-none text-neutral-500 dark:text-neutral-400" style={{ fontFamily: '"Segoe UI Variable", "Segoe UI", system-ui, sans-serif', fontSize: "12px" }}>{tabs.length} {tabs.length === 1 ? "tab" : "tabs"}</span>
+      <AnimatePresence>
+        {isTabOverviewOpen && (
+          <motion.div data-workspace-tab-overview initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -5 }} transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1] }} className="absolute right-0 top-[calc(100%+8px)] z-50 w-[720px] max-w-[calc(100vw-2rem)] max-h-[500px] overflow-hidden rounded-[14px] border border-transparent bg-white/[0.76] shadow-[0_24px_64px_rgba(0,0,0,0.17),0_2px_10px_rgba(0,0,0,0.06)] ring-1 ring-black/[0.04] backdrop-blur-[52px] backdrop-saturate-[1.35] dark:bg-[#1c1c1c]/[0.82] dark:shadow-[0_26px_68px_rgba(0,0,0,0.56),0_2px_12px_rgba(0,0,0,0.32)] dark:ring-white/[0.06]" style={{ fontFamily: '"Segoe UI Variable", "Segoe UI", system-ui, sans-serif' }}>
+            <div className="flex max-h-[498px] flex-col">
+              <div className="flex shrink-0 items-center justify-between px-[18px] pt-[18px] pb-3"><h2 className="text-[13px] font-semibold tracking-[-0.01em] text-neutral-900 dark:text-neutral-100">Open tabs</h2><div className="flex items-center gap-2.5">{tabs.length > 0 && hasRoyScriptDesktopExitBridge() && <button type="button" data-workspace-tab-close-all onClick={closeAllTabsAndRequestExit} disabled={examStatus === "running" || examStatus === "countdown" || isExamSealed || tabs.length === 0} className="rounded-[7px] border-0 bg-transparent px-2 py-[5px] text-[12px] font-medium leading-none tracking-[-0.01em] text-neutral-500 transition-colors hover:bg-neutral-900/[0.045] hover:text-neutral-900 disabled:cursor-not-allowed disabled:text-neutral-300 dark:text-neutral-400 dark:hover:bg-white/[0.055] dark:hover:text-neutral-100 dark:disabled:text-neutral-600" title="Close all tabs and exit the application">Close all tabs</button>}<span className="rounded-full bg-black/[0.04] px-2 py-[3px] text-[11px] font-medium leading-none text-neutral-400 shadow-[inset_0_1px_0_rgba(255,255,255,0.48)] dark:bg-white/[0.045] dark:text-neutral-500 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.035)]">{tabs.length} {tabs.length === 1 ? "tab" : "tabs"}</span></div></div>
+              <div className="min-h-0 overflow-y-auto overflow-x-hidden px-[18px] pb-[18px]"><div data-workspace-tab-overview-list className="grid grid-cols-3 gap-3.5 rounded-[11px] bg-black/[0.018] p-2.5 dark:bg-black/[0.16]">
+                {tabs.map(tab => {
+                  const isActive = tab.id === activeTabId;
+                  const isSwitchLocked = examStatus === "running" || examStatus === "countdown";
+                  // A completed exam tab is permanently sealed until the existing
+                  // Save and Start Fresh flow replaces it with a normal workspace.
+                  // Do not render a close affordance that the existing close guard
+                  // must silently refuse; ordinary tabs keep their normal guard.
+                  const canCloseFromOverview = !tab.examSealed;
+                  const preview = buildTabOverviewPreview(tab.id === activeTabId ? editorContent : tab.content);
+                  return <div key={tab.id} data-workspace-tab-overview-item={tab.id} data-workspace-tab-overview-exam-sealed={tab.examSealed ? "true" : "false"} data-workspace-tab-overview-close-eligible={canCloseFromOverview ? "true" : "false"} className={`group relative flex min-h-[138px] w-full flex-col rounded-[10px] border border-transparent bg-white/[0.52] p-3 text-left shadow-[0_1px_1px_rgba(0,0,0,0.018)] transition-[background-color,border-color,box-shadow] ${isSwitchLocked ? "cursor-not-allowed opacity-35" : "hover:bg-white/[0.76] hover:border-black/[0.05] hover:shadow-[0_8px_20px_rgba(0,0,0,0.055)] dark:hover:bg-white/[0.065] dark:hover:border-white/[0.08] dark:hover:shadow-[0_10px_24px_rgba(0,0,0,0.2)]"} ${isActive ? "text-neutral-900 dark:text-neutral-50" : "text-neutral-700 dark:bg-white/[0.035] dark:shadow-[0_1px_1px_rgba(0,0,0,0.2)] dark:text-neutral-300"}`} style={isActive ? { borderColor: themeAccentColor, boxShadow: `0 0 0 1px ${themeAccentColor}22`, backgroundColor: `${themeAccentColor}0D` } : undefined}>
+                    <button type="button" data-workspace-tab-overview-activate={tab.id} onClick={() => { if (!isSwitchLocked) { setIsTabOverviewOpen(false); switchTab(tab.id); } }} disabled={isSwitchLocked} className="flex min-h-[112px] w-full flex-col text-left outline-none" aria-label={`Open ${tab.name}`}><span className="flex w-full items-center gap-1.5 truncate pr-5 text-[12px] font-medium leading-4"><FileText className="h-[14px] w-[14px] shrink-0 text-neutral-400 dark:text-neutral-500" strokeWidth={1.55} /><span className="truncate">{tab.name}</span>{tab.isDirty && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-neutral-400 dark:bg-neutral-500" />}</span><span data-openeditor-tab-preview={tab.id} className={`mt-3 block min-h-[72px] w-full overflow-hidden rounded-[6px] px-2.5 py-2 font-mono text-[10px] leading-[15px] ${preview ? "bg-black/[0.035] text-neutral-400 dark:bg-black/[0.16] dark:text-neutral-500" : "bg-black/[0.02] text-neutral-300 dark:bg-black/[0.12] dark:text-neutral-600"}`} style={{ display: "-webkit-box", WebkitBoxOrient: "vertical", WebkitLineClamp: 4, fontFamily: "Consolas, 'Liberation Mono', monospace" }}>{preview || "No text yet"}</span></button>
+                    {canCloseFromOverview && <button type="button" data-workspace-tab-overview-close={tab.id} onClick={(event) => { event.preventDefault(); event.stopPropagation(); if (!isSwitchLocked) initiateTabClose(tab.id, event); }} disabled={isSwitchLocked} className={`absolute right-2 top-2 flex h-5 w-5 items-center justify-center rounded-[5px] text-neutral-400 opacity-0 transition-[opacity,color,background-color] group-hover:opacity-100 focus-visible:opacity-100 dark:text-neutral-500 ${isSwitchLocked ? "cursor-not-allowed" : "cursor-pointer hover:bg-black/[0.055] hover:text-neutral-800 dark:hover:bg-white/[0.08] dark:hover:text-neutral-200"}`} title={isSwitchLocked ? "Locked while an exam is in progress" : `Close ${tab.name}`} aria-label={`Close ${tab.name}`}><X className="h-[13px] w-[13px]" strokeWidth={1.8} /></button>}
+                  </div>;
+                })}
+              </div></div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+
   return (
     <ThemeProviderCast attribute="class" defaultTheme="system" enableSystem>
       <div className="flex flex-col h-screen w-full bg-[#f3f3f3] dark:bg-[#202020] font-sans overflow-hidden text-neutral-900 dark:text-neutral-100">
@@ -3910,9 +4189,13 @@ export default function Workspace() {
 
           {/* Main Area */}
           <div className="flex-1 flex flex-col bg-white dark:bg-[#1a1a1a] relative overflow-hidden transition-colors shadow-[-10px_0_15px_-10px_rgba(0,0,0,0.05)] z-0">
-            {mode === "Write" && (
-              <div className="h-10 bg-neutral-100 dark:bg-[#161616] flex items-center justify-between pr-3 shrink-0 select-none">
-                <div className="flex items-center gap-1 overflow-x-auto no-scrollbar scroll-smooth flex-1 h-full pt-1.5">
+            {false && mode === "Write" && (
+              <div data-workspace-tab-strip className="h-10 bg-neutral-100 dark:bg-[#161616] flex items-center shrink-0 select-none">
+                <div
+                  ref={tabStripScrollRef}
+                  data-workspace-tab-scroll
+                  className="flex items-center gap-1 overflow-x-auto no-scrollbar scroll-smooth min-w-0 flex-1 h-full"
+                >
                 {tabs.map((tab, tabIndex) => {
                   const isActive = tab.id === activeTabId;
                   const examLockedUI = (examStatus === "running" || examStatus === "countdown") && !isActive;
@@ -3920,6 +4203,8 @@ export default function Workspace() {
                   return (
                     <div
                       key={tab.id}
+                      data-workspace-tab-card={tab.id}
+                      data-workspace-tab-active={isActive ? "true" : undefined}
                       ref={isActive ? activeTabElRef : undefined}
                       onClick={() => !examLockedUI && switchTab(tab.id)}
                       onDoubleClick={(e) => {
@@ -4007,7 +4292,7 @@ export default function Workspace() {
                                 vectorEffect="non-scaling-stroke"
                                 pathLength={1}
                                 className="tab-neon-pulse-path"
-                                onAnimationEnd={() => setGlowingTabId(null)}
+                                onAnimationEnd={() => completeTabGlow(tab.id)}
                               />
                             </>
                           )}
@@ -4082,26 +4367,140 @@ export default function Workspace() {
                   );
                 })}
 
-                {/* (+) Add Tab Button */}
-                <button
-                  onClick={() => {
-                    if (examStatus === "running" || examStatus === "countdown") {
-                      alert("Cannot open new tabs during an active exam.");
-                      return;
-                    }
-                    createNewTab(`New Document ${tabs.length + 1}`, "");
-                  }}
-                  disabled={examStatus === "running" || examStatus === "countdown"}
-                  className={`p-1.5 ml-2 text-neutral-400 dark:text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300 transition-colors self-center shrink-0 active:scale-95 ${(examStatus === "running" || examStatus === "countdown") ? "opacity-30 cursor-not-allowed" : "cursor-pointer"}`}
-                  title={(examStatus === "running" || examStatus === "countdown") ? "Locked while an exam is in progress" : "New Tab: Alt+T | Close: Alt+W | Switch: Alt+Left/Right"}
+                </div>
+
+                {/* OpenEditor MainWindow.xaml parity: the fixed native-style TaskView
+                    overflow button and Add button stay outside the scrolling tab region. */}
+                <div
+                  ref={tabOverviewRef}
+                  data-workspace-tab-controls
+                  className="rigorous-menu relative flex h-full items-center shrink-0 bg-neutral-100 dark:bg-[#161616]"
                 >
-                  <Plus className="w-3.5 h-3.5" />
-                </button>
-              </div>
+                  <button
+                    type="button"
+                    data-workspace-tab-overview-trigger
+                    onClick={() => setIsTabOverviewOpen(open => !open)}
+                    disabled={examStatus === "running" || examStatus === "countdown"}
+                    className={`flex h-full items-center justify-center border-0 bg-transparent px-2.5 py-1.5 text-neutral-500 dark:text-neutral-400 transition-colors hover:bg-black/[0.04] hover:text-neutral-800 dark:hover:bg-white/[0.06] dark:hover:text-neutral-100 ${(examStatus === "running" || examStatus === "countdown") ? "opacity-30 cursor-not-allowed" : "cursor-pointer"}`}
+                    title={(examStatus === "running" || examStatus === "countdown") ? "Locked while an exam is in progress" : "Open tabs"}
+                    aria-label="Open tabs"
+                    aria-expanded={isTabOverviewOpen}
+                  >
+                    {/* Literal code port of the user-supplied Windows 11 Task View artwork. */}
+                    <span data-openeditor-taskview-glyph className="inline-flex items-center"><WindowsTaskViewGlyph /></span>
+                  </button>
+
+                  <button
+                    type="button"
+                    data-workspace-new-tab-trigger
+                    onClick={() => createNewTab(`New Document ${tabs.length + 1}`, "")}
+                    disabled={examStatus === "running" || examStatus === "countdown"}
+                    className={`flex h-full items-center justify-center border-0 bg-transparent px-2.5 py-1.5 text-neutral-500 dark:text-neutral-400 transition-colors hover:bg-black/[0.04] hover:text-neutral-800 dark:hover:bg-white/[0.06] dark:hover:text-neutral-100 ${(examStatus === "running" || examStatus === "countdown") ? "opacity-30 cursor-not-allowed" : "cursor-pointer"}`}
+                    title={(examStatus === "running" || examStatus === "countdown") ? "Locked while an exam is in progress" : "New Tab: Alt+T | Close: Alt+W | Switch: Alt+Left/Right"}
+                    aria-label="New tab"
+                  >
+                    {/* TabView's native Add glyph (Segoe MDL2 E710), matching
+                        IsAddTabButtonVisible="True" in the supplied XAML. */}
+                    <span data-openeditor-add-glyph><OpenEditorMdl2AddGlyph /></span>
+                  </button>
+
+                  <AnimatePresence>
+                    {isTabOverviewOpen && (
+                      <motion.div
+                        data-workspace-tab-overview
+                        initial={{ opacity: 0, y: -5 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -5 }}
+                        transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
+                        className="absolute right-0 top-full z-50 w-[720px] max-w-[calc(100vw-2rem)] max-h-[500px] overflow-hidden rounded-[14px] border border-transparent bg-white/[0.76] shadow-[0_24px_64px_rgba(0,0,0,0.17),0_2px_10px_rgba(0,0,0,0.06)] ring-1 ring-black/[0.04] backdrop-blur-[52px] backdrop-saturate-[1.35] dark:bg-[#1c1c1c]/[0.82] dark:shadow-[0_26px_68px_rgba(0,0,0,0.56),0_2px_12px_rgba(0,0,0,0.32)] dark:ring-white/[0.06]"
+                        style={{ fontFamily: '"Segoe UI Variable", "Segoe UI", system-ui, sans-serif' }}
+                      >
+                        <div className="flex max-h-[498px] flex-col">
+                          <div className="flex shrink-0 items-center justify-between px-[18px] pt-[18px] pb-3">
+                            <h2 className="text-[13px] font-semibold tracking-[-0.01em] text-neutral-900 dark:text-neutral-100">
+                              Open tabs
+                            </h2>
+                            <div className="flex items-center gap-2.5">
+                              {tabs.length > 0 && hasRoyScriptDesktopExitBridge() && (
+                                <button
+                                  type="button"
+                                  data-workspace-tab-close-all
+                                  onClick={closeAllTabsAndRequestExit}
+                                  disabled={examStatus === "running" || examStatus === "countdown" || tabs.length === 0}
+                                  className={`rounded-[7px] border-0 bg-transparent px-2 py-[5px] text-[12px] font-medium leading-none tracking-[-0.01em] transition-colors ${
+                                    examStatus === "running" || examStatus === "countdown" || tabs.length === 0
+                                      ? "text-neutral-300 dark:text-neutral-600 cursor-not-allowed"
+                                      : "text-neutral-500 hover:bg-neutral-900/[0.045] hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-white/[0.055] dark:hover:text-neutral-100 cursor-pointer"
+                                  }`}
+                                  title={(examStatus === "running" || examStatus === "countdown") ? "Locked while an exam is in progress" : "Close all tabs and exit the application"}
+                                >
+                                  Close all tabs
+                                </button>
+                              )}
+                              <span className="rounded-full bg-black/[0.04] px-2 py-[3px] text-[11px] font-medium leading-none text-neutral-400 shadow-[inset_0_1px_0_rgba(255,255,255,0.48)] dark:bg-white/[0.045] dark:text-neutral-500 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.035)]">
+                                {tabs.length} {tabs.length === 1 ? "tab" : "tabs"}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="min-h-0 overflow-y-auto overflow-x-hidden px-[18px] pb-[18px]">
+                            {tabs.length === 0 ? (
+                              <p className="px-1 pb-1 text-[12px] text-neutral-500 dark:text-neutral-400">No open tabs</p>
+                            ) : (
+                              <div data-workspace-tab-overview-list className="grid grid-cols-3 gap-3.5 rounded-[11px] bg-black/[0.018] p-2.5 dark:bg-black/[0.16]">
+                          {tabs.map(tab => {
+                            const isActive = tab.id === activeTabId;
+                            const isLocked = examStatus === "running" || examStatus === "countdown";
+                            const preview = buildTabOverviewPreview(tab.id === activeTabId ? editorContent : tab.content);
+                            return (
+                              <button
+                                type="button"
+                                key={tab.id}
+                                data-workspace-tab-overview-item={tab.id}
+                                data-workspace-tab-overview-activate={tab.id}
+                                onClick={() => {
+                                  setIsTabOverviewOpen(false);
+                                  switchTab(tab.id);
+                                }}
+                                disabled={isLocked}
+                                className={`group flex min-h-[138px] w-full flex-col rounded-[10px] border border-transparent bg-white/[0.52] p-3 text-left shadow-[0_1px_1px_rgba(0,0,0,0.018)] transition-[background-color,border-color,box-shadow] ${isLocked ? "cursor-not-allowed opacity-35" : "cursor-pointer hover:bg-white/[0.76] hover:border-black/[0.05] hover:shadow-[0_8px_20px_rgba(0,0,0,0.055)] dark:hover:bg-white/[0.065] dark:hover:border-white/[0.08] dark:hover:shadow-[0_10px_24px_rgba(0,0,0,0.2)]"} ${isActive ? "text-neutral-900 dark:text-neutral-50" : "text-neutral-700 dark:bg-white/[0.035] dark:shadow-[0_1px_1px_rgba(0,0,0,0.2)] dark:text-neutral-300"}`}
+                                style={isActive ? { borderColor: themeAccentColor, boxShadow: `0 0 0 1px ${themeAccentColor}22`, backgroundColor: `${themeAccentColor}0D` } : undefined}
+                              >
+                                <span className="flex w-full items-center gap-1.5 truncate text-[12px] font-medium leading-4">
+                                  <FileText className="h-[14px] w-[14px] shrink-0 text-neutral-400 dark:text-neutral-500" strokeWidth={1.55} />
+                                    <span className="truncate">{tab.name}</span>
+                                    {tab.isDirty && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-neutral-400 dark:bg-neutral-500" />}
+                                </span>
+                                <span
+                                    data-openeditor-tab-preview={tab.id}
+                                    className={`mt-3 block min-h-[72px] w-full overflow-hidden rounded-[6px] px-2.5 py-2 font-mono text-[10px] leading-[15px] ${preview ? "bg-black/[0.035] text-neutral-400 dark:bg-black/[0.16] dark:text-neutral-500" : "bg-black/[0.02] text-neutral-300 dark:bg-black/[0.12] dark:text-neutral-600"}`}
+                                    style={{
+                                      display: "-webkit-box",
+                                      WebkitBoxOrient: "vertical",
+                                      WebkitLineClamp: 4,
+                                      fontFamily: "Consolas, 'Liberation Mono', monospace",
+                                    }}
+                                  >
+                                    {preview || "No text yet"}
+                                  </span>
+                              </button>
+                            );
+                          })}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
 
               {/* Extra info/status in right side of tab bar */}
-              <div className="flex items-center gap-2 text-[10px] font-mono text-neutral-400 dark:text-neutral-500 mr-2 select-none">
-                <span>{tabs.length} {tabs.length === 1 ? "tab" : "tabs"}</span>
+              <div
+                data-tab-count
+                className="flex items-center gap-2 mr-2 ml-1 select-none shrink-0"
+                style={{ fontFamily: '"Segoe UI Variable", "Segoe UI", system-ui, sans-serif', fontSize: "12px", color: "inherit" }}
+              >
+                <span className="text-[12px] text-neutral-500 dark:text-neutral-400">{tabs.length} {tabs.length === 1 ? "tab" : "tabs"}</span>
               </div>
             </div>
             )}
@@ -4115,9 +4514,13 @@ export default function Workspace() {
                   key={editorKey}
                   ref={editorRef}
                   toolbarLeftAddon={hamAddon}
+                  toolbarWorkspaceAddon={workspaceToolbarAddon}
                   toolbarRightAddon={actCenterAddon}
-                  readOnly={examStatus === "timeout" || isExamSealed}
-                  className={`w-full flex-1 min-h-0 border-none rounded-none !bg-transparent transition-opacity duration-300 ${examStatus === "timeout" || isExamSealed ? "opacity-55 grayscale-[50%]" : ""} ${!isWordWrap ? "no-word-wrap" : ""}`}
+                  readOnly={isExamSealed}
+                  toolbarLocked={isExamSealed}
+                  sealedVisual={isExamSealed}
+                  onReadOnlyEditorDoubleClick={isExamSealed ? reopenTimesUpForSealedTab : undefined}
+                  className={`w-full flex-1 min-h-0 border-none rounded-none !bg-transparent ${!isWordWrap ? "no-word-wrap" : ""}`}
                   onReady={(m) => {
                     if (m) {
                       // Retrieve the active tab's properties and inject on mount
@@ -4137,11 +4540,10 @@ export default function Workspace() {
                   onChange={() => {
                     // First-keystroke glow: fire once per tab lifetime, only when real content exists
                     const activeTab = tabs.find(t => t.id === activeTabId);
-                    if (activeTab && !activeTab.hasGlowedOnce) {
+                    if (activeTab && !activeTab.hasGlowedOnce && firstKeyGlowPendingTabIdRef.current !== activeTabId) {
                       const text = editorRef.current?.getMarkdown?.() ?? "";
                       if (text.trim().length > 0) {
-                        setTabs(prev => prev.map(t => t.id === activeTabId ? { ...t, hasGlowedOnce: true } : t));
-                        fireTabGlow(activeTabId);
+                        fireTabGlow(activeTabId, { firstKey: true });
                       }
                     }
 
@@ -4190,22 +4592,13 @@ export default function Workspace() {
                   examActive={examStatus === "running" || examStatus === "countdown"}
                 />
 
-                {/* Ultimate read-only glass shield to absolutely prevent editing */}
-                {(examStatus === "timeout" || isExamSealed) && (
-                  <div
-                    className="absolute inset-0 z-50 cursor-not-allowed"
-                    onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); }}
-                    onKeyDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
-                    onMouseDownCapture={(e) => { e.preventDefault(); e.stopPropagation(); }}
-                    onTouchStartCapture={(e) => { e.preventDefault(); e.stopPropagation(); }}
-                    onPaste={(e) => { e.preventDefault(); e.stopPropagation(); }}
-                    title="Exam is sealed in read-only mode."
-                  />
-                )}
-
                 {/* Developer Status Bar (Phase 4) */}
                 {isStatusBarVisible && (
-                  <div className="h-8 shrink-0 bg-[#f9f9f9] dark:bg-[#141414] text-neutral-500 dark:text-neutral-400 flex items-center justify-between px-4 text-[12.5px] font-sans tracking-normal select-none border-t border-black/[0.08] dark:border-white/[0.06] z-10 w-full relative transition-colors duration-300">
+                  <div
+                    data-workspace-statusbar
+                    className="h-8 shrink-0 bg-[#f9f9f9] dark:bg-[#141414] text-neutral-500 dark:text-neutral-400 flex items-center justify-between px-4 select-none border-t border-black/[0.08] dark:border-white/[0.06] z-10 w-full relative transition-colors duration-300"
+                    style={{ fontFamily: '"Segoe UI Variable", "Segoe UI", system-ui, sans-serif', fontSize: "12px", letterSpacing: "normal" }}
+                  >
                     <div className="flex items-center gap-4">
                       <div className="px-2 py-0.5 flex items-center gap-1 cursor-default font-medium">
                         <div className="flex items-center">
@@ -4515,6 +4908,10 @@ export default function Workspace() {
               onCountdownEnd={() => setExamStatus("running")}
               onTimeout={handleExamTimeout}
               onFinish={() => {
+                setExamStatus("idle");
+                setIsExamMode(false);
+              }}
+              onJustLook={() => {
                 setExamStatus("idle");
                 setIsExamMode(false);
               }}
@@ -4842,6 +5239,7 @@ function ExamOverlay({
   onCountdownEnd,
   onTimeout,
   onFinish,
+  onJustLook,
   onClearApp,
   editorRef,
   onTriggerFallback,
@@ -5038,7 +5436,7 @@ function ExamOverlay({
       </AnimatePresence>
 
       {status === "timeout" && isPopupVisible && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/25 dark:bg-black/40 backdrop-blur-[6px] animate-in fade-in duration-200">
+        <div data-times-up-popup className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/25 dark:bg-black/40 backdrop-blur-[6px] animate-in fade-in duration-200">
           <motion.div
             initial={{ opacity: 0, scale: 0.98, y: 10 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -5104,7 +5502,7 @@ function ExamOverlay({
                   <button
                     onClick={() => {
                         setIsPopupVisible(false);
-                        onFinish();
+                        onJustLook();
                     }}
                     className="flex-1 py-3.5 rounded-xl bg-black/5 hover:bg-black/10 dark:bg-white/5 dark:hover:bg-white/10 text-[#1E1E1E] dark:text-[#EAEAEA] text-[14px] font-medium transition-all active:scale-[0.98] cursor-pointer"
                   >

@@ -1,0 +1,5 @@
+# Scoped Just Look Verification
+
+The focused live-browser regression completed against the local development server after the post-exam state redesign. It confirmed that the completed exam document remains read-only and preserves its content; the toolbar-integrated Task View and New Tab controls remain available; a persisted sealed tab does not impose read-only behavior on ordinary tabs; an ordinary dirty tab can still invoke and cancel the existing close-confirmation dialog; a new tab is fully editable; double-clicking the sealed editor area reopens the Times Up dialog; and the seal survives a Practice Mode round trip and later tab transitions.
+
+The accompanying browser capture, `sealed-exam-return.png`, showed the approved toolbar-integrated control layout intact while the protected exam document was active. Static validation completed with TypeScript clean, all 18 Vitest assertions passing, and a successful production build. The separate multi-tab browser regression also passed all 13 checks with no browser-console errors.

@@ -100,6 +100,24 @@
     transform: none !important;
   }
 
+  [data-workspace-toolbar-controls] button,
+  [data-workspace-toolbar-controls] button:hover:not(:disabled),
+  [data-workspace-toolbar-controls] button:active:not(:disabled),
+  [data-workspace-toolbar-controls] button svg,
+  [data-workspace-toolbar-controls] button:hover:not(:disabled) svg {
+    animation: none !important;
+    transform: none !important;
+  }
+
+  /* A completed exam remains visibly distinct without dimming its toolbar or
+     the floating Task View that lives in the toolbar slot. */
+  .lexkit-sealed-document .lexkit-content-editable,
+  .lexkit-sealed-document .lexkit-placeholder {
+    opacity: 0.55;
+    filter: grayscale(50%);
+    transition: opacity 300ms ease, filter 300ms ease;
+  }
+
 
   input, textarea, select {
     transition:

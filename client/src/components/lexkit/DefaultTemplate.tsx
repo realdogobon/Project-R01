@@ -377,12 +377,14 @@ function Toolbar({
   toggleTheme,
   onCommandPaletteOpen,
   leftAddon,
+  workspaceAddon,
   rightAddon,
   showLinkDialog,
   setShowLinkDialog,
   linkUrl,
   setLinkUrl,
   onEditCaption,
+  toolbarLocked = false,
 }: {
   commands: EditorCommands;
   hasExtension: (name: ExtensionNames) => boolean;
@@ -391,12 +393,14 @@ function Toolbar({
   toggleTheme: () => void;
   onCommandPaletteOpen: () => void;
   leftAddon?: React.ReactNode;
+  workspaceAddon?: React.ReactNode;
   rightAddon?: React.ReactNode;
   showLinkDialog: boolean;
   setShowLinkDialog: (show: boolean) => void;
   linkUrl: string;
   setLinkUrl: (url: string) => void;
   onEditCaption: () => void;
+  toolbarLocked?: boolean;
 }) {
   const { lexical: editor } = useEditor();
   const [showImageUrlDialog, setShowImageUrlDialog] = useState(false);
@@ -443,7 +447,7 @@ function Toolbar({
   return (
     <>
       <div className="lexkit-toolbar flex items-center justify-between w-full">
-        <div className="flex items-center gap-1.5 flex-1 overflow-x-auto no-scrollbar scroll-smooth flex-nowrap py-0.5">
+        <div data-lexkit-editing-controls aria-disabled={toolbarLocked} className={`flex items-center gap-1.5 flex-1 overflow-x-auto no-scrollbar scroll-smooth flex-nowrap py-0.5 ${toolbarLocked ? "pointer-events-none cursor-not-allowed opacity-30" : ""}`}>
           {leftAddon && <div className="lexkit-toolbar-section mr-2 shrink-0">{leftAddon}</div>}
 
           {/* Text Formatting */}
@@ -545,7 +549,9 @@ function Toolbar({
 
         </div>
 
-        <div className="flex items-center gap-1.5 shrink-0 pl-2 ml-auto border-l border-black/5 dark:border-white/5 lexkit-right-addon">
+        {workspaceAddon && <div className="lexkit-workspace-addon flex shrink-0 items-center">{workspaceAddon}</div>}
+
+        <div data-lexkit-command-controls aria-disabled={toolbarLocked} className={`flex items-center gap-1.5 shrink-0 pl-2 ml-auto border-l border-black/5 dark:border-white/5 lexkit-right-addon ${toolbarLocked ? "pointer-events-none cursor-not-allowed opacity-30" : ""}`}>
           <div className="lexkit-toolbar-section m-0">
             <button onClick={onCommandPaletteOpen} className="lexkit-toolbar-button" title="Command Palette (Ctrl+K)"><Command size={16} /></button>
           </div>
@@ -622,7 +628,11 @@ function EditorContent({
   readOnly,
   examActive,
   toolbarLeftAddon,
+  toolbarWorkspaceAddon,
   toolbarRightAddon,
+  toolbarLocked,
+  sealedVisual,
+  onReadOnlyEditorDoubleClick,
 }: {
   className?: string;
   isDark: boolean;
@@ -632,7 +642,11 @@ function EditorContent({
   readOnly?: boolean;
   examActive?: boolean;
   toolbarLeftAddon?: React.ReactNode;
+  toolbarWorkspaceAddon?: React.ReactNode;
   toolbarRightAddon?: React.ReactNode;
+  toolbarLocked?: boolean;
+  sealedVisual?: boolean;
+  onReadOnlyEditorDoubleClick?: () => void;
 }) {
   const alert = (message: string) => {
     try {
@@ -671,6 +685,15 @@ function EditorContent({
     setShowCaptionDialog(true);
   };
   const commandsRef = useRef<EditorCommands>(commands);
+  // Tab content is imported asynchronously. Keep the newest prop in a ref so
+  // an import scheduled by the tab we are leaving cannot restore that tab's
+  // read-only state after React has already activated a different document.
+  const latestReadOnlyRef = useRef(Boolean(readOnly));
+  latestReadOnlyRef.current = Boolean(readOnly);
+  // Each import belongs to one selected document. Older delayed callbacks must
+  // become no-ops instead of restoring their content, selection, or editability
+  // over the tab the user has already selected.
+  const hydrationGenerationRef = useRef(0);
   const readyRef = useRef(false);
 
   // OPTION A — custom caret eradicated; the browser's NATIVE caret now runs the
@@ -800,20 +823,34 @@ function EditorContent({
   const methods = useMemo<DefaultTemplateRef>(
     () => ({
       injectMarkdown: (markdownStr: string) => {
+        const hydrationRequestId = ++hydrationGenerationRef.current;
         setTimeout(() => {
+          if (hydrationRequestId !== hydrationGenerationRef.current) return;
           if (editor) {
             editor.update(() => {
               commandsRef.current.importFromMarkdown(markdownStr, { immediate: true, preventFocus: true });
+              // Hydration restores document content only. A real user click or
+              // keypress owns the next cursor placement; imports never create
+              // a startup caret or selection by themselves.
+              $setSelection(null);
             });
+            // Importing another document can restore Lexical's editable DOM
+            // flag. Use the newest active tab state, not the tab that queued
+            // this delayed import.
+            editor.setEditable(!latestReadOnlyRef.current);
           }
         }, 100);
       },
       injectHTML: (htmlStr: string) => {
+        const hydrationRequestId = ++hydrationGenerationRef.current;
         setTimeout(() => {
+          if (hydrationRequestId !== hydrationGenerationRef.current) return;
           if (editor) {
             editor.update(() => {
               commandsRef.current.importFromHTML(htmlStr, { preventFocus: true });
+              $setSelection(null);
             });
+            editor.setEditable(!latestReadOnlyRef.current);
           }
         }, 100);
       },
@@ -891,7 +928,7 @@ function EditorContent({
         }
       }
     }),
-    [editor],
+    [editor, readOnly],
   );
 
   useEffect(() => {
@@ -980,18 +1017,20 @@ function EditorContent({
             toggleTheme={toggleTheme}
             onCommandPaletteOpen={() => setCommandPaletteOpen(true)}
             leftAddon={toolbarLeftAddon}
+            workspaceAddon={toolbarWorkspaceAddon}
             rightAddon={toolbarRightAddon}
             showLinkDialog={showLinkDialog}
             setShowLinkDialog={setShowLinkDialog}
             linkUrl={linkUrl}
             setLinkUrl={setLinkUrl}
             onEditCaption={handleEditCaptionClick}
+            toolbarLocked={toolbarLocked}
           />
       </div>
       <div
         ref={containerRef}
         data-editor-theme={isDark ? "dark" : "light"}
-        className={`lexkit-editor flex-1 min-h-0 ${readOnly ? "select-none cursor-default" : ""}`}
+        className={`lexkit-editor flex-1 min-h-0 ${readOnly ? "select-none cursor-default" : ""} ${sealedVisual ? "lexkit-sealed-document" : ""}`}
         onCopyCapture={(e) => { if (examActive || readOnly) { e.preventDefault(); e.stopPropagation(); alert("Clipboard operations are locked."); } }}
         onCutCapture={(e) => { if (examActive || readOnly) { e.preventDefault(); e.stopPropagation(); alert("Clipboard operations are locked."); } }}
         onPasteCapture={(e) => { if (examActive || readOnly) { e.preventDefault(); e.stopPropagation(); alert("Clipboard operations are locked."); } }}
@@ -999,6 +1038,7 @@ function EditorContent({
         onMouseDownCapture={(e) => { if (readOnly) { e.preventDefault(); e.stopPropagation(); } }}
         onPointerDownCapture={(e) => { if (readOnly) { e.preventDefault(); e.stopPropagation(); } }}
         onKeyDownCapture={(e) => { if (readOnly) { e.preventDefault(); e.stopPropagation(); } }}
+        onDoubleClick={() => { if (readOnly) onReadOnlyEditorDoubleClick?.(); }}
       >
         <div className="flex flex-col flex-1 min-h-0">
           <RichText
@@ -1089,10 +1129,14 @@ interface DefaultTemplateProps {
   readOnly?: boolean;
   examActive?: boolean;
   toolbarLeftAddon?: React.ReactNode;
+  toolbarWorkspaceAddon?: React.ReactNode;
   toolbarRightAddon?: React.ReactNode;
+  toolbarLocked?: boolean;
+  sealedVisual?: boolean;
+  onReadOnlyEditorDoubleClick?: () => void;
 }
 
-export const DefaultTemplate = forwardRef<DefaultTemplateRef, DefaultTemplateProps>(({ className, onReady, onChange, readOnly, examActive, toolbarLeftAddon, toolbarRightAddon }, ref) => {
+export const DefaultTemplate = forwardRef<DefaultTemplateRef, DefaultTemplateProps>(({ className, onReady, onChange, readOnly, examActive, toolbarLeftAddon, toolbarWorkspaceAddon, toolbarRightAddon, toolbarLocked, sealedVisual, onReadOnlyEditorDoubleClick }, ref) => {
   const { theme: globalTheme, resolvedTheme } = useTheme();
   const [editorTheme, setEditorTheme] = useState<"light" | "dark">("light");
 
@@ -1129,7 +1173,7 @@ export const DefaultTemplate = forwardRef<DefaultTemplateRef, DefaultTemplatePro
   return (
     <div className={`lexkit-editor-wrapper flex flex-col h-full border-none rounded-none shadow-none !bg-transparent ${className || ""}`} data-editor-theme={editorTheme}>
       <Provider extensions={extensions} config={{ theme: defaultTheme }}>
-        <EditorContent className={className} isDark={isDark} toggleTheme={toggleTheme} onReady={handleReady} onChange={onChange} readOnly={readOnly} examActive={examActive} toolbarLeftAddon={toolbarLeftAddon} toolbarRightAddon={toolbarRightAddon} />
+        <EditorContent className={className} isDark={isDark} toggleTheme={toggleTheme} onReady={handleReady} onChange={onChange} readOnly={readOnly} examActive={examActive} toolbarLeftAddon={toolbarLeftAddon} toolbarWorkspaceAddon={toolbarWorkspaceAddon} toolbarRightAddon={toolbarRightAddon} toolbarLocked={toolbarLocked} sealedVisual={sealedVisual} onReadOnlyEditorDoubleClick={onReadOnlyEditorDoubleClick} />
       </Provider>
     </div>
   );
