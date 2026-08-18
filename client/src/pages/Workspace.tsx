@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { hasRoyScriptDesktopExitBridge, requestRoyScriptExit } from "../lib/platformExit";
+import { installRoyScriptDesktopShortcutBridge } from "../lib/desktopShortcuts";
 import { jsPDF } from "jspdf";
 import { Document, Packer, Paragraph, TextRun } from "docx";
 import {
@@ -741,6 +742,7 @@ export default function Workspace() {
       const isCtrlShiftS = isCtrlOrMeta && e.shiftKey && key === "s";
       const isCtrlP = isCtrlOrMeta && key === "p";
       const isCtrlShiftW = isCtrlOrMeta && e.shiftKey && key === "w";
+      const isTransientOverlayOpen = Boolean(document.querySelector("[data-royscript-transient-overlay]"));
 
       if (isCtrlN || isCtrlShiftN || isCtrlO || isCtrlS || isCtrlShiftS || isCtrlP || isCtrlShiftW) {
         e.preventDefault();
@@ -780,7 +782,7 @@ export default function Workspace() {
         return;
       }
 
-      if (isCtrlK || isEscape) {
+      if ((isCtrlK || isEscape) && !isTransientOverlayOpen) {
         if (!examLocked && !isExamSealed) {
           e.preventDefault();
           setIsSettingsOpen((prev) => !prev);
@@ -790,6 +792,8 @@ export default function Workspace() {
     window.addEventListener("keydown", handleGlobalKeyDown, true);
     return () => window.removeEventListener("keydown", handleGlobalKeyDown, true);
   }, [activeTabId, examStatus, isExamSealed, mode]);
+
+  useEffect(() => installRoyScriptDesktopShortcutBridge(), []);
 
   const sealActiveTab = (sealed: boolean) => {
     setTabs(prev => prev.map(t => t.id === activeTabId ? { ...t, examSealed: sealed } : t));
@@ -1056,12 +1060,13 @@ export default function Workspace() {
       }
 
       const isAltT = e.altKey && e.key.toLowerCase() === "t";
+      const isCtrlT = (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "t";
       const isAltW = e.altKey && e.key.toLowerCase() === "w";
       const isAltR = e.altKey && e.key.toLowerCase() === "r";
       const isAltLeft = e.altKey && (e.key === "ArrowLeft" || e.key === "[");
       const isAltRight = e.altKey && (e.key === "ArrowRight" || e.key === "]");
 
-      if (isAltT) {
+      if (isCtrlT || isAltT) {
         e.preventDefault();
         e.stopPropagation();
         createNewTab(`New Document ${tabs.length + 1}`, "");
@@ -4229,7 +4234,7 @@ export default function Workspace() {
             {examStatus === "running" && (
               <button
                 onClick={handleExamFinishEarly}
-                className="mr-4 hover:scale-105 active:scale-95 transition-all cursor-pointer bg-transparent border-none p-0 flex items-center justify-center"
+                className="mr-4 transition-opacity duration-150 ease-out hover:!transform-none active:!transform-none hover:opacity-75 active:opacity-60 cursor-pointer bg-transparent border-none p-0 flex items-center justify-center"
                 title="Stop Exam"
               >
                 <img

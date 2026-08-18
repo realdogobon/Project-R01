@@ -17,12 +17,14 @@ interface CommandPaletteProps {
   isOpen: boolean;
   onClose: () => void;
   commands: CommandPaletteItem[];
+  onExecute?: (action: () => void) => void;
 }
 
 export function CommandPalette({
   isOpen,
   onClose,
   commands,
+  onExecute,
 }: CommandPaletteProps) {
   const [query, setQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -50,6 +52,20 @@ export function CommandPalette({
 
   const flatCommands = filteredCommands;
 
+  const executeCommand = (command: CommandPaletteItem, afterKeyboardEvent = false) => {
+    const closeAndDispatch = () => {
+      onClose();
+      onExecute ? onExecute(command.action) : command.action();
+    };
+
+    if (afterKeyboardEvent) {
+      window.setTimeout(closeAndDispatch, 0);
+      return;
+    }
+
+    closeAndDispatch();
+  };
+
 
   useEffect(() => {
     setSelectedIndex(0);
@@ -69,39 +85,44 @@ export function CommandPalette({
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!isOpen) return;
 
+      const consumePaletteKey = () => {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+      };
+
       switch (e.key) {
         case "Escape":
-          e.preventDefault();
+          consumePaletteKey();
           onClose();
           break;
         case "ArrowDown":
-          e.preventDefault();
+          consumePaletteKey();
           setSelectedIndex((prev) =>
             Math.min(prev + 1, flatCommands.length - 1),
           );
           break;
         case "ArrowUp":
-          e.preventDefault();
+          consumePaletteKey();
           setSelectedIndex((prev) => Math.max(prev - 1, 0));
           break;
         case "Enter":
-          e.preventDefault();
+          consumePaletteKey();
           if (flatCommands[selectedIndex]) {
-            flatCommands[selectedIndex].action();
-            onClose();
+            executeCommand(flatCommands[selectedIndex], true);
           }
           break;
       }
     };
 
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, selectedIndex, flatCommands, onClose]);
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => window.removeEventListener("keydown", handleKeyDown, true);
+  }, [isOpen, selectedIndex, flatCommands, onClose, onExecute]);
 
   if (!isOpen) return null;
 
   return createPortal(
-    <div className="lexkit-command-palette-overlay" onClick={onClose}>
+    <div className="lexkit-command-palette-overlay" data-royscript-transient-overlay onClick={onClose}>
       <div
         className="lexkit-command-palette"
         onClick={(e) => e.stopPropagation()}
@@ -140,8 +161,7 @@ export function CommandPalette({
                         globalIndex === selectedIndex ? "selected" : ""
                       }`}
                       onClick={() => {
-                        cmd.action();
-                        onClose();
+                        executeCommand(cmd);
                       }}
                       onMouseEnter={() => setSelectedIndex(globalIndex)}
                     >

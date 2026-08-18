@@ -41,11 +41,13 @@ import { LexicalEditor, $getRoot, $createParagraphNode, $getSelection, $isRangeS
 import type { EditorSelectionStatus } from "../../lib/statusBar";
 import { Bold, Italic, Underline, Strikethrough, List, ListOrdered, Undo, Redo, Sun, Moon, Image as ImageIcon, AlignLeft, AlignCenter, AlignRight, Upload, Link, Unlink, Minus, Code, Terminal, Table as TableIcon, FileCode, Eye, Pencil, Command, Type, Quote, Indent, Outdent } from "lucide-react";
 import { Select, Dropdown, Dialog } from "./components";
+import { calculateFloatingToolbarPosition, type FloatingToolbarPosition } from "./floatingToolbarPosition";
 import {
   commandsToCommandPaletteItems,
   registerKeyboardShortcuts,
 } from "./commands";
 import { CommandPalette } from "./CommandPalette";
+import { createCommandPaletteExecutionGuard } from "./commandPaletteSafety";
 import { createPortal } from "react-dom";
 import { defaultTheme } from "./theme";
 import "./styles.css";
@@ -163,130 +165,103 @@ function FloatingToolbarRenderer({ setShowLinkDialog, onEditCaption }: { setShow
   const { commands, activeStates, extensions, hasExtension, lexical: editor } = useEditor();
 
   const [isVisible, setIsVisible] = useState(false);
-  const [selectionRect, setSelectionRect] = useState<{ x: number; y: number } | null>(null);
+  const [selectionPosition, setSelectionPosition] = useState<FloatingToolbarPosition | null>(null);
+  const toolbarRef = useRef<HTMLDivElement>(null);
 
   const floatingExtension = extensions.find((ext) => ext.name === "floatingToolbar") as any;
+
+  const updatePosition = useCallback(() => {
+    if (!floatingExtension?.getIsVisible?.() || !editor) {
+      setIsVisible(false);
+      setSelectionPosition(null);
+      return;
+    }
+
+    let anchorRect: DOMRect | null = null;
+    editor.getEditorState().read(() => {
+      const selection = $getSelection();
+
+      if ($isNodeSelection(selection)) {
+        const node = selection.getNodes()[0];
+        const element = node ? editor.getElementByKey(node.getKey()) : null;
+        if (element) {
+          const figure = element.querySelector("figure") || element;
+          anchorRect = figure.getBoundingClientRect();
+        }
+        return;
+      }
+
+      if ($isRangeSelection(selection) && !selection.isCollapsed()) {
+        const domSelection = window.getSelection();
+        if (domSelection?.rangeCount) {
+          anchorRect = domSelection.getRangeAt(0).getBoundingClientRect();
+        }
+      }
+    });
+
+    if (!anchorRect || anchorRect.width <= 0 || anchorRect.height <= 0) {
+      setIsVisible(false);
+      setSelectionPosition(null);
+      return;
+    }
+
+    const measuredToolbar = toolbarRef.current?.getBoundingClientRect();
+    const isImageSelection = activeStates.imageSelected;
+    const toolbarWidth = measuredToolbar?.width || (isImageSelection ? 180 : 400);
+    const toolbarHeight = measuredToolbar?.height || (isImageSelection ? 44 : 96);
+    const headerBottom = document.querySelector(".lexkit-editor-header")?.getBoundingClientRect().bottom || 0;
+
+    setSelectionPosition(calculateFloatingToolbarPosition({
+      selectionRect: anchorRect,
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+      toolbarWidth,
+      toolbarHeight,
+      protectedTop: headerBottom,
+      offset: 8,
+      edgeInset: 10,
+    }));
+    setIsVisible(true);
+  }, [activeStates.imageSelected, editor, floatingExtension]);
 
   useEffect(() => {
     if (!floatingExtension) return;
 
-    const checkState = () => {
-      const visible = floatingExtension.getIsVisible();
-      setIsVisible(visible);
-
-      if (visible) {
-
-        if (activeStates.imageSelected) {
-          let imageRect: DOMRect | null = null;
-          editor?.getEditorState().read(() => {
-            const sel = $getSelection();
-            if ($isNodeSelection(sel)) {
-              const nodes = sel.getNodes();
-              if (nodes.length > 0) {
-                const domEl = editor.getElementByKey(nodes[0].getKey());
-                if (domEl) {
-                  const fig = domEl.querySelector("figure") || domEl;
-                  imageRect = fig.getBoundingClientRect();
-                }
-              }
-            }
-          });
-
-          if (imageRect) {
-            const toolbarWidth = 180;
-            const toolbarHeight = 44;
-            const selectionCenter = imageRect.left + imageRect.width / 2;
-            let left = selectionCenter - toolbarWidth / 2;
-            let top = imageRect.top - toolbarHeight - 10;
-
-            const padding = 16;
-            if (left < padding) left = padding;
-            if (left + toolbarWidth > window.innerWidth - padding) {
-              left = window.innerWidth - toolbarWidth - padding;
-            }
-            if (top < padding) {
-              top = imageRect.bottom + 10;
-            }
-
-            setSelectionRect({ x: left, y: top });
-            return;
-          }
-        }
-
-
-        const selection = window.getSelection();
-        if (selection && selection.rangeCount > 0 && !selection.isCollapsed) {
-          const range = selection.getRangeAt(0);
-          const rect = range.getBoundingClientRect();
-          if (rect.width > 0 && rect.height > 0) {
-
-            const toolbarWidth = 460;
-            const toolbarHeight = 44;
-
-
-            const selectionCenter = rect.left + rect.width / 2;
-
-
-            let left = selectionCenter - toolbarWidth / 2;
-
-
-            const padding = 16;
-            if (left < padding) {
-              left = padding;
-            } else if (left + toolbarWidth > window.innerWidth - padding) {
-              left = window.innerWidth - toolbarWidth - padding;
-            }
-
-
-            let top = rect.top - toolbarHeight - 10;
-            if (top < padding) {
-              top = rect.bottom + 10;
-            }
-
-            setSelectionRect({ x: left, y: top });
-            return;
-          }
-        }
-      }
-      setSelectionRect(null);
-    };
-
-    const interval = setInterval(checkState, 150);
-    document.addEventListener("selectionchange", checkState);
-    window.addEventListener("resize", checkState);
-
-    const editable = document.querySelector(".lexkit-content-editable");
-    if (editable) {
-      editable.addEventListener("scroll", checkState);
-    }
+    const interval = window.setInterval(updatePosition, 100);
+    document.addEventListener("selectionchange", updatePosition);
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+    const resizeObserver = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(updatePosition);
+    if (toolbarRef.current) resizeObserver?.observe(toolbarRef.current);
+    updatePosition();
 
     return () => {
       clearInterval(interval);
-      document.removeEventListener("selectionchange", checkState);
-      window.removeEventListener("resize", checkState);
-      if (editable) {
-        editable.removeEventListener("scroll", checkState);
-      }
+      document.removeEventListener("selectionchange", updatePosition);
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+      resizeObserver?.disconnect();
     };
-  }, [floatingExtension, editor, activeStates.imageSelected]);
+  }, [floatingExtension, updatePosition]);
 
-  if (!isVisible || !selectionRect) return null;
+  if (!isVisible || !selectionPosition) return null;
 
   const isImageSelected = activeStates.imageSelected;
 
   return createPortal(
     <div
+      ref={toolbarRef}
       className="lexkit-floating-toolbar"
       style={{
         position: "fixed",
-        top: selectionRect.y,
-        left: selectionRect.x,
+        top: selectionPosition.y,
+        ...(selectionPosition.positionFromRight
+          ? { right: selectionPosition.edgeInset, left: "auto" }
+          : { left: selectionPosition.x, right: "auto" }),
         zIndex: 9999,
-        width: "max-content",
-        maxWidth: "fit-content",
-        flexWrap: "nowrap",
+        maxWidth: 400,
+        flexWrap: "wrap",
         pointerEvents: "auto",
-        transform: "none",
       }}
     >
       {isImageSelected ? (
@@ -554,7 +529,7 @@ function Toolbar({
 
         <div data-lexkit-command-controls aria-disabled={toolbarLocked} className={`flex items-center gap-1.5 shrink-0 pl-2 ml-auto border-l border-black/5 dark:border-white/5 lexkit-right-addon ${toolbarLocked ? "pointer-events-none cursor-not-allowed opacity-30" : ""}`}>
           <div className="lexkit-toolbar-section m-0">
-            <button onClick={onCommandPaletteOpen} className="lexkit-toolbar-button" title="Command Palette (Ctrl+K)"><Command size={16} /></button>
+            <button onClick={onCommandPaletteOpen} className="lexkit-toolbar-button" title="Command Palette (Ctrl+Shift+P)"><Command size={16} /></button>
           </div>
           {rightAddon}
         </div>
@@ -702,6 +677,43 @@ function EditorContent({
   // over the tab the user has already selected.
   const hydrationGenerationRef = useRef(0);
   const readyRef = useRef(false);
+  const paletteSelectionRef = useRef<ReturnType<typeof $getSelection> | null>(null);
+
+  const paletteExecutionGuard = useMemo(() => createCommandPaletteExecutionGuard<NonNullable<ReturnType<typeof $getSelection>>>({
+    focusEditor: () => editor?.focus(),
+    restoreSelection: (selectionSnapshot, afterRestore) => {
+      if (!editor) {
+        afterRestore();
+        return;
+      }
+      editor.update(() => {
+        $setSelection(selectionSnapshot.clone());
+      }, { onUpdate: afterRestore });
+    },
+  }), [editor]);
+
+  const capturePaletteSelection = useCallback(() => {
+    let selectionSnapshot: ReturnType<typeof $getSelection> | null = null;
+    editor?.getEditorState().read(() => {
+      const selection = $getSelection();
+      selectionSnapshot = selection ? selection.clone() : null;
+    });
+    paletteSelectionRef.current = selectionSnapshot;
+  }, [editor]);
+
+  const openCommandPalette = useCallback(() => {
+    capturePaletteSelection();
+    setCommandPaletteOpen(true);
+  }, [capturePaletteSelection]);
+
+  const executePaletteCommand = useCallback((action: () => void) => {
+    const selectionSnapshot = paletteSelectionRef.current;
+    paletteSelectionRef.current = null;
+    paletteExecutionGuard.capture(selectionSnapshot);
+    requestAnimationFrame(() => {
+      paletteExecutionGuard.execute(action);
+    });
+  }, [paletteExecutionGuard]);
 
   // OPTION A — custom caret eradicated; the browser's NATIVE caret now runs the
   // editor (1:1 with LexKit's own approach). Zero custom JS positioning.
@@ -1034,7 +1046,7 @@ function EditorContent({
     paletteCommands.forEach((cmd) => commands.registerCommand(cmd));
 
     const originalShowCommand = commands.showCommandPalette;
-    (commands as any).showCommandPalette = () => setCommandPaletteOpen(true);
+    (commands as any).showCommandPalette = openCommandPalette;
 
     const originalInsertImage = commands.insertImage;
     commands.insertImage = (payload: any) => {
@@ -1085,7 +1097,7 @@ function EditorContent({
       (commands as any).showCommandPalette = originalShowCommand;
       commands.insertImage = originalInsertImage;
     };
-  }, [editor, commands, onReady, methods]);
+  }, [editor, commands, onReady, methods, openCommandPalette]);
 
   return (
     <>
@@ -1096,7 +1108,7 @@ function EditorContent({
             activeStates={activeStates}
             isDark={isDark}
             toggleTheme={toggleTheme}
-            onCommandPaletteOpen={() => setCommandPaletteOpen(true)}
+            onCommandPaletteOpen={openCommandPalette}
             leftAddon={toolbarLeftAddon}
             workspaceAddon={toolbarWorkspaceAddon}
             rightAddon={toolbarRightAddon}
@@ -1175,7 +1187,7 @@ function EditorContent({
           </div>
         )}
       </div>
-      <CommandPalette isOpen={commandPaletteOpen} onClose={() => setCommandPaletteOpen(false)} commands={commandsToCommandPaletteItems(commands)} />
+      <CommandPalette isOpen={commandPaletteOpen} onClose={() => setCommandPaletteOpen(false)} onExecute={executePaletteCommand} commands={commandsToCommandPaletteItems(commands)} />
 
       {/* Caption Dialog */}
       <Dialog isOpen={showCaptionDialog} onClose={() => setShowCaptionDialog(false)} title="Edit Image Caption">

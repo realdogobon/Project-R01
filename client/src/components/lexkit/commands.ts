@@ -364,6 +364,23 @@ function formatShortcut(shortcut: KeyboardShortcut): string {
   return parts.join("+");
 }
 
+export function matchesKeyboardShortcut(
+  event: Pick<KeyboardEvent, "key" | "ctrlKey" | "metaKey" | "shiftKey" | "altKey">,
+  shortcut: KeyboardShortcut,
+): boolean {
+  const expectsPrimaryModifier = !!shortcut.ctrlKey || !!shortcut.metaKey;
+  const primaryModifierMatches = expectsPrimaryModifier
+    ? (event.ctrlKey || event.metaKey)
+    : (!event.ctrlKey && !event.metaKey);
+
+  return (
+    event.key.toLowerCase() === shortcut.key.toLowerCase() &&
+    primaryModifierMatches &&
+    !!event.shiftKey === !!shortcut.shiftKey &&
+    !!event.altKey === !!shortcut.altKey
+  );
+}
+
 
 export function registerKeyboardShortcuts(
   commands: EditorCommands,
@@ -376,13 +393,7 @@ export function registerKeyboardShortcuts(
       if (!config.shortcuts) continue;
 
       for (const shortcut of config.shortcuts) {
-        if (
-          event.key.toLowerCase() === shortcut.key.toLowerCase() &&
-          !!event.ctrlKey === !!shortcut.ctrlKey &&
-          !!event.metaKey === !!shortcut.metaKey &&
-          !!event.shiftKey === !!shortcut.shiftKey &&
-          !!event.altKey === !!shortcut.altKey
-        ) {
+        if (matchesKeyboardShortcut(event, shortcut)) {
           if (shortcut.preventDefault !== false) {
             event.preventDefault();
           }

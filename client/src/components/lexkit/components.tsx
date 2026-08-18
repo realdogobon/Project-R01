@@ -197,7 +197,7 @@ export function Dialog({
   if (!isOpen) return null;
 
   return createPortal(
-    <div className="lexkit-dialog-overlay">
+    <div className="lexkit-dialog-overlay" data-royscript-transient-overlay>
       <div className="lexkit-dialog" ref={dialogRef}>
         <div className="lexkit-dialog-header">
           <h3 className="lexkit-dialog-title">{title}</h3>

@@ -136,17 +136,7 @@
   }
 
 
-  input, textarea {
-    caret-color: #3b82f6 !important;
-  }
-
-  .dark input,
-  .dark textarea {
-    caret-color: #60a5fa !important;
-  }
-
-
-  input:hover:not(:disabled),
+  input:not(.lexkit-input):not(.lexkit-command-palette-input):hover:not(:disabled),
   textarea:hover:not(:disabled) {
     border-color: rgba(59, 130, 246, 0.35) !important;
     transform: scale(1.001) translateY(-0.2px);
@@ -226,15 +216,15 @@
     filter: drop-shadow(0 0 0 rgba(0,0,0,0)) !important;
   }
 
-  .dark input:hover:not(:disabled),
-  .dark textarea:hover:not(:disabled) {
+  .dark input:not(.lexkit-input):not(.lexkit-command-palette-input):hover:not(:disabled),
+  .dark textarea:not(.lexkit-input):not(.lexkit-command-palette-input):hover:not(:disabled) {
     border-color: rgba(96, 165, 250, 0.4) !important;
     transform: scale(1.001) translateY(-0.2px);
   }
 
 
-  input:focus,
-  textarea:focus {
+  input:not(.lexkit-input):not(.lexkit-command-palette-input):focus,
+  textarea:not(.lexkit-input):not(.lexkit-command-palette-input):focus {
     outline: none !important;
     border-color: rgba(59, 130, 246, 0.5) !important;
     background-color: rgba(59, 130, 246, 0.008) !important;
@@ -242,8 +232,8 @@
     transform: scale(1.003) translateY(-0.4px) !important;
   }
 
-  .dark input:focus,
-  .dark textarea:focus {
+  .dark input:not(.lexkit-input):not(.lexkit-command-palette-input):focus,
+  .dark textarea:not(.lexkit-input):not(.lexkit-command-palette-input):focus {
     outline: none !important;
     border-color: rgba(96, 165, 250, 0.45) !important;
     background-color: rgba(96, 165, 250, 0.008) !important;
