@@ -219,19 +219,6 @@ function ThemeToggle({ disabled }: { disabled?: boolean }) {
   );
 }
 
-// Builds the neon-glow outline path in the tab's own real pixel box (not a distorted
-// 0-100 square) so the curve radius matches the tab's actual CSS rounded-lg corner
-// exactly — no stretching, no jagged arcs. `flushLeft` drops the top-left corner/curve
-// entirely for the first tab, which sits directly against the app's left wall like a
-// native OS tab (no separate border/curve there); other tabs get both corners rounded.
-function buildTabAccentPath(width: number, height: number, flushLeft: boolean): string {
-  const r = 8; // matches Tailwind's rounded-lg radius used on the tab itself
-  if (flushLeft) {
-    return `M 0 0 L ${width - r} 0 A ${r} ${r} 0 0 1 ${width} ${r} L ${width} ${height}`;
-  }
-  return `M 0 ${height} L 0 ${r} A ${r} ${r} 0 0 1 ${r} 0 L ${width - r} 0 A ${r} ${r} 0 0 1 ${width} ${r} L ${width} ${height}`;
-}
-
 const ScannerLiveIcon = ({ className = "w-4 h-4" }: { className?: string }) => {
   const [paperFeedRun, setPaperFeedRun] = useState(0);
   const [isPaperFeedActive, setIsPaperFeedActive] = useState(false);
@@ -482,7 +469,8 @@ export default function Workspace() {
     weakKeys: [] as string[],
     problemKeys: [] as string[],
     timerRunning: false,
-    typedTextLength: 0
+    typedTextLength: 0,
+    activeKeyCodes: [] as string[]
   });
   const [drillKeys, setDrillKeys] = useState<string[] | null>(null);
   const [forceStep, setForceStep] = useState<number | null>(null);
@@ -586,31 +574,6 @@ export default function Workspace() {
     };
   }, []);
 
-  // --- Accent bar idle tracking: dims the tab accent bar after inactivity, ---
-  // --- restores it quietly on the next input. Does not touch tab-glow logic. ---
-  useEffect(() => {
-    const ACCENT_IDLE_THRESHOLD_MS = 30 * 1000; // 30s
-    const markActive = () => {
-      lastActivityAtRef.current = Date.now();
-      setIsAccentBarIdle(false);
-    };
-    window.addEventListener("mousemove", markActive);
-    window.addEventListener("mousedown", markActive);
-    window.addEventListener("keydown", markActive);
-    const intervalId = window.setInterval(() => {
-      const gap = Date.now() - lastActivityAtRef.current;
-      if (gap >= ACCENT_IDLE_THRESHOLD_MS) {
-        setIsAccentBarIdle(true);
-      }
-    }, 2000);
-    return () => {
-      window.removeEventListener("mousemove", markActive);
-      window.removeEventListener("mousedown", markActive);
-      window.removeEventListener("keydown", markActive);
-      window.clearInterval(intervalId);
-    };
-  }, []);
-
   const [examRemainingSeconds, setExamRemainingSeconds] = useState(0);
   const [examTotalSeconds, setExamTotalSeconds] = useState(0);
   const [currentFileHandle, setCurrentFileHandle] = useState<any>(null);
@@ -620,29 +583,16 @@ export default function Workspace() {
 
 
 
-  const [tabs, setTabs] = useState<Array<{ id: string; name: string; content: string; fileHandle?: any; isDirty?: boolean; isAutoNamed?: boolean; examSealed?: boolean; hasGlowedOnce?: boolean; lastActiveAt?: number; format?: TabFormat; savedContent?: string; savedFormat?: TabFormat }>>([
-    { id: "1", name: "New Document", content: "", isDirty: false, isAutoNamed: true, examSealed: false, hasGlowedOnce: false, format: DEFAULT_TAB_FORMAT, savedContent: "", savedFormat: DEFAULT_TAB_FORMAT }
+  const [tabs, setTabs] = useState<Array<{ id: string; name: string; content: string; fileHandle?: any; isDirty?: boolean; isAutoNamed?: boolean; examSealed?: boolean; format?: TabFormat; savedContent?: string; savedFormat?: TabFormat }>>([
+    { id: "1", name: "New Document", content: "", isDirty: false, isAutoNamed: true, examSealed: false, format: DEFAULT_TAB_FORMAT, savedContent: "", savedFormat: DEFAULT_TAB_FORMAT }
   ]);
   const [activeTabId, setActiveTabId] = useState<string>("1");
-  const [glowingTabId, setGlowingTabId] = useState<string | null>(null);
-  // The first keystroke must finish its existing sweep before the steady tube
-  // can render. This separate lifecycle marker prevents a first-frame overlap.
-  const firstKeyGlowPendingTabIdRef = useRef<string | null>(null);
-  const [closingTabId, setClosingTabId] = useState<string | null>(null);
   const [isTabOverviewOpen, setIsTabOverviewOpen] = useState(false);
   const [tabOverviewQuery, setTabOverviewQuery] = useState("");
   const [tabOverviewSelectedIndex, setTabOverviewSelectedIndex] = useState(0);
-  const [isAccentBarIdle, setIsAccentBarIdle] = useState(false);
-  const lastActivityAtRef = useRef<number>(Date.now());
-  // Real pixel box of the currently-active tab, measured directly from the DOM so the
-  // neon-glow outline's curve radius matches the tab's actual rendered corner exactly
-  // (no distorted viewBox stretching a square arc onto a rectangular tab).
-  const activeTabElRef = useRef<HTMLDivElement | null>(null);
-  const tabStripScrollRef = useRef<HTMLDivElement | null>(null);
   const tabOverviewRef = useRef<HTMLDivElement | null>(null);
   const tabOverviewPaletteRef = useRef<HTMLDivElement | null>(null);
   const tabOverviewSearchInputRef = useRef<HTMLInputElement | null>(null);
-  const [activeTabBox, setActiveTabBox] = useState({ width: 176, height: 40 });
   const filteredTabOverviewTabs = useMemo(() => {
     const normalizedQuery = tabOverviewQuery.trim().toLowerCase();
     if (!normalizedQuery) return tabs;
@@ -651,66 +601,6 @@ export default function Workspace() {
       return `${tab.name} ${preview}`.toLowerCase().includes(normalizedQuery);
     });
   }, [tabs, tabOverviewQuery]);
-
-  // Measures the active tab's real rendered box so the neon-glow outline can be built
-  // in exact pixel units instead of a distorted 0-100 viewBox stretched to fit.
-  useEffect(() => {
-    const measure = () => {
-      const el = activeTabElRef.current;
-      if (el) {
-        const rect = el.getBoundingClientRect();
-        if (rect.width > 0 && rect.height > 0) {
-          setActiveTabBox({ width: rect.width, height: rect.height });
-        }
-      }
-    };
-    measure();
-    window.addEventListener("resize", measure);
-    return () => window.removeEventListener("resize", measure);
-  }, [activeTabId]);
-
-  // Tab cards may overflow, but the active document should always be revealed
-  // inside the dedicated scrolling region after creation or activation.
-  useEffect(() => {
-    const revealActiveTab = (behavior: "smooth" | "instant") => {
-      const activeEl = activeTabElRef.current;
-      const stripEl = tabStripScrollRef.current;
-      if (!activeEl || !stripEl) return;
-
-      const tabRect = activeEl.getBoundingClientRect();
-      const stripRect = stripEl.getBoundingClientRect();
-      const correction = tabRect.left < stripRect.left
-        ? tabRect.left - stripRect.left
-        : tabRect.right > stripRect.right
-          ? tabRect.right - stripRect.right
-          : 0;
-      if (!correction) return;
-
-      if (behavior === "instant") {
-        // The strip uses Tailwind's `scroll-smooth`, so `behavior: "auto"`
-        // would still animate. A numeric correction guarantees the final
-        // measured pass clears the fixed trailing controls.
-        stripEl.scrollLeft += correction;
-      } else {
-        stripEl.scrollBy({ left: correction, behavior });
-      }
-    };
-
-    const frame = window.requestAnimationFrame(() => revealActiveTab("smooth"));
-    // Entering an exam creates its protected tab while adjacent editor chrome is
-    // still settling. A second, immediate measured pass completes any final
-    // few-pixel correction after the first smooth movement has started.
-    const settledFrame = window.setTimeout(() => revealActiveTab("instant"), 180);
-    // A later read accounts for the finished smooth-scroll and any late tab-width
-    // settlement. It keeps the active card fully inside the scroll region rather
-    // than fractionally underneath the fixed overview/new-tab controls.
-    const finalFrame = window.setTimeout(() => revealActiveTab("instant"), 520);
-    return () => {
-      window.cancelAnimationFrame(frame);
-      window.clearTimeout(settledFrame);
-      window.clearTimeout(finalFrame);
-    };
-  }, [activeTabId, tabs.length]);
 
   // The overview behaves like a quiet document switcher: it closes when the
   // user escapes or clicks elsewhere, without affecting editor focus or tabs.
@@ -743,7 +633,6 @@ export default function Workspace() {
   useEffect(() => {
     setTabOverviewSelectedIndex(0);
   }, [tabOverviewQuery]);
-  const pendingCloseTabIdRef = useRef<string | null>(null);
   const activeTab = tabs.find(t => t.id === activeTabId);
   const isExamSealed = !!activeTab?.examSealed;
 
@@ -867,39 +756,6 @@ export default function Workspace() {
     setTabs(prev => prev.map(t => t.id === activeTabId ? { ...t, content } : t));
   };
 
-  // --- Tab glow & close helpers ---
-  const GLOW_LONG_ABSENCE_MS  = 5 * 60 * 1000;  // 5 min  → always glow
-  const GLOW_SHORT_ABSENCE_MS = 45 * 1000;       // 45 sec → glow if tab has content
-
-  const fireTabGlow = (tabId: string, options?: { firstKey?: boolean }) => {
-    if (options?.firstKey) firstKeyGlowPendingTabIdRef.current = tabId;
-    setGlowingTabId(null);
-    requestAnimationFrame(() => setGlowingTabId(tabId));
-  };
-
-  const completeTabGlow = (tabId: string) => {
-    setGlowingTabId(currentId => currentId === tabId ? null : currentId);
-    if (firstKeyGlowPendingTabIdRef.current === tabId) {
-      firstKeyGlowPendingTabIdRef.current = null;
-      setTabs(prev => prev.map(tab => tab.id === tabId ? { ...tab, hasGlowedOnce: true } : tab));
-    }
-  };
-
-  const shouldGlowOnReturn = (tab: { isDirty?: boolean; lastActiveAt?: number; content?: string }): boolean => {
-    if (!tab.lastActiveAt) return false;
-    const gap = Date.now() - tab.lastActiveAt;
-    if (gap >= GLOW_LONG_ABSENCE_MS) return true;
-    if (gap >= GLOW_SHORT_ABSENCE_MS && (tab.isDirty || (tab.content && tab.content.trim().length > 0))) return true;
-    return false;
-  };
-
-  const handleCloseAnimationEnd = () => {
-    const tid = pendingCloseTabIdRef.current;
-    pendingCloseTabIdRef.current = null;
-    setClosingTabId(null);
-    if (tid) doCloseTab(tid);
-  };
-
   const initiateTabClose = (tabId: string, e?: React.MouseEvent) => {
     if (e) { e.stopPropagation(); e.preventDefault(); }
     const tabToClose = tabs.find(t => t.id === tabId);
@@ -924,7 +780,7 @@ export default function Workspace() {
     setTabs(prev => prev.map(t => t.id === activeTabId ? { ...t, content: currentText, isDirty: isDirty } : t));
 
     const newId = String(Date.now());
-    const newTab = { id: newId, name, content, fileHandle, isDirty: false, isAutoNamed: true, hasGlowedOnce: false, format: DEFAULT_TAB_FORMAT, savedContent: content, savedFormat: DEFAULT_TAB_FORMAT };
+    const newTab = { id: newId, name, content, fileHandle, isDirty: false, isAutoNamed: true, format: DEFAULT_TAB_FORMAT, savedContent: content, savedFormat: DEFAULT_TAB_FORMAT };
     setTabs(prev => [...prev, newTab]);
     setActiveTabId(newId);
     setFileName(name);
@@ -951,20 +807,10 @@ export default function Workspace() {
     }
 
     const currentText = editorRef.current ? editorRef.current.getMarkdown() : editorContent;
-    // Stamp lastActiveAt on the tab we're leaving
-    setTabs(prev => prev.map(t => t.id === activeTabId ? { ...t, content: currentText, isDirty: isDirty, lastActiveAt: Date.now() } : t));
+    setTabs(prev => prev.map(t => t.id === activeTabId ? { ...t, content: currentText, isDirty: isDirty } : t));
 
     const nextTab = tabs.find(t => t.id === tabId);
     if (!nextTab) return;
-
-    // An interrupted first-key sweep should remain eligible to replay cleanly
-    // when the user returns, rather than latching a static partial outline.
-    if (firstKeyGlowPendingTabIdRef.current === activeTabId) {
-      firstKeyGlowPendingTabIdRef.current = null;
-    }
-
-    // Smart return-glow: fire only after meaningful absence
-    if (shouldGlowOnReturn(nextTab)) fireTabGlow(tabId);
 
     setActiveTabId(tabId);
     setFileName(nextTab.name);
@@ -1256,8 +1102,7 @@ export default function Workspace() {
     }
     else if (action.startsWith("animatedCloseTab:")) {
       const tabId = action.replace("animatedCloseTab:", "");
-      pendingCloseTabIdRef.current = tabId;
-      setClosingTabId(tabId);
+      doCloseTab(tabId);
     }
   };
 
@@ -4049,23 +3894,24 @@ export default function Workspace() {
         <div className="h-14 bg-white/70 dark:bg-black/50 backdrop-blur-2xl flex items-center justify-between pl-2 pr-4 border-b border-black/5 dark:border-white/5 select-none relative z-10 transition-colors">
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
-              <div className="flex items-center gap-2">
+              <div data-royscript-wordmark aria-label="RoyScript TSR" className="flex items-center gap-2">
                 <img
                   src={logoImage}
                   alt="RoyScript logo"
                   className="h-[30px] md:h-[36px] w-auto select-none"
                   draggable={false}
                 />
-                <span className="font-bold text-xl md:text-[26px] tracking-[-0.04em] text-neutral-900 dark:text-neutral-50 font-sans antialiased select-none leading-none">
-                  RoyScript
-                </span>
                 <span
-                  className="font-black text-[17px] md:text-[18px] tracking-[0.05em] uppercase font-sans antialiased select-none transition-all duration-300 leading-none"
-                  style={{
-                    color: themeAccentColor
-                  }}
+                  className="inline-flex items-baseline whitespace-nowrap text-neutral-900 dark:text-neutral-50 select-none leading-none antialiased"
                 >
-                  TSR
+                  <span className="font-serif text-[25px] md:text-[29px] font-semibold tracking-[-0.08em] leading-none">R</span>
+                  <span className="font-sans text-[21px] md:text-[25px] font-semibold tracking-[-0.055em] leading-none">oyScript</span>
+                  <span
+                    className="mb-[0.14em] ml-[0.24em] font-sans text-[11px] md:text-[12px] font-bold uppercase tracking-[0.075em] leading-none transition-colors duration-300"
+                    style={{ color: themeAccentColor }}
+                  >
+                    TSR
+                  </span>
                 </span>
               </div>
               {user && (
@@ -4117,10 +3963,11 @@ export default function Workspace() {
                 >
                   <div className="flex items-center justify-center gap-1.5">
                     {m === "Practice" ? (
-                       <AnimatedPracticeIcon
-                         active={mode === m && practiceState.step === 2}
-                         isHovered={hoveredMode === m}
-                         className={`transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${mode === m ? "w-[28px] h-[28px]" : "w-[20px] h-[20px]"}`}
+                        <AnimatedPracticeIcon
+                          active={mode === m && practiceState.step === 2}
+                          activeKeyCodes={practiceState.activeKeyCodes}
+                          isHovered={hoveredMode === m}
+                          className={`transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${mode === m ? "w-[28px] h-[28px]" : "w-[20px] h-[20px]"}`}
                        />
                     ) : (
                        <AnimatedWriteIcon
@@ -4333,321 +4180,6 @@ export default function Workspace() {
 
           {/* Main Area */}
           <div className="flex-1 flex flex-col bg-white dark:bg-[#1a1a1a] relative overflow-hidden transition-colors shadow-[-10px_0_15px_-10px_rgba(0,0,0,0.05)] z-0">
-            {false && mode === "Write" && (
-              <div data-workspace-tab-strip className="h-10 bg-neutral-100 dark:bg-[#161616] flex items-center shrink-0 select-none">
-                <div
-                  ref={tabStripScrollRef}
-                  data-workspace-tab-scroll
-                  className="flex items-center gap-1 overflow-x-auto no-scrollbar scroll-smooth min-w-0 flex-1 h-full"
-                >
-                {tabs.map((tab, tabIndex) => {
-                  const isActive = tab.id === activeTabId;
-                  const examLockedUI = (examStatus === "running" || examStatus === "countdown") && !isActive;
-                  const isFirstTab = tabIndex === 0;
-                  return (
-                    <div
-                      key={tab.id}
-                      data-workspace-tab-card={tab.id}
-                      data-workspace-tab-active={isActive ? "true" : undefined}
-                      ref={isActive ? activeTabElRef : undefined}
-                      onClick={() => !examLockedUI && switchTab(tab.id)}
-                      onDoubleClick={(e) => {
-                         e.preventDefault();
-                         e.stopPropagation();
-                         if (examStatus === "running" || examStatus === "countdown") return;
-                         const newName = prompt(`Rename tab "${tab.name}" to:`, tab.name);
-                         if (newName && newName.trim()) {
-                            const cleanedName = newName.trim();
-                            setTabs(prev => prev.map(t => t.id === tab.id ? { ...t, name: cleanedName, isAutoNamed: false } : t));
-                            if (tab.id === activeTabId) {
-                              setFileName(cleanedName);
-                            }
-                         }
-                      }}
-                      onMouseUp={(e) => {
-                        if (e.button === 1) { // Middle click
-                          e.preventDefault();
-                          e.stopPropagation();
-                          if (examStatus === "running" || examStatus === "countdown") {
-                            alert("Cannot close tabs during an active exam.");
-                            return;
-                          }
-                          initiateTabClose(tab.id, e as any);
-                        }
-                      }}
-                      title={examLockedUI ? "Locked while an exam is in progress" : undefined}
-                      className={`group relative h-full w-44 ${
-                        isFirstTab ? "rounded-tr-lg border-r" : "rounded-t-lg border-x"
-                      } border-b-0 px-3 flex items-center justify-between gap-2.5 transition-all text-[12.5px] font-sans ${
-                        examLockedUI ? "opacity-40 grayscale-[40%] cursor-not-allowed pointer-events-none" : "cursor-pointer"
-                      } ${
-                        isActive
-                          ? "bg-white dark:bg-[#1a1a1a] border-neutral-200 dark:border-white/10 text-neutral-800 dark:text-neutral-100 font-semibold"
-                          : "bg-neutral-50/50 dark:bg-[#1c1c1c] border-transparent text-neutral-400 dark:text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300 hover:bg-neutral-200/50 dark:hover:bg-white/[0.02]"
-                      }`}
-                    >
-                      {/* Accent glow: neon tube traced around the tab's full outer outline
-                          (up the left edge, through the top-left curve, across the top,
-                          through the top-right curve, down the right edge) instead of a
-                          flat top strip. Same 4-phase timeline as before. */}
-                      {isActive && closingTabId !== tab.id && (() => {
-                        const accentPath = buildTabAccentPath(activeTabBox.width, activeTabBox.height, isFirstTab);
-                        return (
-                        <svg
-                          className="absolute inset-0 w-full h-full overflow-visible pointer-events-none"
-                          viewBox={`0 0 ${activeTabBox.width} ${activeTabBox.height}`}
-                        style={{
-                            opacity: (glowingTabId !== tab.id && isAccentBarIdle) ? 0 : 1,
-                            transition: 'opacity 0.6s ease',
-                          }}
-                        >
-                          {/* "off" state: a fresh tab that has never played its first-keystroke
-                              cycle stays dark until then, matching the neon-tube spec. */}
-                          {tab.hasGlowedOnce && glowingTabId !== tab.id && (
-                            <path
-                              d={accentPath}
-                              fill="none"
-                              stroke={themeAccentColor}
-                              strokeWidth={2}
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              vectorEffect="non-scaling-stroke"
-                            />
-                          )}
-                          {glowingTabId === tab.id && (
-                            <>
-                              <path
-                                d={accentPath}
-                                fill="none"
-                                stroke={themeAccentColor}
-                                strokeWidth={2}
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                vectorEffect="non-scaling-stroke"
-                                pathLength={1}
-                                className="tab-neon-trail-path"
-                              />
-                              <path
-                                d={accentPath}
-                                fill="none"
-                                strokeWidth={2.5}
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                vectorEffect="non-scaling-stroke"
-                                pathLength={1}
-                                className="tab-neon-pulse-path"
-                                onAnimationEnd={() => completeTabGlow(tab.id)}
-                              />
-                            </>
-                          )}
-                        </svg>
-                        );
-                      })()}
-                      {/* Close: same outline path and pixel-accurate geometry as the accent
-                          glow, played in reverse — the lit trail retreats back to the wall
-                          and vanishes, at the same duration the old flat close-drain used. */}
-                      {closingTabId === tab.id && (() => {
-                        const closePath = buildTabAccentPath(activeTabBox.width, activeTabBox.height, isFirstTab);
-                        return (
-                          <svg
-                            className="absolute inset-0 w-full h-full overflow-visible pointer-events-none"
-                            viewBox={`0 0 ${activeTabBox.width} ${activeTabBox.height}`}
-                          >
-                            <path
-                              d={closePath}
-                              fill="none"
-                              stroke={themeAccentColor}
-                              strokeWidth={2}
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              vectorEffect="non-scaling-stroke"
-                              pathLength={1}
-                              className="tab-neon-close-trail-path"
-                              onAnimationEnd={handleCloseAnimationEnd}
-                            />
-                            <path
-                              d={closePath}
-                              fill="none"
-                              strokeWidth={2.5}
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              vectorEffect="non-scaling-stroke"
-                              pathLength={1}
-                              className="tab-neon-close-pulse-path"
-                            />
-                          </svg>
-                        );
-                      })()}
-
-                      {/* Clean FileIcon */}
-                      <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                        <FileText className="w-3.5 h-3.5 text-neutral-400 dark:text-neutral-600 shrink-0" />
-
-                        {/* Title text */}
-                        <span
-                          className="truncate select-none translate-y-[-0.5px] cursor-text"
-                          title="Double click to rename"
-                        >
-                          {tab.name}
-                        </span>
-                      </div>
-
-                      {/* Close button */}
-                      <button
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          if (examStatus === "running" || examStatus === "countdown") {
-                            alert("Cannot close tabs during an active exam.");
-                            return;
-                          }
-                          initiateTabClose(tab.id, e);
-                        }}
-                        className="p-0.5 rounded-full hover:bg-neutral-200 dark:hover:bg-white/10 text-neutral-400 dark:text-neutral-600 group-hover:text-neutral-600 dark:group-hover:text-neutral-400 transition-colors cursor-pointer"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                    </div>
-                  );
-                })}
-
-                </div>
-
-                {/* OpenEditor MainWindow.xaml parity: the fixed native-style TaskView
-                    overflow button and Add button stay outside the scrolling tab region. */}
-                <div
-                  ref={tabOverviewRef}
-                  data-workspace-tab-controls
-                  className="rigorous-menu relative flex h-full items-center shrink-0 bg-neutral-100 dark:bg-[#161616]"
-                >
-                  <button
-                    type="button"
-                    data-workspace-tab-overview-trigger
-                    onClick={() => setIsTabOverviewOpen(open => !open)}
-                    disabled={examStatus === "running" || examStatus === "countdown"}
-                    className={`flex h-full items-center justify-center border-0 bg-transparent px-2.5 py-1.5 text-neutral-500 dark:text-neutral-400 transition-colors hover:bg-black/[0.04] hover:text-neutral-800 dark:hover:bg-white/[0.06] dark:hover:text-neutral-100 ${(examStatus === "running" || examStatus === "countdown") ? "opacity-30 cursor-not-allowed" : "cursor-pointer"}`}
-                    title={(examStatus === "running" || examStatus === "countdown") ? "Locked while an exam is in progress" : "Open tabs"}
-                    aria-label="Open tabs"
-                    aria-expanded={isTabOverviewOpen}
-                  >
-                    {/* Literal code port of the user-supplied Windows 11 Task View artwork. */}
-                    <span data-openeditor-taskview-glyph className="inline-flex items-center"><WindowsTaskViewGlyph /></span>
-                  </button>
-
-                  <button
-                    type="button"
-                    data-workspace-new-tab-trigger
-                    onClick={() => createNewTab()}
-                    disabled={examStatus === "running" || examStatus === "countdown"}
-                    className={`flex h-full items-center justify-center border-0 bg-transparent px-2.5 py-1.5 text-neutral-500 dark:text-neutral-400 transition-colors hover:bg-black/[0.04] hover:text-neutral-800 dark:hover:bg-white/[0.06] dark:hover:text-neutral-100 ${(examStatus === "running" || examStatus === "countdown") ? "opacity-30 cursor-not-allowed" : "cursor-pointer"}`}
-                    title={(examStatus === "running" || examStatus === "countdown") ? "Locked while an exam is in progress" : "New Tab: Alt+T | Close: Alt+W | Switch: Alt+Left/Right"}
-                    aria-label="New tab"
-                  >
-                    {/* TabView's native Add glyph (Segoe MDL2 E710), matching
-                        IsAddTabButtonVisible="True" in the supplied XAML. */}
-                    <span data-openeditor-add-glyph><OpenEditorMdl2AddGlyph /></span>
-                  </button>
-
-                  <AnimatePresence>
-                    {isTabOverviewOpen && (
-                      <motion.div
-                        data-workspace-tab-overview
-                        initial={{ opacity: 0, y: -5 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -5 }}
-                        transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
-                        className="absolute right-0 top-full z-50 w-[720px] max-w-[calc(100vw-2rem)] max-h-[500px] overflow-hidden rounded-[14px] border border-transparent bg-white/[0.76] shadow-[0_24px_64px_rgba(0,0,0,0.17),0_2px_10px_rgba(0,0,0,0.06)] ring-1 ring-black/[0.04] backdrop-blur-[52px] backdrop-saturate-[1.35] dark:bg-[#1c1c1c]/[0.82] dark:shadow-[0_26px_68px_rgba(0,0,0,0.56),0_2px_12px_rgba(0,0,0,0.32)] dark:ring-white/[0.06]"
-                        style={{ fontFamily: '"Segoe UI Variable", "Segoe UI", system-ui, sans-serif' }}
-                      >
-                        <div className="flex max-h-[498px] flex-col">
-                          <div className="flex shrink-0 items-center justify-between px-[18px] pt-[18px] pb-3">
-                            <h2 className="text-[13px] font-semibold tracking-[-0.01em] text-neutral-900 dark:text-neutral-100">
-                              Open tabs
-                            </h2>
-                            <div className="flex items-center gap-2.5">
-                              {tabs.length > 0 && hasRoyScriptDesktopExitBridge() && (
-                                <button
-                                  type="button"
-                                  data-workspace-tab-close-all
-                                  onClick={closeAllTabsAndRequestExit}
-                                  disabled={examStatus === "running" || examStatus === "countdown" || tabs.length === 0}
-                                  className={`rounded-[7px] border-0 bg-transparent px-2 py-[5px] text-[12px] font-medium leading-none tracking-[-0.01em] transition-colors ${
-                                    examStatus === "running" || examStatus === "countdown" || tabs.length === 0
-                                      ? "text-neutral-300 dark:text-neutral-600 cursor-not-allowed"
-                                      : "text-neutral-500 hover:bg-neutral-900/[0.045] hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-white/[0.055] dark:hover:text-neutral-100 cursor-pointer"
-                                  }`}
-                                  title={(examStatus === "running" || examStatus === "countdown") ? "Locked while an exam is in progress" : "Close all tabs and exit the application"}
-                                >
-                                  Close all tabs
-                                </button>
-                              )}
-                              <span className="rounded-full bg-black/[0.04] px-2 py-[3px] text-[11px] font-medium leading-none text-neutral-400 shadow-[inset_0_1px_0_rgba(255,255,255,0.48)] dark:bg-white/[0.045] dark:text-neutral-500 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.035)]">
-                                {tabs.length} {tabs.length === 1 ? "tab" : "tabs"}
-                              </span>
-                            </div>
-                          </div>
-                          <div className="min-h-0 overflow-y-auto overflow-x-hidden px-[18px] pb-[18px]">
-                            {tabs.length === 0 ? (
-                              <p className="px-1 pb-1 text-[12px] text-neutral-500 dark:text-neutral-400">No open tabs</p>
-                            ) : (
-                              <div data-workspace-tab-overview-list className="grid grid-cols-3 gap-3.5 rounded-[11px] bg-black/[0.018] p-2.5 dark:bg-black/[0.16]">
-                          {tabs.map(tab => {
-                            const isActive = tab.id === activeTabId;
-                            const isLocked = examStatus === "running" || examStatus === "countdown";
-                            const preview = buildTabOverviewPreview(tab.id === activeTabId ? editorContent : tab.content);
-                            return (
-                              <button
-                                type="button"
-                                key={tab.id}
-                                data-workspace-tab-overview-item={tab.id}
-                                data-workspace-tab-overview-activate={tab.id}
-                                onClick={() => {
-                                  setIsTabOverviewOpen(false);
-                                  switchTab(tab.id);
-                                }}
-                                disabled={isLocked}
-                                className={`group flex min-h-[138px] w-full flex-col rounded-[10px] border border-transparent bg-white/[0.52] p-3 text-left shadow-[0_1px_1px_rgba(0,0,0,0.018)] transition-[background-color,border-color,box-shadow] ${isLocked ? "cursor-not-allowed opacity-35" : "cursor-pointer hover:bg-white/[0.76] hover:border-black/[0.05] hover:shadow-[0_8px_20px_rgba(0,0,0,0.055)] dark:hover:bg-white/[0.065] dark:hover:border-white/[0.08] dark:hover:shadow-[0_10px_24px_rgba(0,0,0,0.2)]"} ${isActive ? "text-neutral-900 dark:text-neutral-50" : "text-neutral-700 dark:bg-white/[0.035] dark:shadow-[0_1px_1px_rgba(0,0,0,0.2)] dark:text-neutral-300"}`}
-                                style={isActive ? { borderColor: themeAccentColor, boxShadow: `0 0 0 1px ${themeAccentColor}22`, backgroundColor: `${themeAccentColor}0D` } : undefined}
-                              >
-                                <span className="flex w-full items-center gap-1.5 truncate text-[12px] font-medium leading-4">
-                                  <FileText className="h-[14px] w-[14px] shrink-0 text-neutral-400 dark:text-neutral-500" strokeWidth={1.55} />
-                                    <span className="truncate">{tab.name}</span>
-                                    {tab.isDirty && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-neutral-400 dark:bg-neutral-500" />}
-                                </span>
-                                <span
-                                    data-openeditor-tab-preview={tab.id}
-                                    className={`mt-3 block min-h-[72px] w-full overflow-hidden rounded-[6px] px-2.5 py-2 font-mono text-[10px] leading-[15px] ${preview ? "bg-black/[0.035] text-neutral-400 dark:bg-black/[0.16] dark:text-neutral-500" : "bg-black/[0.02] text-neutral-300 dark:bg-black/[0.12] dark:text-neutral-600"}`}
-                                    style={{
-                                      display: "-webkit-box",
-                                      WebkitBoxOrient: "vertical",
-                                      WebkitLineClamp: 4,
-                                      fontFamily: "Consolas, 'Liberation Mono', monospace",
-                                    }}
-                                  >
-                                    {preview || "No text yet"}
-                                  </span>
-                              </button>
-                            );
-                          })}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </div>
-
-              {/* Extra info/status in right side of tab bar */}
-              <div
-                data-tab-count
-                className="flex items-center gap-2 mr-2 ml-1 select-none shrink-0"
-                style={{ fontFamily: '"Segoe UI Variable", "Segoe UI", system-ui, sans-serif', fontSize: "12px", color: "inherit" }}
-              >
-                <span className="text-[12px] text-neutral-500 dark:text-neutral-400">{tabs.length} {tabs.length === 1 ? "tab" : "tabs"}</span>
-              </div>
-            </div>
-            )}
 
             {mode === "Write" && (
               <div
@@ -4682,15 +4214,6 @@ export default function Workspace() {
                     }
                   }}
                   onChange={() => {
-                    // First-keystroke glow: fire once per tab lifetime, only when real content exists
-                    const activeTab = tabs.find(t => t.id === activeTabId);
-                    if (activeTab && !activeTab.hasGlowedOnce && firstKeyGlowPendingTabIdRef.current !== activeTabId) {
-                      const text = editorRef.current?.getMarkdown?.() ?? "";
-                      if (text.trim().length > 0) {
-                        fireTabGlow(activeTabId, { firstKey: true });
-                      }
-                    }
-
                     // Update main unsaved dirty state instantly for snappy UI feedback
                     setIsDirty(true);
 

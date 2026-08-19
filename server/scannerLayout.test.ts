@@ -125,53 +125,19 @@ describe("scanner action-bar layout contract", () => {
     expect((source.match(/scanner-paper-sheet scanner-paper-sheet--(?:entry|tray|exit)\s[^`]*w-\[82%\] rounded-\[1px\]/g) ?? []).length).toBe(3);
   });
 
-  it("keeps the workspace active tab flush while reserving the exact OpenEditor-style fixed controls and overview viewport", () => {
+  it("keeps the live toolbar Task View architecture while excluding superseded permanent tab-strip markup", () => {
     const source = fs.readFileSync(path.resolve(import.meta.dirname, "../client/src/pages/Workspace.tsx"), "utf8");
 
-    expect(source).toContain("data-workspace-tab-strip");
-    expect(source).toContain("data-workspace-tab-scroll");
-    expect(source).toContain("data-workspace-tab-controls");
+    expect(source).not.toContain("data-workspace-tab-strip");
+    expect(source).not.toContain("data-workspace-tab-scroll");
+    expect(source).not.toContain("data-workspace-tab-controls");
     expect(source).toContain("data-workspace-tab-overview-trigger");
     expect(source).toContain("data-workspace-new-tab-trigger");
-    expect(source).toContain('className="flex items-center gap-1 overflow-x-auto no-scrollbar scroll-smooth min-w-0 flex-1 h-full"');
-    expect(source).not.toContain('className="flex items-center gap-1 overflow-x-auto no-scrollbar scroll-smooth flex-1 h-full pt-1.5"');
     expect(source).toContain("const [isTabOverviewOpen, setIsTabOverviewOpen] = useState(false);");
-    expect(source).toContain("const tabStripScrollRef = useRef<HTMLDivElement | null>(null);");
-    expect(source).toContain("const correction = tabRect.left < stripRect.left");
-    expect(source).toContain("stripEl.scrollBy({ left: correction, behavior });");
-    expect(source).toContain("stripEl.scrollLeft += correction;");
-    expect(source).toContain('const finalFrame = window.setTimeout(() => revealActiveTab("instant"), 520);');
-    expect(source).toContain("window.clearTimeout(finalFrame);");
     expect(source).toContain("data-workspace-tab-overview-item={tab.id}");
-    expect(source).toContain("data-openeditor-taskview-glyph");
-    expect(source).toContain("Literal code port of the user-supplied Windows 11 Task View artwork");
-    expect(source).toContain("function WindowsTaskViewGlyph()");
-    expect(source).toContain('data-openeditor-taskview-artwork');
-    expect(source).toContain('viewBox="0 0 1200 1200"');
-    expect(source).toContain('data-taskview-top-frame');
-    expect(source).toContain('data-taskview-middle-frame');
-    expect(source).toContain('data-taskview-bottom-frame');
-    expect(source).toContain('data-taskview-gradient-tile');
-    expect(source).toContain('stopColor="#196dff"');
-    expect(source).toContain('stopColor="#ca20ff"');
-    expect(source).toContain('stopColor="#6fc8ff"');
-    expect(source).toContain('stopColor="#e5abff"');
-    expect(source).toContain('M2048 1088V960H1088V0H960V960H0V1088H960V2048H1088V1088Z');
-    expect(source).toContain('transform="translate(0 2048) scale(1 -1)"');
-    expect(source).toContain("data-openeditor-add-glyph");
-    expect(source).toContain('rigorous-menu relative flex h-full items-center shrink-0');
-    expect(source).toContain('w-[720px] max-w-[calc(100vw-2rem)] max-h-[500px]');
-    expect(source).toContain('rounded-[14px] border border-transparent bg-white/[0.76]');
-    expect(source).toContain('shadow-[0_24px_64px_rgba(0,0,0,0.17),0_2px_10px_rgba(0,0,0,0.06)] ring-1 ring-black/[0.04] backdrop-blur-[52px]');
-    expect(source).toContain('data-workspace-tab-overview-list');
-    expect(source).toContain('grid grid-cols-3 gap-3.5 rounded-[11px] bg-black/[0.018] p-2.5 dark:bg-black/[0.16]');
-    expect(source).toContain('min-h-[138px] w-full flex-col rounded-[10px] border border-transparent bg-white/[0.52] p-3');
-    expect(source).toContain('boxShadow: `0 0 0 1px ${themeAccentColor}22`');
-    expect(source).toContain('data-openeditor-tab-preview={tab.id}');
-    expect(source).toContain('WebkitLineClamp: 4');
+    expect(source).toContain('data-workspace-tab-overview-close={tab.id}');
     expect(source).toContain("function buildTabOverviewPreview(text: string) {");
     expect(source).toContain("switchTab(tab.id);");
-    expect(source).toContain("data-workspace-tab-overview-close={tab.id}");
     expect(source).toContain("event.stopPropagation();");
     expect(source).toContain("initiateTabClose(tab.id, event);");
     expect(source).toContain("const WORKSPACE_TAB_CACHE_RESET_VERSION = 1;");
@@ -204,15 +170,16 @@ describe("scanner action-bar layout contract", () => {
     expect(exitSource).toContain("Exit request must always fail silently at the app level.");
   });
 
-  it("lets the first-key neon sweep finish before enabling the steady tube", () => {
+  it("removes the superseded permanent tab-strip neon lifecycle without affecting the live Task View", () => {
     const source = fs.readFileSync(path.resolve(import.meta.dirname, "../client/src/pages/Workspace.tsx"), "utf8");
 
-    expect(source).toContain("const firstKeyGlowPendingTabIdRef = useRef<string | null>(null);");
-    expect(source).toContain("const completeTabGlow = (tabId: string) => {");
-    expect(source).toContain("fireTabGlow(activeTabId, { firstKey: true });");
-    expect(source).toContain("onAnimationEnd={() => completeTabGlow(tab.id)}");
-    expect(source).toContain("firstKeyGlowPendingTabIdRef.current !== activeTabId");
-    expect(source).not.toContain("setTabs(prev => prev.map(t => t.id === activeTabId ? { ...t, hasGlowedOnce: true } : t));\n                        fireTabGlow(activeTabId);");
+    expect(source).not.toContain("buildTabAccentPath");
+    expect(source).not.toContain("firstKeyGlowPendingTabIdRef");
+    expect(source).not.toContain("fireTabGlow");
+    expect(source).not.toContain("completeTabGlow");
+    expect(source).not.toContain("hasGlowedOnce");
+    expect(source).toContain("data-workspace-tab-overview-trigger");
+    expect(source).toContain("data-workspace-tab-overview-item={tab.id}");
   });
 
   it("preserves completed exam seals per tab without imposing a workspace-wide Just Look lock", () => {

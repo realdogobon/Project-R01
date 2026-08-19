@@ -122,6 +122,86 @@ describe("approved editor hardening contracts", () => {
     expect(preview).toMatch(/…$/);
   });
 
+  it("layers the Practice hover preview beneath real keyboard-driven hand movement", () => {
+    const icons = readProjectFile("client/src/components/AnimatedModeIcons.tsx");
+    const practiceIcon = icons.slice(icons.indexOf("export function AnimatedPracticeIcon"), icons.indexOf("export function AnimatedWriteIcon"));
+    const workspace = readProjectFile("client/src/pages/Workspace.tsx");
+    const practice = readProjectFile("client/src/pages/PracticeMode.tsx");
+
+    expect(practiceIcon).toContain("activeKeyCodes");
+    expect(practiceIcon).toContain("isHovered");
+    expect(practiceIcon).toContain("leftHandKeyCodes");
+    expect(practiceIcon).toContain("rightHandKeyCodes");
+    expect(practiceIcon).toContain("const hasActiveKeys = leftHandActive || rightHandActive");
+    expect(practiceIcon).toContain("const shouldHoverAnimate = isHovered && !hasActiveKeys");
+    expect(practiceIcon).not.toContain("window.addEventListener('keydown'");
+    expect(practiceIcon).toContain("leftHandActive\n              ? { duration: 0.1, ease: \"easeOut\" }");
+    expect(practiceIcon).toContain("rightHandActive\n              ? { duration: 0.1, ease: \"easeOut\" }");
+    expect(practiceIcon).toContain("y: [0, -6, 2, -4, 0, -5, 0]");
+    expect(practiceIcon).toContain("rotate: [0, 4, -2, -3, 0, 2, 0]");
+    expect(practiceIcon).toContain("duration: 0.9, repeat: Infinity, ease: \"easeInOut\"");
+    expect(practiceIcon).toContain("y: [0, -3, 0, -6, 2, -4, 0]");
+    expect(practiceIcon).toContain("rotate: [0, -3, 2, 4, 0, -2, 0]");
+    expect(practiceIcon).toContain("duration: 0.85, repeat: Infinity, delay: 0.1, ease: \"easeInOut\"");
+    expect(practice).toContain("activeKeyCodes = React.useMemo(() => Array.from(pressedKeys)");
+    expect(practice).toContain("activeKeyCodes,");
+    expect(workspace).toContain("activeKeyCodes: [] as string[]");
+    expect(workspace).toContain("activeKeyCodes={practiceState.activeKeyCodes}");
+    expect(workspace).toContain("isHovered={hoveredMode === m}");
+  });
+
+  it("retains completed Practice results separately from active-session recovery and restores them without replaying completion side effects", () => {
+    const practice = readProjectFile("client/src/pages/PracticeMode.tsx");
+    const finishHandler = practice.slice(practice.indexOf("onFinish={(finalWpm"), practice.indexOf("onBack={()"));
+
+    expect(practice).toContain("canRestoreCompletedResult");
+    expect(practice).toContain("persistCompletedResult");
+    expect(practice).toContain("completedRunRef");
+    expect(practice).toContain("step === 3 && completedRunRef.current");
+    expect(finishHandler).toContain("persistCompletedResult({");
+    expect(finishHandler).not.toContain("clearPracticeSession()");
+    expect(practice).toContain("clearPracticeSession(); changeStep(1);");
+  });
+
+  it("persists full Practice screen context while retaining deliberate fresh-session clearing paths", () => {
+    const practice = readProjectFile("client/src/pages/PracticeMode.tsx");
+
+    expect(practice).toContain("const restoredUiContext = loadedSession?.ui");
+    expect(practice).toContain("version: 2");
+    expect(practice).toContain("const persistPracticeSession");
+    expect(practice).toContain("latestTypingSnapshotRef");
+    expect(practice).toContain("latestCompletedResultRef");
+    expect(practice).toContain("isAiModalOpen, isAdvModalOpen, isTimerModalOpen, isStrictModeModalOpen");
+    expect(practice).toContain("activeSessionTab, hoveredGraphIndex");
+    expect(practice).toContain("showReplayOverlay, replayIndex, replaySpeed");
+    expect(practice).toContain("latestTypingSnapshotRef.current = null;");
+    expect(practice).toContain("latestCompletedResultRef.current = null;");
+  });
+
+  it("uses a visibility-safe ResizeObserver guard for the Practice results graph", () => {
+    const practice = readProjectFile("client/src/pages/PracticeMode.tsx");
+
+    expect(practice).toContain("function ResilientResultsChart");
+    expect(practice).toContain("new ResizeObserver(scheduleMeasure)");
+    expect(practice).toContain("document.addEventListener(\"visibilitychange\", scheduleMeasure)");
+    expect(practice).toContain("data-practice-results-chart");
+    expect(practice).toContain("<ResilientResultsChart>");
+    expect(practice).toContain("<ResponsiveContainer key={chartRevision}");
+  });
+
+  it("uses a capital-R unified title-bar wordmark without a detached TSR divider", () => {
+    const workspace = readProjectFile("client/src/pages/Workspace.tsx");
+
+    expect(workspace).toContain("data-royscript-wordmark");
+    expect(workspace).toContain('aria-label="RoyScript TSR"');
+    expect(workspace).toContain(">R</span>");
+    expect(workspace).toContain(">oyScript</span>");
+    expect(workspace).toContain("TSR\n                  </span>");
+    expect(workspace).toContain("tracking-[-0.055em]");
+    expect(workspace).toContain("tracking-[0.075em]");
+    expect(workspace).not.toContain('aria-hidden="true" className="h-4 w-px');
+  });
+
   it("removes the global blue caret override, preserves localized caret inheritance, and restores combined decorations", () => {
     const indexCss = readProjectFile("client/src/index.css");
     const styles = readProjectFile("client/src/components/lexkit/styles.css");

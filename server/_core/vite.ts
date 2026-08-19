@@ -9,10 +9,14 @@ import viteConfig from "../../vite.config";
 export async function setupVite(app: Express, server: Server) {
   const serverOptions = {
     middlewareMode: true,
-    // Vite shares this HTTP server for HMR upgrades. Leave the browser client
-    // host, protocol, and port inferred from the managed preview origin so it
-    // never targets the sandbox loopback address from a user browser.
-    hmr: { server },
+    // Vite shares this HTTP server for HMR upgrades. Preserve the secure
+    // client protocol and public port from vite.config.ts while attaching the
+    // local upgrade server; replacing this object makes Vite inject its
+    // unreachable localhost:5173 fallback into the managed-preview client.
+    hmr: {
+      ...(typeof viteConfig.server?.hmr === "object" ? viteConfig.server.hmr : {}),
+      server,
+    },
     allowedHosts: true as const,
   };
 

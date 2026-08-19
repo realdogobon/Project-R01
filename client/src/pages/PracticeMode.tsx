@@ -236,6 +236,69 @@ function buildSessionFingerprint(cfg: {
   });
 }
 
+// Recharts can occasionally read a zero-sized parent when this screen first
+// becomes visible (notably after a mode switch, at Windows DPI boundaries, or
+// while an entering transition is in progress). This wrapper waits for a real
+// measurable box and remounts the chart whenever that box becomes usable or
+// materially changes size. It deliberately renders nothing while measurement
+// is unsafe, avoiding console noise and half-drawn axes.
+function ResilientResultsChart({
+  children,
+}: {
+  children: (revision: number) => React.ReactNode;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [isMeasurable, setIsMeasurable] = useState(false);
+  const [revision, setRevision] = useState(0);
+  const lastMeasurementRef = useRef("");
+
+  React.useLayoutEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    let frame = 0;
+    let settleTimer: number | undefined;
+    const measure = () => {
+      const { width, height } = container.getBoundingClientRect();
+      const canMeasure = width > 32 && height >= 160;
+      const measurement = canMeasure ? `${Math.round(width)}x${Math.round(height)}` : "";
+
+      setIsMeasurable(canMeasure);
+      if (canMeasure && measurement !== lastMeasurementRef.current) {
+        lastMeasurementRef.current = measurement;
+        setRevision((current) => current + 1);
+      }
+    };
+    const scheduleMeasure = () => {
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(measure);
+    };
+    const observer = typeof ResizeObserver === "undefined"
+      ? null
+      : new ResizeObserver(scheduleMeasure);
+
+    observer?.observe(container);
+    window.addEventListener("resize", scheduleMeasure);
+    document.addEventListener("visibilitychange", scheduleMeasure);
+    scheduleMeasure();
+    settleTimer = window.setTimeout(scheduleMeasure, 220);
+
+    return () => {
+      observer?.disconnect();
+      window.cancelAnimationFrame(frame);
+      window.clearTimeout(settleTimer);
+      window.removeEventListener("resize", scheduleMeasure);
+      document.removeEventListener("visibilitychange", scheduleMeasure);
+    };
+  }, []);
+
+  return (
+    <div ref={containerRef} data-practice-results-chart className="h-[200px] min-h-[200px] w-full">
+      {isMeasurable ? children(revision) : null}
+    </div>
+  );
+}
+
 export function PracticeMode({
   accountUid,
   onReturnToWrite,
@@ -264,7 +327,7 @@ export function PracticeMode({
   onDrillTriggeredDone?: () => void;
   forceStep?: number | null;
   onForceStepDone?: () => void;
-  onStateChange?: (state: { step: number; wpm: number; accuracy: number; weakKeys: string[]; problemKeys: string[]; timerRunning: boolean; typedTextLength: number }) => void;
+  onStateChange?: (state: { step: number; wpm: number; accuracy: number; weakKeys: string[]; problemKeys: string[]; timerRunning: boolean; typedTextLength: number; activeKeyCodes: string[] }) => void;
 }) {
   const { user, addSession } = useAuth();
   const keystrokeLogRef = useRef<{ char: string; index: number; timestamp: number; latency: number; key: string; isCorrect: boolean }[]>([]);
@@ -293,9 +356,12 @@ export function PracticeMode({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const canResumeSnapshot = !!(loadedSession && loadedSession.step === 2 && loadedSession.snapshot && loadedSession.originalText);
+  const canRestoreCompletedResult = !!(loadedSession && loadedSession.step === 3 && loadedSession.completedResult && loadedSession.originalText);
+  const restoredCompletedResult = canRestoreCompletedResult ? loadedSession.completedResult : null;
+  const restoredUiContext = loadedSession?.ui && typeof loadedSession.ui === "object" ? loadedSession.ui : {};
 
-  const [step, setStep] = useState<number>(() => (canResumeSnapshot ? 2 : 1));
-  const [hoveredGraphIndex, setHoveredGraphIndex] = useState<number | null>(null);
+  const [step, setStep] = useState<number>(() => (canResumeSnapshot ? 2 : canRestoreCompletedResult ? 3 : 1));
+  const [hoveredGraphIndex, setHoveredGraphIndex] = useState<number | null>(() => typeof restoredUiContext.hoveredGraphIndex === "number" ? restoredUiContext.hoveredGraphIndex : null);
   const [text, setText] = useState(
     () => (typeof loadedSession?.text === "string" ? loadedSession.text : initialText) || "Use this form to create a typing test with the text of your choice. Each paragraph of the text will be a separate typing test.",
   );
@@ -316,8 +382,11 @@ export function PracticeMode({
     } catch (e) {}
   }, []);
 
+  const completedRunRef = useRef(false);
+
   useEffect(() => {
-    if (step === 3) {
+    if (step === 3 && completedRunRef.current) {
+      completedRunRef.current = false;
       setPersonalBest(prev => {
         const newPb = {
           wpm: Math.max(prev.wpm, wpm),
@@ -338,13 +407,13 @@ export function PracticeMode({
 
 
 
-  const [isAiModalOpen, setIsAiModalOpen] = useState(false);
-  const [aiCategory, setAiCategory] = useState("legal");
-  const [aiTopic, setAiTopic] = useState("civil");
-  const [aiCustomTopic, setAiCustomTopic] = useState("");
-  const [aiDifficulty, setAiDifficulty] = useState("intermediate");
-  const [aiLength, setAiLength] = useState("medium");
-  const [aiCustomLengthWords, setAiCustomLengthWords] = useState("250");
+  const [isAiModalOpen, setIsAiModalOpen] = useState(() => Boolean(restoredUiContext.isAiModalOpen));
+  const [aiCategory, setAiCategory] = useState(() => typeof restoredUiContext.aiCategory === "string" ? restoredUiContext.aiCategory : "legal");
+  const [aiTopic, setAiTopic] = useState(() => typeof restoredUiContext.aiTopic === "string" ? restoredUiContext.aiTopic : "civil");
+  const [aiCustomTopic, setAiCustomTopic] = useState(() => typeof restoredUiContext.aiCustomTopic === "string" ? restoredUiContext.aiCustomTopic : "");
+  const [aiDifficulty, setAiDifficulty] = useState(() => typeof restoredUiContext.aiDifficulty === "string" ? restoredUiContext.aiDifficulty : "intermediate");
+  const [aiLength, setAiLength] = useState(() => typeof restoredUiContext.aiLength === "string" ? restoredUiContext.aiLength : "medium");
+  const [aiCustomLengthWords, setAiCustomLengthWords] = useState(() => typeof restoredUiContext.aiCustomLengthWords === "string" ? restoredUiContext.aiCustomLengthWords : "250");
   const [isGenerating, setIsGenerating] = useState(false);
   const [generateError, setGenerateError] = useState("");
   const aiAbortControllerRef = useRef<AbortController | null>(null);
@@ -440,12 +509,12 @@ export function PracticeMode({
   const [strictCustomInactivity, setStrictCustomInactivity] = useState<string>(() => cfg("strictCustomInactivity") ?? "5");
   const [strictSuddenDeath, setStrictSuddenDeath] = useState<boolean>(() => cfg("strictSuddenDeath") ?? false);
   const lastKeyPressTimeRef = useRef<number>(0);
-  const [isStrictModeModalOpen, setIsStrictModeModalOpen] = useState(false);
-  const [strictViolation, setStrictViolation] = useState<string | null>(null);
-  const [strictViolationAcknowledged, setStrictViolationAcknowledged] = useState(false);
+  const [isStrictModeModalOpen, setIsStrictModeModalOpen] = useState(() => Boolean(restoredUiContext.isStrictModeModalOpen));
+  const [strictViolation, setStrictViolation] = useState<string | null>(() => typeof restoredUiContext.strictViolation === "string" ? restoredUiContext.strictViolation : null);
+  const [strictViolationAcknowledged, setStrictViolationAcknowledged] = useState(() => Boolean(restoredUiContext.strictViolationAcknowledged));
 
 
-  const [isAdvModalOpen, setIsAdvModalOpen] = useState(false);
+  const [isAdvModalOpen, setIsAdvModalOpen] = useState(() => Boolean(restoredUiContext.isAdvModalOpen));
   const [advMode, setAdvMode] = useState<"custom" | "words" | "quote" | "zen">(() => cfg("advMode") ?? (initialText ? "custom" : "words"));
   const [advWordCount, setAdvWordCount] = useState<number>(() => cfg("advWordCount") ?? 50);
   const [customWordCount, setCustomWordCount] = useState<string>(() => cfg("customWordCount") ?? "");
@@ -511,7 +580,7 @@ export function PracticeMode({
 
 
   const [durationLimit, setDurationLimit] = useState<string>(() => cfg("durationLimit") ?? "");
-  const [isTimerModalOpen, setIsTimerModalOpen] = useState(false);
+  const [isTimerModalOpen, setIsTimerModalOpen] = useState(() => Boolean(restoredUiContext.isTimerModalOpen));
   const [timerHrs, setTimerHrs] = useState<number>(() => cfg("timerHrs") ?? 0);
   const [timerMins, setTimerMins] = useState<number>(() => cfg("timerMins") ?? 0);
   const [timerSecs, setTimerSecs] = useState<number>(() => cfg("timerSecs") ?? 0);
@@ -604,8 +673,8 @@ export function PracticeMode({
 
   const [pressedKeys, setPressedKeys] = useState<Set<string>>(new Set());
   const [originalText, setOriginalText] = useState(() => (typeof loadedSession?.originalText === "string" ? loadedSession.originalText : initialText?.trim()) || "");
-  const [typedText, setTypedText] = useState("");
-  const [replayLog, setReplayLog] = useState<ReplayEvent[]>([]);
+  const [typedText, setTypedText] = useState(() => typeof restoredCompletedResult?.typedText === "string" ? restoredCompletedResult.typedText : "");
+  const [replayLog, setReplayLog] = useState<ReplayEvent[]>(() => Array.isArray(restoredCompletedResult?.replayLog) ? restoredCompletedResult.replayLog : []);
 
   const problemKeys = React.useMemo(() => {
     const errorChars = new Map<string, number>();
@@ -623,19 +692,19 @@ export function PracticeMode({
       .slice(0, 4)
       .map(e => e[0] === ' ' ? 'Space' : e[0] === '\n' ? 'Enter' : e[0]);
   }, [originalText, typedText]);
-  const [elapsedTime, setElapsedTime] = useState(0);
-  const [sessionErrorIndices, setSessionErrorIndices] = useState<number[]>([]);
+  const [elapsedTime, setElapsedTime] = useState(() => typeof restoredCompletedResult?.elapsedTime === "number" ? restoredCompletedResult.elapsedTime : 0);
+  const [sessionErrorIndices, setSessionErrorIndices] = useState<number[]>(() => Array.isArray(restoredCompletedResult?.sessionErrorIndices) ? restoredCompletedResult.sessionErrorIndices : []);
   const [timerRunning, setTimerRunning] = useState(false);
-  const [wpm, setWpm] = useState(0);
-  const [wpmHistory, setWpmHistory] = useState<number[]>([]);
-  const [detailedHistory, setDetailedHistory] = useState<{wpm: number, time: number, errors: number, word: string, rawWpm?: number}[]>([]);
+  const [wpm, setWpm] = useState(() => typeof restoredCompletedResult?.wpm === "number" ? restoredCompletedResult.wpm : 0);
+  const [wpmHistory, setWpmHistory] = useState<number[]>(() => Array.isArray(restoredCompletedResult?.wpmHistory) ? restoredCompletedResult.wpmHistory : []);
+  const [detailedHistory, setDetailedHistory] = useState<{wpm: number, time: number, errors: number, word: string, rawWpm?: number}[]>(() => Array.isArray(restoredCompletedResult?.detailedHistory) ? restoredCompletedResult.detailedHistory : []);
   const lastHistoryTime = useRef(0);
-  const [accuracy, setAccuracy] = useState(0);
-  const [replayIndex, setReplayIndex] = useState(0);
+  const [accuracy, setAccuracy] = useState(() => typeof restoredCompletedResult?.accuracy === "number" ? restoredCompletedResult.accuracy : 0);
+  const [replayIndex, setReplayIndex] = useState(() => typeof restoredUiContext.replayIndex === "number" ? restoredUiContext.replayIndex : 0);
   const [isPlayingReplay, setIsPlayingReplay] = useState(false);
-  const [showReplayOverlay, setShowReplayOverlay] = useState(false);
-  const [replaySpeed, setReplaySpeed] = useState(1);
-  const [activeSessionTab, setActiveSessionTab] = useState<"keyboard" | "diagnostics">("keyboard");
+  const [showReplayOverlay, setShowReplayOverlay] = useState(() => Boolean(restoredUiContext.showReplayOverlay));
+  const [replaySpeed, setReplaySpeed] = useState(() => typeof restoredUiContext.replaySpeed === "number" ? restoredUiContext.replaySpeed : 1);
+  const [activeSessionTab, setActiveSessionTab] = useState<"keyboard" | "diagnostics">(() => restoredUiContext.activeSessionTab === "diagnostics" ? "diagnostics" : "keyboard");
   const [clickedKey, setClickedKey] = useState<string | null>(null);
   const [isTransitioning, setIsTransitioning] = useState(false);
 
@@ -652,6 +721,8 @@ export function PracticeMode({
   // (see loadedSession/cfg above), so this ref only needs to seed
   // TypingScreen's initialSnapshot prop for the exact-resume hydrate() call.
   const pendingSnapshotRef = useRef<any>(canResumeSnapshot ? loadedSession.snapshot : null);
+  const latestTypingSnapshotRef = useRef<any>(canResumeSnapshot ? loadedSession.snapshot : null);
+  const latestCompletedResultRef = useRef<any>(restoredCompletedResult);
   // Captured once, alongside the snapshot itself, from the exact config it
   // was saved under — never recomputed from live state. This is what lets
   // us detect "this snapshot no longer matches what's about to run" instead
@@ -684,52 +755,80 @@ export function PracticeMode({
   const invalidatePendingSnapshot = () => {
     pendingSnapshotRef.current = null;
     pendingSnapshotFingerprintRef.current = null;
+    latestTypingSnapshotRef.current = null;
+  };
+
+  const persistPracticeSession = (nextStep: number, overrides: { snapshot?: any; completedResult?: any } = {}) => {
+    if (!canRestore) return;
+    const snapshot = overrides.snapshot ?? latestTypingSnapshotRef.current;
+    const completedResult = overrides.completedResult ?? latestCompletedResultRef.current;
+    try {
+      localStorage.setItem(PRACTICE_SESSION_KEY, JSON.stringify({
+        version: 2,
+        step: nextStep,
+        text, title, originalText,
+        advMode, advWordCount, customWordCount, isCustomWordActive, advPunct, advNums, advDiff, advLanguage,
+        durationLimit, timerHrs, timerMins, timerSecs, timerMs,
+        isStrictModeEnabled, strictDisableBackspace, strictMinAccuracy, strictCustomAccuracy,
+        strictMaxErrors, strictCustomMaxErrors, strictWpmFloor, strictCustomWpmFloor,
+        strictInactivityTimeout, strictCustomInactivity, strictSuddenDeath,
+        snapshot: nextStep === 2 ? snapshot : undefined,
+        completedResult: nextStep === 3 ? completedResult : undefined,
+        ui: {
+          isAiModalOpen, isAdvModalOpen, isTimerModalOpen, isStrictModeModalOpen,
+          aiCategory, aiTopic, aiCustomTopic, aiDifficulty, aiLength, aiCustomLengthWords,
+          strictViolation, strictViolationAcknowledged,
+          activeSessionTab, hoveredGraphIndex,
+          showReplayOverlay, replayIndex, replaySpeed,
+        },
+      }));
+    } catch {}
   };
 
   useEffect(() => {
     if (!canRestore) return;
-    if (step !== 1) return;
+    if (step === 2 && !latestTypingSnapshotRef.current) return;
+    if (step === 3 && !latestCompletedResultRef.current) return;
 
-    const configSnapshot = {
-      step: 1,
-      text, title, originalText,
-      advMode, advWordCount, customWordCount, isCustomWordActive, advPunct, advNums, advDiff,
-      durationLimit,
-      isStrictModeEnabled, strictDisableBackspace, strictMinAccuracy, strictCustomAccuracy,
-      strictMaxErrors, strictCustomMaxErrors, strictWpmFloor, strictCustomWpmFloor,
-      strictInactivityTimeout, strictCustomInactivity, strictSuddenDeath,
-    };
-    const handle = setTimeout(() => {
-      try { localStorage.setItem(PRACTICE_SESSION_KEY, JSON.stringify(configSnapshot)); } catch (e) {}
-    }, 300);
-    return () => clearTimeout(handle);
+    const handle = window.setTimeout(() => persistPracticeSession(step), 300);
+    return () => window.clearTimeout(handle);
   }, [
     canRestore, step, text, title, originalText,
-    advMode, advWordCount, customWordCount, isCustomWordActive, advPunct, advNums, advDiff,
-    durationLimit,
+    advMode, advWordCount, customWordCount, isCustomWordActive, advPunct, advNums, advDiff, advLanguage,
+    durationLimit, timerHrs, timerMins, timerSecs, timerMs,
     isStrictModeEnabled, strictDisableBackspace, strictMinAccuracy, strictCustomAccuracy,
     strictMaxErrors, strictCustomMaxErrors, strictWpmFloor, strictCustomWpmFloor,
     strictInactivityTimeout, strictCustomInactivity, strictSuddenDeath,
+    isAiModalOpen, isAdvModalOpen, isTimerModalOpen, isStrictModeModalOpen,
+    aiCategory, aiTopic, aiCustomTopic, aiDifficulty, aiLength, aiCustomLengthWords,
+    strictViolation, strictViolationAcknowledged,
+    activeSessionTab, hoveredGraphIndex, showReplayOverlay, replayIndex, replaySpeed,
   ]);
 
   const persistTypingSnapshot = (snapshot: any) => {
     if (!canRestore) return;
-    try {
-      const blob = {
-        step: 2,
-        originalText, title, text,
-        advMode, advWordCount, customWordCount, isCustomWordActive, advPunct, advNums, advDiff,
-        durationLimit,
-        isStrictModeEnabled, strictDisableBackspace, strictMinAccuracy, strictCustomAccuracy,
-        strictMaxErrors, strictCustomMaxErrors, strictWpmFloor, strictCustomWpmFloor,
-        strictInactivityTimeout, strictCustomInactivity, strictSuddenDeath,
-        snapshot,
-      };
-      localStorage.setItem(PRACTICE_SESSION_KEY, JSON.stringify(blob));
-    } catch (e) {}
+    latestTypingSnapshotRef.current = snapshot;
+    persistPracticeSession(2, { snapshot });
+  };
+
+  const persistCompletedResult = (completedResult: {
+    wpm: number;
+    accuracy: number;
+    elapsedTime: number;
+    typedText: string;
+    replayLog: ReplayEvent[];
+    sessionErrorIndices: number[];
+    wpmHistory: number[];
+    detailedHistory: { wpm: number; time: number; errors: number; word: string; rawWpm?: number }[];
+  }) => {
+    if (!canRestore) return;
+    latestCompletedResultRef.current = completedResult;
+    persistPracticeSession(3, { completedResult });
   };
 
   const clearPracticeSession = () => {
+    latestTypingSnapshotRef.current = null;
+    latestCompletedResultRef.current = null;
     try { localStorage.removeItem(PRACTICE_SESSION_KEY); } catch (e) {}
   };
 
@@ -987,6 +1086,7 @@ export function PracticeMode({
     onStateChangeRef.current = onStateChange;
   }, [onStateChange]);
 
+  const activeKeyCodes = React.useMemo(() => Array.from(pressedKeys), [pressedKeys]);
 
   useEffect(() => {
     if (onStateChangeRef.current) {
@@ -998,9 +1098,10 @@ export function PracticeMode({
         problemKeys,
         timerRunning,
         typedTextLength: typedText.length,
+        activeKeyCodes,
       });
     }
-  }, [step, wpm, accuracy, weakKeys, problemKeys, timerRunning, typedText.length]);
+  }, [step, wpm, accuracy, weakKeys, problemKeys, timerRunning, typedText.length, activeKeyCodes]);
 
 
   useEffect(() => {
@@ -2759,15 +2860,26 @@ export function PracticeMode({
           strictInactivityTimeout={strictInactivityTimeout}
           strictCustomInactivity={strictCustomInactivity}
           onFinish={(finalWpm, finalAccuracy, elapsedSeconds, finalTypedText, finalWpmHistory, finalReplayLog, finalErrorIndices) => {
+             const finalDetailedHistory = finalWpmHistory.map((val, i) => ({ time: i, wpm: val, rawWpm: val, errors: 0, word: "" }));
              setWpm(finalWpm);
              setAccuracy(finalAccuracy);
              setElapsedTime(elapsedSeconds);
              setTypedText(finalTypedText);
              setReplayLog(finalReplayLog);
               setSessionErrorIndices(finalErrorIndices || []);
-             // Our wpmHistory graph logic expects array of objects with wpm properties
-             setDetailedHistory(finalWpmHistory.map((val, i) => ({ time: i, wpm: val, rawWpm: val, errors: 0, word: "" })));
-             clearPracticeSession();
+             setWpmHistory(finalWpmHistory);
+             setDetailedHistory(finalDetailedHistory);
+             persistCompletedResult({
+               wpm: finalWpm,
+               accuracy: finalAccuracy,
+               elapsedTime: elapsedSeconds,
+               typedText: finalTypedText,
+               replayLog: finalReplayLog,
+               sessionErrorIndices: finalErrorIndices || [],
+               wpmHistory: finalWpmHistory,
+               detailedHistory: finalDetailedHistory,
+             });
+             completedRunRef.current = true;
              changeStep(3);
              setTimerRunning(false);
           }}
@@ -3081,8 +3193,9 @@ export function PracticeMode({
         </div>
 
         {/* ── Chart ── */}
-        <div className="h-[200px] w-full mt-8 animate-in fade-in duration-700" style={{ animationDelay: '0.55s', animationFillMode: 'both' }}>
-              <ResponsiveContainer width="100%" height="100%">
+        <div className="w-full mt-8 animate-in fade-in duration-700" style={{ animationDelay: '0.55s', animationFillMode: 'both' }}>
+              <ResilientResultsChart>
+                {(chartRevision) => <ResponsiveContainer key={chartRevision} width="100%" height="100%">
                   <LineChart data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
                     <CartesianGrid stroke="currentColor" strokeOpacity={0.06} vertical={false} />
                     <XAxis
@@ -3127,7 +3240,8 @@ export function PracticeMode({
                       type="monotone"
                     />
                   </LineChart>
-              </ResponsiveContainer>
+                </ResponsiveContainer>}
+              </ResilientResultsChart>
         </div>
 
         {/* ── Divider ── */}
@@ -3150,11 +3264,11 @@ export function PracticeMode({
 
         {/* ── Actions ── */}
         <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 pb-12 mt-4 animate-in slide-in-from-bottom-2 fade-in duration-500" style={{ animationDelay: '1s', animationFillMode: 'both' }}>
-           <button onClick={() => { changeStep(1); }} className="flex items-center gap-2 text-neutral-600 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white transition-colors text-sm py-1.5 focus:outline-none group">
+           <button onClick={() => { clearPracticeSession(); changeStep(1); }} className="flex items-center gap-2 text-neutral-600 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white transition-colors text-sm py-1.5 focus:outline-none group">
               <ArrowLeft size={16} className="group-hover:-translate-x-1 transition-transform" /> <span className="font-medium text-xs tracking-wide">return</span>
            </button>
 
-           <button onClick={() => { setTypedText(""); typedTextRef.current = ""; setElapsedTime(0); startTimeRef.current = null; setWpm(0); setWpmHistory([]); setDetailedHistory([]); lastHistoryTime.current = 0; setRenderRowOffset(0); setAccuracy(0); handleStartTest(); }} className="flex items-center gap-2 text-neutral-600 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white transition-colors text-sm py-1.5 focus:outline-none group">
+           <button onClick={() => { invalidatePendingSnapshot(); clearPracticeSession(); setTypedText(""); typedTextRef.current = ""; setElapsedTime(0); startTimeRef.current = null; setWpm(0); setWpmHistory([]); setDetailedHistory([]); lastHistoryTime.current = 0; setRenderRowOffset(0); setAccuracy(0); handleStartTest(); }} className="flex items-center gap-2 text-neutral-600 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white transition-colors text-sm py-1.5 focus:outline-none group">
               <RotateCcw size={16} className="group-active:-rotate-180 transition-all duration-300" /> <span className="font-medium text-xs tracking-wide">restart</span>
            </button>
 

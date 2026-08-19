@@ -6,51 +6,41 @@ import { motion } from 'motion/react';
 
 export function AnimatedPracticeIcon({
   active = false,
+  activeKeyCodes = [],
   isHovered = false,
   className = "",
   color = "currentColor"
 }: {
   active?: boolean;
+  activeKeyCodes?: string[];
   isHovered?: boolean;
   className?: string;
   color?: string;
 }) {
-  const [isTyping, setIsTyping] = useState(false);
-
-  useEffect(() => {
-    let timeout: ReturnType<typeof setTimeout>;
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-
-      if (!document.hasFocus()) return;
-      if (e.key === 'Escape' || e.key.startsWith('Arrow') || e.key === 'Shift' || e.key === 'Control' || e.key === 'Alt') {
-        return;
-      }
-
-
-      const activeEl = document.activeElement;
-      if (!activeEl || activeEl.id !== "typing-screen-input") {
-        return;
-      }
-
-      setIsTyping(true);
-      clearTimeout(timeout);
-      timeout = setTimeout(() => {
-        setIsTyping(false);
-      }, 300);
-    };
-
-    if (active) {
-      window.addEventListener('keydown', handleKeyDown);
-    }
-
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      clearTimeout(timeout);
-    };
-  }, [active]);
-
-  const shouldAnimate = isHovered || (active && isTyping);
+  const leftHandKeyCodes = new Set([
+    "Backquote", "Digit1", "Digit2", "Digit3", "Digit4", "Digit5",
+    "Tab", "CapsLock", "ShiftLeft", "ControlLeft", "AltLeft",
+    "KeyQ", "KeyW", "KeyE", "KeyR", "KeyT",
+    "KeyA", "KeyS", "KeyD", "KeyF", "KeyG",
+    "KeyZ", "KeyX", "KeyC", "KeyV", "KeyB",
+  ]);
+  const rightHandKeyCodes = new Set([
+    "Digit6", "Digit7", "Digit8", "Digit9", "Digit0", "Minus", "Equal", "Backspace",
+    "KeyY", "KeyU", "KeyI", "KeyO", "KeyP", "BracketLeft", "BracketRight", "Backslash",
+    "KeyH", "KeyJ", "KeyK", "KeyL", "Semicolon", "Quote", "Enter",
+    "KeyN", "KeyM", "Comma", "Period", "Slash", "ShiftRight", "ControlRight", "AltRight",
+  ]);
+  const activeCodes = active ? activeKeyCodes : [];
+  const leftHandActive = activeCodes.some((code) => leftHandKeyCodes.has(code) || code === "Space");
+  const rightHandActive = activeCodes.some((code) => rightHandKeyCodes.has(code) || code === "Space");
+  const hasActiveKeys = leftHandActive || rightHandActive;
+  // Hover restores the original full typing-preview loop. Real typing always
+  // wins: while any compatible key is held, the hand follows only the
+  // keyboard window's active-key state and never keeps an idle loop alive.
+  const shouldHoverAnimate = isHovered && !hasActiveKeys;
+  const restingSparkPath = "M 50 25 C 50 15, 35 15, 45 8 C 55 1, 55 12, 50 15 C 45 18, 55 30, 50 25";
+  const activeSparkPath = "M 50 25 C 45 10, 35 10, 45 5 C 55 -5, 60 10, 50 12 C 40 14, 55 30, 50 25";
+  const hoverSparkPath = "M 50 25 C 47 12, 37 12, 47 7 C 57 -3, 62 12, 52 14 C 42 16, 57 32, 50 25";
 
   return (
     <div className={`relative flex items-center justify-center ${className}`}>
@@ -70,23 +60,27 @@ export function AnimatedPracticeIcon({
           // parser then rejects the resulting "d: undefined" with the
           // "Expected moveto path command" console error. Stating it here
           // removes the guess entirely — purely additive, no visual change.
-          initial={{ d: "M 50 25 C 50 15, 35 15, 45 8 C 55 1, 55 12, 50 15 C 45 18, 55 30, 50 25" }}
-          animate={shouldAnimate ? {
-            d: [
-               "M 50 25 C 45 10, 35 10, 45 5 C 55 -5, 60 10, 50 12 C 40 14, 55 30, 50 25",
-               "M 50 25 C 47 12, 37 12, 47 7 C 57 -3, 62 12, 52 14 C 42 16, 57 32, 50 25",
-               "M 50 25 C 45 10, 35 10, 45 5 C 55 -5, 60 10, 50 12 C 40 14, 55 30, 50 25",
-            ]
-          } : {
-            d: "M 50 25 C 45 10, 35 10, 45 5 C 55 -5, 60 10, 50 12 C 40 14, 55 30, 50 25"
-          }}
+          initial={{ d: restingSparkPath }}
+          animate={
+            hasActiveKeys
+              ? { d: activeSparkPath }
+              : shouldHoverAnimate
+                ? { d: [activeSparkPath, hoverSparkPath, activeSparkPath] }
+                : { d: restingSparkPath }
+          }
           // Motion can only morph an SVG `d` path with a duration-based
           // tween, never a spring — springs interpolate numbers, and
           // feeding one a path string makes it briefly compute "undefined"
           // for `d` too. Every other prop here (x/y/rotate on the hands
           // below) is a plain number, so those keep their spring settle;
           // only this path tween changed.
-          transition={shouldAnimate ? { duration: 1.5, repeat: Infinity, ease: "easeInOut" } : { duration: 0.4, ease: "easeOut" }}
+          transition={
+            hasActiveKeys
+              ? { duration: 0.12, ease: "easeOut" }
+              : shouldHoverAnimate
+                ? { duration: 1.5, repeat: Infinity, ease: "easeInOut" }
+                : { duration: 0.4, ease: "easeOut" }
+          }
         />
 
         {/* Keyboard Base */}
@@ -104,13 +98,23 @@ export function AnimatedPracticeIcon({
 
 
         <motion.g
-          animate={shouldAnimate ? {
-            y: [0, -6, 2, -4, 0, -5, 0],
-            rotate: [0, 4, -2, -3, 0, 2, 0]
-          } : {
-            y: 0, rotate: 0
-          }}
-          transition={shouldAnimate ? { duration: 0.9, repeat: Infinity, ease: "easeInOut" } : { type: "spring", stiffness: 70, damping: 18 }}
+          animate={
+            leftHandActive
+              ? { y: -5, rotate: 2 }
+              : shouldHoverAnimate
+                ? {
+                    y: [0, -6, 2, -4, 0, -5, 0],
+                    rotate: [0, 4, -2, -3, 0, 2, 0],
+                  }
+                : { y: 0, rotate: 0 }
+          }
+          transition={
+            leftHandActive
+              ? { duration: 0.1, ease: "easeOut" }
+              : shouldHoverAnimate
+                ? { duration: 0.9, repeat: Infinity, ease: "easeInOut" }
+                : { type: "spring", stiffness: 70, damping: 18 }
+          }
           style={{ transformOrigin: "30px 80px" }}
         >
           <path d="M 17 95 L 30 84 L 38 95 L 25 105 Z" fill={color} />
@@ -120,13 +124,23 @@ export function AnimatedPracticeIcon({
 
         {/* Right Hand */}
         <motion.g
-          animate={shouldAnimate ? {
-            y: [0, -3, 0, -6, 2, -4, 0],
-            rotate: [0, -3, 2, 4, 0, -2, 0]
-          } : {
-            y: 0, rotate: 0
-          }}
-          transition={shouldAnimate ? { duration: 0.85, repeat: Infinity, delay: 0.1, ease: "easeInOut" } : { type: "spring", stiffness: 70, damping: 18 }}
+          animate={
+            rightHandActive
+              ? { y: -5, rotate: -2 }
+              : shouldHoverAnimate
+                ? {
+                    y: [0, -3, 0, -6, 2, -4, 0],
+                    rotate: [0, -3, 2, 4, 0, -2, 0],
+                  }
+                : { y: 0, rotate: 0 }
+          }
+          transition={
+            rightHandActive
+              ? { duration: 0.1, ease: "easeOut" }
+              : shouldHoverAnimate
+                ? { duration: 0.85, repeat: Infinity, delay: 0.1, ease: "easeInOut" }
+                : { type: "spring", stiffness: 70, damping: 18 }
+          }
           style={{ transformOrigin: "70px 80px" }}
         >
           <path d="M 83 95 L 70 84 L 62 95 L 75 105 Z" fill={color} />
