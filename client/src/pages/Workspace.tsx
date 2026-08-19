@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "motion/react";
 import { hasRoyScriptDesktopExitBridge, requestRoyScriptExit } from "../lib/platformExit";
 import { installRoyScriptDesktopShortcutBridge } from "../lib/desktopShortcuts";
@@ -103,6 +104,7 @@ import {
   type TabFormat,
   type TextEncoding,
 } from "../lib/statusBar";
+import { DEFAULT_AUTOMATIC_TAB_TITLE, deriveAutomaticTabTitle, isAutomaticallyNamedTab, makeCompactTabPreview, TASK_VIEW_DESCRIPTION_PREVIEW_MAX_LENGTH, TASK_VIEW_TITLE_PREVIEW_MAX_LENGTH, UNSAVED_DIALOG_TITLE_PREVIEW_MAX_LENGTH } from "../lib/tabTitle";
 const globalScannerEngine = new ScannerEngine();
 const SCANNER_MAX_VISUAL_FILE_BYTES = 50_000_000;
 const SCANNER_MAX_TEXT_FILE_BYTES = 2_000_000;
@@ -628,6 +630,8 @@ export default function Workspace() {
   const firstKeyGlowPendingTabIdRef = useRef<string | null>(null);
   const [closingTabId, setClosingTabId] = useState<string | null>(null);
   const [isTabOverviewOpen, setIsTabOverviewOpen] = useState(false);
+  const [tabOverviewQuery, setTabOverviewQuery] = useState("");
+  const [tabOverviewSelectedIndex, setTabOverviewSelectedIndex] = useState(0);
   const [isAccentBarIdle, setIsAccentBarIdle] = useState(false);
   const lastActivityAtRef = useRef<number>(Date.now());
   // Real pixel box of the currently-active tab, measured directly from the DOM so the
@@ -636,7 +640,17 @@ export default function Workspace() {
   const activeTabElRef = useRef<HTMLDivElement | null>(null);
   const tabStripScrollRef = useRef<HTMLDivElement | null>(null);
   const tabOverviewRef = useRef<HTMLDivElement | null>(null);
+  const tabOverviewPaletteRef = useRef<HTMLDivElement | null>(null);
+  const tabOverviewSearchInputRef = useRef<HTMLInputElement | null>(null);
   const [activeTabBox, setActiveTabBox] = useState({ width: 176, height: 40 });
+  const filteredTabOverviewTabs = useMemo(() => {
+    const normalizedQuery = tabOverviewQuery.trim().toLowerCase();
+    if (!normalizedQuery) return tabs;
+    return tabs.filter((tab) => {
+      const preview = buildTabOverviewPreview(tab.content);
+      return `${tab.name} ${preview}`.toLowerCase().includes(normalizedQuery);
+    });
+  }, [tabs, tabOverviewQuery]);
 
   // Measures the active tab's real rendered box so the neon-glow outline can be built
   // in exact pixel units instead of a distorted 0-100 viewBox stretched to fit.
@@ -703,12 +717,14 @@ export default function Workspace() {
   useEffect(() => {
     if (!isTabOverviewOpen) return;
     const handlePointerDown = (event: PointerEvent) => {
-      if (!tabOverviewRef.current?.contains(event.target as Node)) {
+      const target = event.target as Node;
+      const isTaskViewDialogInteraction = target instanceof Element && Boolean(target.closest("[data-workspace-unsaved-popup], [data-workspace-fallback-modal]"));
+      if (!isTaskViewDialogInteraction && !tabOverviewRef.current?.contains(target) && !tabOverviewPaletteRef.current?.contains(target)) {
         setIsTabOverviewOpen(false);
       }
     };
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setIsTabOverviewOpen(false);
+      if (event.key === "Escape" && !document.querySelector("[data-workspace-unsaved-popup], [data-workspace-fallback-modal]")) setIsTabOverviewOpen(false);
     };
     document.addEventListener("pointerdown", handlePointerDown, true);
     window.addEventListener("keydown", handleKeyDown);
@@ -717,6 +733,16 @@ export default function Workspace() {
       window.removeEventListener("keydown", handleKeyDown);
     };
   }, [isTabOverviewOpen]);
+  useEffect(() => {
+    if (!isTabOverviewOpen) return;
+    setTabOverviewQuery("");
+    setTabOverviewSelectedIndex(0);
+    const focusFrame = window.requestAnimationFrame(() => tabOverviewSearchInputRef.current?.focus());
+    return () => window.cancelAnimationFrame(focusFrame);
+  }, [isTabOverviewOpen]);
+  useEffect(() => {
+    setTabOverviewSelectedIndex(0);
+  }, [tabOverviewQuery]);
   const pendingCloseTabIdRef = useRef<string | null>(null);
   const activeTab = tabs.find(t => t.id === activeTabId);
   const isExamSealed = !!activeTab?.examSealed;
@@ -814,35 +840,10 @@ export default function Workspace() {
     setTabs(prev => prev.map(t => t.id === activeTabId ? { ...t, fileHandle: handle } : t));
   };
 
-  const generateSmartLabel = (text: string) => {
-    if (!text || !text.trim()) return "New Document";
-    const lines = text.split('\n');
-    const firstLine = lines.find(line => line.trim().length > 0) || "";
-
-
-    let cleaned = firstLine.replace(/^[\s#*>\-!\[\]()]+/, '').trim();
-
-    cleaned = cleaned.replace(/[.,!?;:]+$/, '');
-
-    if (!cleaned) return "New Document";
-
-    const limit = 24;
-    if (cleaned.length > limit) {
-
-      const lastSpace = cleaned.lastIndexOf(' ', limit);
-      if (lastSpace > 12) {
-        cleaned = cleaned.substring(0, lastSpace) + "...";
-      } else {
-        cleaned = cleaned.substring(0, limit) + "...";
-      }
-    }
-    return cleaned;
-  };
-
   // Mirrors OpenEditor's BuildOverviewPreview contract: build from the first
   // ten source lines, remove CR artifacts, and cap the transfer at 900 chars.
   // The card's XAML-equivalent preview inset then applies the visual 8-line crop.
-  const buildTabOverviewPreview = (text: string) => {
+  function buildTabOverviewPreview(text: string) {
     if (!text) return "";
     const preview = text
       .split("\n")
@@ -850,8 +851,16 @@ export default function Workspace() {
       .map(line => line.replace(/\r$/, ""))
       .join("\n")
       .trimEnd();
-    return preview.length > 900 ? preview.slice(0, 900) : preview;
-  };
+    return makeCompactTabPreview(preview, TASK_VIEW_DESCRIPTION_PREVIEW_MAX_LENGTH);
+  }
+
+  function getPendingActionTitlePreview() {
+    const pendingTabId = pendingAction?.replace(/^(closeTab:|animatedCloseTab:)/, "");
+    const pendingTabName = (pendingAction?.startsWith("closeTab:") || pendingAction?.startsWith("animatedCloseTab:"))
+      ? (tabs.find((tab) => tab.id === pendingTabId)?.name ?? fileName)
+      : fileName;
+    return makeCompactTabPreview(pendingTabName, UNSAVED_DIALOG_TITLE_PREVIEW_MAX_LENGTH);
+  }
 
   const updateActiveTabContent = (content: string) => {
     setEditorContent(content);
@@ -906,7 +915,7 @@ export default function Workspace() {
   };
   // --------------------------------
 
-  const createNewTab = (name = "New Document", content = "", fileHandle = null) => {
+  const createNewTab = (name = DEFAULT_AUTOMATIC_TAB_TITLE, content = "", fileHandle = null) => {
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
       saveTimeoutRef.current = null;
@@ -975,6 +984,39 @@ export default function Workspace() {
       }
     }
   };
+
+  useEffect(() => {
+    if (!isTabOverviewOpen) return;
+    const handleTaskViewKeyDown = (event: KeyboardEvent) => {
+      if (document.querySelector("[data-workspace-unsaved-popup]")) return;
+      const consumeTaskViewKey = () => {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+      };
+      if (event.key === "ArrowDown") {
+        consumeTaskViewKey();
+        setTabOverviewSelectedIndex((previous) => Math.min(previous + 1, filteredTabOverviewTabs.length - 1));
+        return;
+      }
+      if (event.key === "ArrowUp") {
+        consumeTaskViewKey();
+        setTabOverviewSelectedIndex((previous) => Math.max(previous - 1, 0));
+        return;
+      }
+      if (event.key === "Enter") {
+        const selectedTab = filteredTabOverviewTabs[tabOverviewSelectedIndex];
+        if (!selectedTab || examStatus === "running" || examStatus === "countdown") return;
+        consumeTaskViewKey();
+        window.setTimeout(() => {
+          setIsTabOverviewOpen(false);
+          switchTab(selectedTab.id);
+        }, 0);
+      }
+    };
+    window.addEventListener("keydown", handleTaskViewKeyDown, true);
+    return () => window.removeEventListener("keydown", handleTaskViewKeyDown, true);
+  }, [isTabOverviewOpen, tabOverviewSelectedIndex, filteredTabOverviewTabs, examStatus, switchTab]);
 
   const doCloseTab = async (tabId: string) => {
     const tabToClose = tabs.find(t => t.id === tabId);
@@ -1069,7 +1111,7 @@ export default function Workspace() {
       if (isCtrlT || isAltT) {
         e.preventDefault();
         e.stopPropagation();
-        createNewTab(`New Document ${tabs.length + 1}`, "");
+        createNewTab();
       } else if (isAltW) {
         e.preventDefault();
         e.stopPropagation();
@@ -1113,6 +1155,22 @@ export default function Workspace() {
 
   const [isUnsavedPopupOpen, setIsUnsavedPopupOpen] = useState(false);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isUnsavedPopupOpen) return;
+
+    const handleUnsavedPopupEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopPropagation();
+      setIsUnsavedPopupOpen(false);
+      setPendingAction(null);
+      pendingSwitchRef.current = null;
+    };
+
+    window.addEventListener("keydown", handleUnsavedPopupEscape, true);
+    return () => window.removeEventListener("keydown", handleUnsavedPopupEscape, true);
+  }, [isUnsavedPopupOpen]);
 
   // Close all tabs + request platform exit (Electron app.quit / Tauri exit).
   // Reuses the existing unsaved popup for the consolidated dirty confirmation,
@@ -3949,41 +4007,44 @@ export default function Workspace() {
       <button type="button" data-workspace-tab-overview-trigger onClick={() => setIsTabOverviewOpen(open => !open)} disabled={examStatus === "running" || examStatus === "countdown"} className={`lexkit-toolbar-button flex h-8 w-8 items-center justify-center rounded-[6px] border-0 bg-transparent p-0 text-neutral-500 transition-colors hover:bg-black/[0.045] hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-white/[0.06] dark:hover:text-neutral-100 ${(examStatus === "running" || examStatus === "countdown") ? "cursor-not-allowed opacity-30" : "cursor-pointer"}`} title={(examStatus === "running" || examStatus === "countdown") ? "Locked while an exam is in progress" : "Open tabs"} aria-label="Open tabs" aria-expanded={isTabOverviewOpen}>
         <span data-openeditor-taskview-glyph className="inline-flex items-center"><WindowsTaskViewGlyph /></span>
       </button>
-      <button type="button" data-workspace-new-tab-trigger onClick={() => createNewTab(`New Document ${tabs.length + 1}`, "")} disabled={examStatus === "running" || examStatus === "countdown"} className={`lexkit-toolbar-button flex h-8 w-8 items-center justify-center rounded-[6px] border-0 bg-transparent p-0 text-neutral-500 transition-colors hover:bg-black/[0.045] hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-white/[0.06] dark:hover:text-neutral-100 ${(examStatus === "running" || examStatus === "countdown") ? "cursor-not-allowed opacity-30" : "cursor-pointer"}`} title={(examStatus === "running" || examStatus === "countdown") ? "Locked while an exam is in progress" : "New tab"} aria-label="New tab">
+      <button type="button" data-workspace-new-tab-trigger onClick={() => createNewTab()} disabled={examStatus === "running" || examStatus === "countdown"} className={`lexkit-toolbar-button flex h-8 w-8 items-center justify-center rounded-[6px] border-0 bg-transparent p-0 text-neutral-500 transition-colors hover:bg-black/[0.045] hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-white/[0.06] dark:hover:text-neutral-100 ${(examStatus === "running" || examStatus === "countdown") ? "cursor-not-allowed opacity-30" : "cursor-pointer"}`} title={(examStatus === "running" || examStatus === "countdown") ? "Locked while an exam is in progress" : "New tab"} aria-label="New tab">
         <span data-openeditor-add-glyph><OpenEditorMdl2AddGlyph /></span>
       </button>
       <span data-tab-count className="ml-1.5 select-none whitespace-nowrap text-[12px] leading-none text-neutral-500 dark:text-neutral-400" style={{ fontFamily: '"Segoe UI Variable", "Segoe UI", system-ui, sans-serif', fontSize: "12px" }}>{tabs.length} {tabs.length === 1 ? "tab" : "tabs"}</span>
-      <AnimatePresence>
-        {isTabOverviewOpen && (
-          <motion.div data-workspace-tab-overview initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -5 }} transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1] }} className="absolute right-0 top-[calc(100%+8px)] z-50 w-[720px] max-w-[calc(100vw-2rem)] max-h-[500px] overflow-hidden rounded-[14px] border border-transparent bg-white/[0.76] shadow-[0_24px_64px_rgba(0,0,0,0.17),0_2px_10px_rgba(0,0,0,0.06)] ring-1 ring-black/[0.04] backdrop-blur-[52px] backdrop-saturate-[1.35] dark:bg-[#1c1c1c]/[0.82] dark:shadow-[0_26px_68px_rgba(0,0,0,0.56),0_2px_12px_rgba(0,0,0,0.32)] dark:ring-white/[0.06]" style={{ fontFamily: '"Segoe UI Variable", "Segoe UI", system-ui, sans-serif' }}>
-            <div className="flex max-h-[498px] flex-col">
-              <div className="flex shrink-0 items-center justify-between px-[18px] pt-[18px] pb-3"><h2 className="text-[13px] font-semibold tracking-[-0.01em] text-neutral-900 dark:text-neutral-100">Open tabs</h2><div className="flex items-center gap-2.5">{tabs.length > 0 && hasRoyScriptDesktopExitBridge() && <button type="button" data-workspace-tab-close-all onClick={closeAllTabsAndRequestExit} disabled={examStatus === "running" || examStatus === "countdown" || isExamSealed || tabs.length === 0} className="rounded-[7px] border-0 bg-transparent px-2 py-[5px] text-[12px] font-medium leading-none tracking-[-0.01em] text-neutral-500 transition-colors hover:bg-neutral-900/[0.045] hover:text-neutral-900 disabled:cursor-not-allowed disabled:text-neutral-300 dark:text-neutral-400 dark:hover:bg-white/[0.055] dark:hover:text-neutral-100 dark:disabled:text-neutral-600" title="Close all tabs and exit the application">Close all tabs</button>}<span className="rounded-full bg-black/[0.04] px-2 py-[3px] text-[11px] font-medium leading-none text-neutral-400 shadow-[inset_0_1px_0_rgba(255,255,255,0.48)] dark:bg-white/[0.045] dark:text-neutral-500 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.035)]">{tabs.length} {tabs.length === 1 ? "tab" : "tabs"}</span></div></div>
-              <div className="min-h-0 overflow-y-auto overflow-x-hidden px-[18px] pb-[18px]"><div data-workspace-tab-overview-list className="grid grid-cols-3 gap-3.5 rounded-[11px] bg-black/[0.018] p-2.5 dark:bg-black/[0.16]">
-                {tabs.map(tab => {
-                  const isActive = tab.id === activeTabId;
-                  const isSwitchLocked = examStatus === "running" || examStatus === "countdown";
-                  // A completed exam tab is permanently sealed until the existing
-                  // Save and Start Fresh flow replaces it with a normal workspace.
-                  // Do not render a close affordance that the existing close guard
-                  // must silently refuse; ordinary tabs keep their normal guard.
-                  const canCloseFromOverview = !tab.examSealed;
-                  const preview = buildTabOverviewPreview(tab.id === activeTabId ? editorContent : tab.content);
-                  return <div key={tab.id} data-workspace-tab-overview-item={tab.id} data-workspace-tab-overview-exam-sealed={tab.examSealed ? "true" : "false"} data-workspace-tab-overview-close-eligible={canCloseFromOverview ? "true" : "false"} className={`group relative flex min-h-[138px] w-full flex-col rounded-[10px] border border-transparent bg-white/[0.52] p-3 text-left shadow-[0_1px_1px_rgba(0,0,0,0.018)] transition-[background-color,border-color,box-shadow] ${isSwitchLocked ? "cursor-not-allowed opacity-35" : "hover:bg-white/[0.76] hover:border-black/[0.05] hover:shadow-[0_8px_20px_rgba(0,0,0,0.055)] dark:hover:bg-white/[0.065] dark:hover:border-white/[0.08] dark:hover:shadow-[0_10px_24px_rgba(0,0,0,0.2)]"} ${isActive ? "text-neutral-900 dark:text-neutral-50" : "text-neutral-700 dark:bg-white/[0.035] dark:shadow-[0_1px_1px_rgba(0,0,0,0.2)] dark:text-neutral-300"}`} style={isActive ? { borderColor: themeAccentColor, boxShadow: `0 0 0 1px ${themeAccentColor}22`, backgroundColor: `${themeAccentColor}0D` } : undefined}>
-                    <button type="button" data-workspace-tab-overview-activate={tab.id} onClick={() => { if (!isSwitchLocked) { setIsTabOverviewOpen(false); switchTab(tab.id); } }} disabled={isSwitchLocked} className="flex min-h-[112px] w-full flex-col text-left outline-none" aria-label={`Open ${tab.name}`}><span className="flex w-full items-center gap-1.5 truncate pr-5 text-[12px] font-medium leading-4"><FileText className="h-[14px] w-[14px] shrink-0 text-neutral-400 dark:text-neutral-500" strokeWidth={1.55} /><span className="truncate">{tab.name}</span>{tab.isDirty && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-neutral-400 dark:bg-neutral-500" />}</span><span data-openeditor-tab-preview={tab.id} className={`mt-3 block min-h-[72px] w-full overflow-hidden rounded-[6px] px-2.5 py-2 font-mono text-[10px] leading-[15px] ${preview ? "bg-black/[0.035] text-neutral-400 dark:bg-black/[0.16] dark:text-neutral-500" : "bg-black/[0.02] text-neutral-300 dark:bg-black/[0.12] dark:text-neutral-600"}`} style={{ display: "-webkit-box", WebkitBoxOrient: "vertical", WebkitLineClamp: 4, fontFamily: "Consolas, 'Liberation Mono', monospace" }}>{preview || "No text yet"}</span></button>
-                    {canCloseFromOverview && <button type="button" data-workspace-tab-overview-close={tab.id} onClick={(event) => { event.preventDefault(); event.stopPropagation(); if (!isSwitchLocked) initiateTabClose(tab.id, event); }} disabled={isSwitchLocked} className={`absolute right-2 top-2 flex h-5 w-5 items-center justify-center rounded-[5px] text-neutral-400 opacity-0 transition-[opacity,color,background-color] group-hover:opacity-100 focus-visible:opacity-100 dark:text-neutral-500 ${isSwitchLocked ? "cursor-not-allowed" : "cursor-pointer hover:bg-black/[0.055] hover:text-neutral-800 dark:hover:bg-white/[0.08] dark:hover:text-neutral-200"}`} title={isSwitchLocked ? "Locked while an exam is in progress" : `Close ${tab.name}`} aria-label={`Close ${tab.name}`}><X className="h-[13px] w-[13px]" strokeWidth={1.8} /></button>}
-                  </div>;
-                })}
-              </div></div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   );
+
+  const taskViewCommandPalette = isTabOverviewOpen ? createPortal(
+    <div className="lexkit-command-palette-overlay" data-royscript-transient-overlay data-workspace-tab-overview onClick={() => setIsTabOverviewOpen(false)}>
+      <div ref={tabOverviewPaletteRef} className="lexkit-command-palette" onClick={(event) => event.stopPropagation()}>
+        <div className="lexkit-command-palette-header">
+          <Search size={16} className="lexkit-command-palette-icon" />
+          <input ref={tabOverviewSearchInputRef} type="text" placeholder="Search open tabs…" value={tabOverviewQuery} onChange={(event) => setTabOverviewQuery(event.target.value)} className="lexkit-command-palette-input" autoFocus />
+          {tabs.length > 0 && hasRoyScriptDesktopExitBridge() ? <button type="button" data-workspace-tab-close-all onClick={closeAllTabsAndRequestExit} disabled={examStatus === "running" || examStatus === "countdown" || isExamSealed || tabs.length === 0} className="lexkit-command-palette-kbd" title="Close all tabs and exit the application">Close all</button> : <kbd className="lexkit-command-palette-kbd">ESC</kbd>}
+        </div>
+        <div className="lexkit-command-palette-list">
+          {filteredTabOverviewTabs.length === 0 ? <div className="lexkit-command-palette-empty">No open tabs found</div> : <div className="lexkit-command-palette-group">{filteredTabOverviewTabs.map((tab, index) => {
+            const isSwitchLocked = examStatus === "running" || examStatus === "countdown";
+            const canCloseFromOverview = !tab.examSealed;
+            const preview = buildTabOverviewPreview(tab.id === activeTabId ? editorContent : tab.content);
+            const titlePreview = makeCompactTabPreview(tab.name, TASK_VIEW_TITLE_PREVIEW_MAX_LENGTH);
+            const previewText = preview ? preview.replace(/\s+/g, " ") : "No text yet";
+            return <div key={tab.id} data-workspace-tab-overview-item={tab.id} data-workspace-tab-overview-exam-sealed={tab.examSealed ? "true" : "false"} data-workspace-tab-overview-close-eligible={canCloseFromOverview ? "true" : "false"} className={`group lexkit-command-palette-item ${index === tabOverviewSelectedIndex ? "selected" : ""} ${isSwitchLocked ? "opacity-40" : ""}`} role="option" aria-selected={index === tabOverviewSelectedIndex} onClick={() => { if (!isSwitchLocked) { setIsTabOverviewOpen(false); switchTab(tab.id); } }} onMouseEnter={() => setTabOverviewSelectedIndex(index)}>
+              <div className="lexkit-command-palette-item-content"><div className="lexkit-command-palette-item-title min-w-0 overflow-hidden"><span className="block w-full max-w-full truncate">{titlePreview}</span></div><div data-openeditor-tab-preview={tab.id} className="lexkit-command-palette-item-description block w-full max-w-full truncate">{previewText}</div></div>
+              {canCloseFromOverview && <button type="button" data-workspace-tab-overview-close={tab.id} onClick={(event) => { event.preventDefault(); event.stopPropagation(); if (!isSwitchLocked) initiateTabClose(tab.id, event); }} disabled={isSwitchLocked} className="ml-2 flex h-6 w-6 shrink-0 items-center justify-center rounded-[4px] text-[var(--lexkit-muted-fg)] opacity-0 transition-opacity hover:bg-[var(--lexkit-bg)] group-hover:opacity-100 focus-visible:opacity-100 disabled:cursor-not-allowed" aria-label={isSwitchLocked ? "Locked while an exam is in progress" : `Close ${titlePreview}`}><X className="h-[13px] w-[13px]" strokeWidth={1.8} /></button>}
+            </div>;
+          })}</div>}
+        </div>
+        <div className="lexkit-command-palette-footer"><span className="lexkit-command-palette-hint"><kbd>↑↓</kbd> to navigate, <kbd>↵</kbd> to open, <kbd>ESC</kbd> to close</span></div>
+      </div>
+    </div>,
+    document.body,
+  ) : null;
 
   return (
     <ThemeProviderCast attribute="class" defaultTheme="system" enableSystem>
       <div className="flex flex-col h-screen w-full bg-[#f3f3f3] dark:bg-[#202020] font-sans overflow-hidden text-neutral-900 dark:text-neutral-100">
+        {taskViewCommandPalette}
         {/* Title Bar (Mimicking native OS title bar with WinUI 3 style) */}
         <div className="h-14 bg-white/70 dark:bg-black/50 backdrop-blur-2xl flex items-center justify-between pl-2 pr-4 border-b border-black/5 dark:border-white/5 select-none relative z-10 transition-colors">
           <div className="flex items-center gap-4">
@@ -4476,7 +4537,7 @@ export default function Workspace() {
                   <button
                     type="button"
                     data-workspace-new-tab-trigger
-                    onClick={() => createNewTab(`New Document ${tabs.length + 1}`, "")}
+                    onClick={() => createNewTab()}
                     disabled={examStatus === "running" || examStatus === "countdown"}
                     className={`flex h-full items-center justify-center border-0 bg-transparent px-2.5 py-1.5 text-neutral-500 dark:text-neutral-400 transition-colors hover:bg-black/[0.04] hover:text-neutral-800 dark:hover:bg-white/[0.06] dark:hover:text-neutral-100 ${(examStatus === "running" || examStatus === "countdown") ? "opacity-30 cursor-not-allowed" : "cursor-pointer"}`}
                     title={(examStatus === "running" || examStatus === "countdown") ? "Locked while an exam is in progress" : "New Tab: Alt+T | Close: Alt+W | Switch: Alt+Left/Right"}
@@ -4661,10 +4722,10 @@ export default function Workspace() {
                         updateActiveTabIsDirty(true);
 
                         const activeTab = tabs.find(t => t.id === activeTabId);
-                        if (activeTab && activeTab.isAutoNamed) {
-                          const newFilename = generateSmartLabel(text);
-                          if (newFilename !== activeTab.name) {
-                            updateActiveTabFileName(newFilename);
+                        if (activeTab && isAutomaticallyNamedTab(activeTab)) {
+                          const newTitle = deriveAutomaticTabTitle(text);
+                          if (newTitle !== activeTab.name) {
+                            updateActiveTabFileName(newTitle);
                           }
                         }
                       } else {
@@ -4863,7 +4924,14 @@ export default function Workspace() {
 
           {/* Unsaved Changes \u2014 Native OS Alert Dialog */}
           {isUnsavedPopupOpen && (
-            <div className="fixed inset-0 z-[500] flex items-center justify-center bg-black/40">
+            <div
+              data-royscript-transient-overlay
+              role="dialog"
+              aria-modal="true"
+              aria-label="Unsaved changes"
+              data-workspace-unsaved-popup
+              className="fixed inset-0 z-[10050] flex items-center justify-center bg-black/40"
+            >
               <div
                 className="bg-white dark:bg-[#1c1c1c] rounded-[10px] shadow-[0_32px_80px_rgba(0,0,0,0.40)] w-[420px] overflow-hidden"
                 style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Segoe UI', sans-serif" }}
@@ -4878,7 +4946,8 @@ export default function Workspace() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <h2 className="text-[15px] font-medium text-neutral-900 dark:text-neutral-100 leading-snug tracking-[-0.008em] mb-1.5">
-                      Do you want to save changes to &ldquo;{(pendingAction?.startsWith("closeTab:") || pendingAction?.startsWith("animatedCloseTab:")) ? (tabs.find(t => t.id === pendingAction?.replace(/^(closeTab:|animatedCloseTab:)/, ""))?.name ?? fileName) : fileName}&rdquo;?
+                      <span className="block">Do you want to save changes to</span>
+                      <span className="mt-0.5 block max-w-full truncate">&ldquo;{getPendingActionTitlePreview()}&rdquo;?</span>
                     </h2>
                     <p className="text-[13px] text-neutral-500 dark:text-neutral-400 leading-[1.5]">
                       Your changes will be lost if you don&apos;t save them.
@@ -5233,7 +5302,7 @@ export default function Workspace() {
 
           {/* Sandboxed Fallback Copy/Print Modal */}
           {fallbackModalOpen && (
-            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/25 dark:bg-black/40 backdrop-blur-[6px] animate-in fade-in duration-200">
+            <div data-workspace-fallback-modal className="fixed inset-0 z-[10060] flex items-center justify-center p-4 bg-black/25 dark:bg-black/40 backdrop-blur-[6px] animate-in fade-in duration-200">
                <motion.div
                  initial={{ opacity: 0, scale: 0.98, y: 10 }}
                  animate={{ opacity: 1, scale: 1, y: 0 }}

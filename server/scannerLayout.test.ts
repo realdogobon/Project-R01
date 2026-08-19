@@ -169,8 +169,7 @@ describe("scanner action-bar layout contract", () => {
     expect(source).toContain('boxShadow: `0 0 0 1px ${themeAccentColor}22`');
     expect(source).toContain('data-openeditor-tab-preview={tab.id}');
     expect(source).toContain('WebkitLineClamp: 4');
-    expect(source).toContain("const buildTabOverviewPreview = (text: string) => {");
-    expect(source).toContain('tab.isDirty && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-neutral-400 dark:bg-neutral-500"');
+    expect(source).toContain("function buildTabOverviewPreview(text: string) {");
     expect(source).toContain("switchTab(tab.id);");
     expect(source).toContain("data-workspace-tab-overview-close={tab.id}");
     expect(source).toContain("event.stopPropagation();");

@@ -3,6 +3,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { matchesKeyboardShortcut } from "../client/src/components/lexkit/commands";
 import { calculateFloatingToolbarPosition } from "../client/src/components/lexkit/floatingToolbarPosition";
+import { DEFAULT_AUTOMATIC_TAB_TITLE, deriveAutomaticTabTitle, isAutomaticallyNamedTab, makeCompactTabPreview, TASK_VIEW_DESCRIPTION_PREVIEW_MAX_LENGTH, TASK_VIEW_TITLE_PREVIEW_MAX_LENGTH, UNSAVED_DIALOG_TITLE_PREVIEW_MAX_LENGTH } from "../client/src/lib/tabTitle";
 
 const projectRoot = path.resolve(import.meta.dirname, "..");
 const readProjectFile = (relativePath: string) => fs.readFileSync(path.join(projectRoot, relativePath), "utf8");
@@ -31,6 +32,94 @@ describe("approved editor hardening contracts", () => {
     expect(dialog).toContain("data-royscript-transient-overlay");
     expect(workspace).toContain('document.querySelector("[data-royscript-transient-overlay]")');
     expect(workspace).toContain("(isCtrlK || isEscape) && !isTransientOverlayOpen");
+  });
+
+  it("renders Task View through the shared centred Command Palette surface without replacing tab safety flows", () => {
+    const workspace = readProjectFile("client/src/pages/Workspace.tsx");
+
+    expect(workspace).toContain('placeholder="Search open tabs…"');
+    expect(workspace).toContain('className="lexkit-command-palette-overlay"');
+    expect(workspace).toContain('className="lexkit-command-palette"');
+    expect(workspace).toContain('className="lexkit-command-palette-header"');
+    expect(workspace).toContain('className="lexkit-command-palette-list"');
+    expect(workspace).toContain('className="lexkit-command-palette-footer"');
+    expect(workspace).toContain("data-royscript-transient-overlay data-workspace-tab-overview");
+    expect(workspace).toContain("createPortal(");
+    expect(workspace).toContain("filteredTabOverviewTabs");
+    expect(workspace).toContain('setIsTabOverviewOpen(false); switchTab(tab.id);');
+    expect(workspace).toContain("initiateTabClose(tab.id, event)");
+    expect(workspace).toContain("const canCloseFromOverview = !tab.examSealed");
+    expect(workspace).toContain('examStatus === "running" || examStatus === "countdown"');
+    expect(workspace).toContain("data-workspace-tab-close-all");
+  });
+
+  it("keeps Task View rows free of redundant icons, headings, and dirty-dot decoration", () => {
+    const workspace = readProjectFile("client/src/pages/Workspace.tsx");
+
+    expect(workspace).not.toContain('<FileText size={16} className="lexkit-command-palette-icon shrink-0" />');
+    expect(workspace).not.toContain('className="lexkit-command-palette-group-title">Open tabs');
+    expect(workspace).not.toContain('tab.isDirty && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-current opacity-55" />');
+  });
+
+  it("derives an auto-named tab from its first meaningful visible line while preserving deliberate titles", () => {
+    expect(deriveAutomaticTabTitle("")).toBe(DEFAULT_AUTOMATIC_TAB_TITLE);
+    expect(deriveAutomaticTabTitle("\n  ## Project outline\nSecond line")).toBe("Project outline");
+    expect(deriveAutomaticTabTitle("> [Guide](https://example.com)\nSecond line")).toBe("Guide");
+    expect(isAutomaticallyNamedTab({ name: "New Document" })).toBe(true);
+    expect(isAutomaticallyNamedTab({ name: "New Document 4" })).toBe(true);
+    expect(isAutomaticallyNamedTab({ name: "My saved note.md", isAutoNamed: false })).toBe(false);
+  });
+
+  it("keeps Task View labels as compact visual previews while retaining full title state for search", () => {
+    const longTitle = "Quarterly planning notes for customer research, release coordination, and durable documentation across the entire operating calendar";
+
+    expect(makeCompactTabPreview(longTitle, TASK_VIEW_TITLE_PREVIEW_MAX_LENGTH)).toBe("Quarterly planning notes for customer research, release coordination,…");
+    expect(makeCompactTabPreview("singlewordwithoutbreaks".repeat(8), 20)).toBe("singlewordwithoutbr…");
+    expect(makeCompactTabPreview("First line\nSecond line\nThird line", TASK_VIEW_DESCRIPTION_PREVIEW_MAX_LENGTH)).toBe("First line Second line Third line");
+
+    const workspace = readProjectFile("client/src/pages/Workspace.tsx");
+    expect(workspace).toContain("TASK_VIEW_TITLE_PREVIEW_MAX_LENGTH");
+    expect(workspace).toContain("TASK_VIEW_DESCRIPTION_PREVIEW_MAX_LENGTH");
+    expect(workspace).toContain('className="block w-full max-w-full truncate"');
+    expect(workspace).toContain("lexkit-command-palette-item-title min-w-0 overflow-hidden");
+  });
+
+  it("contains Escape inside the dirty-close confirmation instead of leaking it to Settings", () => {
+    const workspace = readProjectFile("client/src/pages/Workspace.tsx");
+
+    expect(workspace).toContain("data-royscript-transient-overlay");
+    expect(workspace).toContain("handleUnsavedPopupEscape");
+    expect(workspace).toContain('window.addEventListener("keydown", handleUnsavedPopupEscape, true)');
+    expect(workspace).toContain("setIsUnsavedPopupOpen(false);");
+  });
+
+  it("keeps a guarded Task View close confirmation in the foreground without exposing full document titles", () => {
+    const workspace = readProjectFile("client/src/pages/Workspace.tsx");
+    const closeInitiator = workspace.slice(workspace.indexOf("const initiateTabClose"), workspace.indexOf("const createNewTab"));
+
+    expect(workspace).toContain("data-workspace-unsaved-popup");
+    expect(workspace).toContain("z-[10050]");
+    expect(workspace).toContain("getPendingActionTitlePreview");
+    expect(workspace).toContain("makeCompactTabPreview(pendingTabName, UNSAVED_DIALOG_TITLE_PREVIEW_MAX_LENGTH)");
+    expect(workspace).toContain('className="mt-0.5 block max-w-full truncate"');
+    expect(workspace).not.toContain("title={tab.name}");
+    expect(workspace).not.toContain("title={previewText}");
+    expect(workspace).not.toContain("`Close ${tab.name}`");
+    expect(closeInitiator).not.toContain("setIsTabOverviewOpen(false)");
+    expect(workspace).toContain("doCloseTab(tabId);");
+    expect(workspace).toContain("data-workspace-fallback-modal");
+    expect(workspace).toContain("z-[10060]");
+    expect(workspace).toContain('target.closest("[data-workspace-unsaved-popup], [data-workspace-fallback-modal]")');
+    expect(workspace).toContain('!document.querySelector("[data-workspace-unsaved-popup], [data-workspace-fallback-modal]")');
+  });
+
+  it("limits unsaved-dialog names more tightly than the Task View while keeping them readable", () => {
+    const longTitle = "Save-path verification note with a compact preview title only";
+    const preview = makeCompactTabPreview(longTitle, UNSAVED_DIALOG_TITLE_PREVIEW_MAX_LENGTH);
+
+    expect(UNSAVED_DIALOG_TITLE_PREVIEW_MAX_LENGTH).toBeLessThan(TASK_VIEW_TITLE_PREVIEW_MAX_LENGTH);
+    expect(preview.length).toBeLessThanOrEqual(UNSAVED_DIALOG_TITLE_PREVIEW_MAX_LENGTH);
+    expect(preview).toMatch(/…$/);
   });
 
   it("removes the global blue caret override, preserves localized caret inheritance, and restores combined decorations", () => {
