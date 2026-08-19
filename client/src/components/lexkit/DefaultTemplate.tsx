@@ -99,6 +99,14 @@ export const extensions = [
 
 const { Provider, useEditor } = createEditorSystem<typeof extensions>();
 
+const EXAM_BLOCKED_NATIVE_INPUT_TYPES = new Set([
+  "insertFromPaste",
+  "insertFromPasteAsQuotation",
+  "insertFromDrop",
+  "insertFromYank",
+  "insertReplacementText",
+]);
+
 
 type EditorCommands = BaseCommands & ExtractCommands<typeof extensions>;
 type EditorStateQueries = ExtractStateQueries<typeof extensions>;
@@ -777,6 +785,49 @@ function EditorContent({
     };
   }, [updateScrollStats]);
 
+  useEffect(() => {
+    const browserAssistanceAttributes = {
+      spellcheck: "false",
+      autocorrect: "off",
+      autocapitalize: "off",
+      autocomplete: "off",
+      "data-gramm": "false",
+      "data-gramm_editor": "false",
+      "data-enable-grammarly": "false",
+      "data-lt-active": "false",
+    } as const;
+    const shouldLockBrowserAssistance = Boolean(examActive || readOnly);
+
+    const synchronizeBrowserAssistance = () => {
+      const editable = containerRef.current?.querySelector(".lexkit-content-editable") as HTMLElement | null;
+      if (!editable) return;
+
+      if (shouldLockBrowserAssistance) {
+        Object.entries(browserAssistanceAttributes).forEach(([attribute, value]) => {
+          if (editable.getAttribute(attribute) !== value) editable.setAttribute(attribute, value);
+        });
+        return;
+      }
+
+      Object.keys(browserAssistanceAttributes).forEach((attribute) => {
+        if (editable.hasAttribute(attribute)) editable.removeAttribute(attribute);
+      });
+    };
+
+    synchronizeBrowserAssistance();
+    if (!shouldLockBrowserAssistance || !containerRef.current) return;
+
+    const observer = new MutationObserver(synchronizeBrowserAssistance);
+    observer.observe(containerRef.current, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      attributeFilter: Object.keys(browserAssistanceAttributes),
+    });
+
+    return () => observer.disconnect();
+  }, [examActive, readOnly]);
+
   const onThumbMouseDown = (e: React.MouseEvent) => {
     e.preventDefault();
     setIsDraggingScrollbar(true);
@@ -1124,14 +1175,27 @@ function EditorContent({
         ref={containerRef}
         data-editor-theme={isDark ? "dark" : "light"}
         className={`lexkit-editor flex-1 min-h-0 ${readOnly ? "select-none cursor-default" : ""} ${sealedVisual ? "lexkit-sealed-document" : ""}`}
-        onCopyCapture={(e) => { if (examActive || readOnly) { e.preventDefault(); e.stopPropagation(); alert("Clipboard operations are locked."); } }}
-        onCutCapture={(e) => { if (examActive || readOnly) { e.preventDefault(); e.stopPropagation(); alert("Clipboard operations are locked."); } }}
-        onPasteCapture={(e) => { if (examActive || readOnly) { e.preventDefault(); e.stopPropagation(); alert("Clipboard operations are locked."); } }}
+        onCopyCapture={(e) => { if (examActive || readOnly) { e.preventDefault(); e.stopPropagation(); } }}
+        onCutCapture={(e) => { if (examActive || readOnly) { e.preventDefault(); e.stopPropagation(); } }}
+        onPasteCapture={(e) => { if (examActive || readOnly) { e.preventDefault(); e.stopPropagation(); } }}
+        onBeforeInputCapture={(e) => {
+          if (!examActive) return;
+          const inputType = (e.nativeEvent as InputEvent).inputType;
+          if (EXAM_BLOCKED_NATIVE_INPUT_TYPES.has(inputType)) {
+            e.preventDefault();
+            e.stopPropagation();
+          }
+        }}
         onContextMenuCapture={(e) => { if (examActive || readOnly) { e.preventDefault(); e.stopPropagation(); } }}
         onMouseDownCapture={(e) => { if (readOnly) { e.preventDefault(); e.stopPropagation(); } }}
         onPointerDownCapture={(e) => { if (readOnly) { e.preventDefault(); e.stopPropagation(); } }}
         onKeyDownCapture={(e) => {
           if (readOnly) { e.preventDefault(); e.stopPropagation(); return; }
+          if (examActive && (e.ctrlKey || e.metaKey) && ["c", "x", "v"].includes(e.key.toLowerCase())) {
+            e.preventDefault();
+            e.stopPropagation();
+            return;
+          }
           if (e.key !== "Tab" || e.ctrlKey || e.metaKey || e.altKey || !(e.target as HTMLElement).closest(".lexkit-content-editable")) return;
           e.preventDefault();
           e.stopPropagation();

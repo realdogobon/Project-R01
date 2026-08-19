@@ -4269,7 +4269,7 @@ export default function Workspace() {
                     className="h-7 shrink-0 bg-[#f9f9f9] dark:bg-[#141414] text-neutral-500 dark:text-neutral-400 flex items-stretch justify-between select-none border-t border-black/[0.08] dark:border-white/[0.06] z-10 w-full relative transition-colors duration-300"
                     style={{ fontFamily: '"Segoe UI Variable", "Segoe UI", system-ui, sans-serif', fontSize: "12px", letterSpacing: "normal" }}
                   >
-                    <div className="flex flex-1 min-w-0 items-stretch overflow-hidden">
+                    <div data-statusbar-live-metrics className="flex flex-1 min-w-0 items-stretch overflow-hidden" style={{ fontFamily: fontCssFamily }}>
                       <div data-statusbar-position className="flex shrink-0 items-center px-2 font-normal whitespace-nowrap cursor-default">
                           {(() => { const position = getLineColumn(editorStatus.text, editorStatus.focus); return <><span>Ln {position.line},</span><span className="ml-2.5">Col {position.column}</span></>; })()}
                       </div>

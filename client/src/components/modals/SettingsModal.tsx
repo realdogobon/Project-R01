@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useId } from "react";
 /* Faithful Notepads reference shell: compact glyph rail, 60px title row, flat Fluent surfaces, 20px content inset, and a dedicated detail frame. RoyScript setting controls and state behavior remain adapted inside this shell. */
 import {
   X,
@@ -1547,6 +1547,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 function ThemeSwitcher({ className }: { className?: string }) {
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
+  const themeIndicatorLayoutId = `settings-theme-active-${useId()}`;
 
   useEffect(() => {
     setMounted(true);
@@ -1588,7 +1589,8 @@ function ThemeSwitcher({ className }: { className?: string }) {
             {isActive && (
               <motion.div
                 className="absolute inset-0 rounded-full bg-neutral-300/40 dark:bg-white/10"
-                layoutId="activeTheme"
+                initial={false}
+                layoutId={themeIndicatorLayoutId}
                 transition={{ type: "spring", stiffness: 380, damping: 26 }}
               />
             )}

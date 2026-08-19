@@ -225,4 +225,40 @@ describe("scanner action-bar layout contract", () => {
     expect(templateSource).toContain('data-lexkit-editing-controls aria-disabled={toolbarLocked}');
     expect(templateSource).toContain('data-lexkit-command-controls aria-disabled={toolbarLocked}');
   });
+
+  it("silently hardens active Exam Mode against clipboard routes and browser input assistance", () => {
+    const templateSource = fs.readFileSync(path.resolve(import.meta.dirname, "../client/src/components/lexkit/DefaultTemplate.tsx"), "utf8");
+
+    expect(templateSource).toContain("const EXAM_BLOCKED_NATIVE_INPUT_TYPES = new Set([");
+    expect(templateSource).toContain('"insertFromPaste"');
+    expect(templateSource).toContain('"insertFromDrop"');
+    expect(templateSource).toContain('"insertReplacementText"');
+    expect(templateSource).toContain('if (EXAM_BLOCKED_NATIVE_INPUT_TYPES.has(inputType))');
+    expect(templateSource).toContain('spellcheck: "false"');
+    expect(templateSource).toContain('autocorrect: "off"');
+    expect(templateSource).toContain('autocapitalize: "off"');
+    expect(templateSource).toContain('autocomplete: "off"');
+    expect(templateSource).toContain('"data-lt-active": "false"');
+    expect(templateSource).toContain('"data-gramm": "false"');
+    expect(templateSource).toContain("const observer = new MutationObserver(synchronizeBrowserAssistance);");
+    expect(templateSource).toContain("attributeFilter: Object.keys(browserAssistanceAttributes)");
+    expect(templateSource).toContain("return () => observer.disconnect();");
+    expect(templateSource).toContain('if (examActive && (e.ctrlKey || e.metaKey) && ["c", "x", "v"].includes(e.key.toLowerCase()))');
+    expect(templateSource).toContain('onCopyCapture={(e) => { if (examActive || readOnly) { e.preventDefault(); e.stopPropagation(); } }}');
+    expect(templateSource).toContain('onContextMenuCapture={(e) => { if (examActive || readOnly) { e.preventDefault(); e.stopPropagation(); } }}');
+    expect(templateSource).not.toContain('alert("Clipboard operations are locked.")');
+  });
+
+  it("keeps status metrics font-aware and prevents the Settings theme indicator from snapping on open", () => {
+    const workspaceSource = fs.readFileSync(path.resolve(import.meta.dirname, "../client/src/pages/Workspace.tsx"), "utf8");
+    const settingsSource = fs.readFileSync(path.resolve(import.meta.dirname, "../client/src/components/modals/SettingsModal.tsx"), "utf8");
+
+    expect(workspaceSource).toContain('style={{ fontFamily: fontCssFamily }}');
+    expect(workspaceSource).toContain('Ln {position.line},');
+    expect(workspaceSource).toContain('<span className="ml-2.5">Col {position.column}</span>');
+    expect(workspaceSource).toContain('`Chars ${getStats().charsWithSpaces || 0}, Words ${getStats().words || 0}`');
+    expect(settingsSource).toContain('const themeIndicatorLayoutId = `settings-theme-active-${useId()}`;');
+    expect(settingsSource).toContain('layoutId={themeIndicatorLayoutId}');
+    expect(settingsSource).toContain('initial={false}');
+  });
 });
