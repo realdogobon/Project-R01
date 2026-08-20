@@ -109,9 +109,32 @@ describe("Dashboard and Workspace progression integration", () => {
     const dashboard = fs.readFileSync(path.resolve(import.meta.dirname, "../client/src/components/dashboard/WorkspaceDashboard.tsx"), "utf8");
     const workspace = fs.readFileSync(path.resolve(import.meta.dirname, "../client/src/pages/Workspace.tsx"), "utf8");
     const marker = fs.readFileSync(path.resolve(import.meta.dirname, "../client/src/components/dashboard/LevelStateMarker.tsx"), "utf8");
+    const globalStyles = fs.readFileSync(path.resolve(import.meta.dirname, "../client/src/index.css"), "utf8");
 
     expect(dashboard).toContain("getProgressionSummary(progression)");
     expect(dashboard).toContain("const badges = achievements;");
+    expect(dashboard).toContain('const ACHIEVEMENT_PATHS = ["Foundation", "Velocity", "Precision", "Endurance", "Consistency", "Craft"] as const;');
+    expect(dashboard).toContain("const achievementPaths = useMemo(() => ACHIEVEMENT_PATHS.map");
+    expect(dashboard).toContain("aria-expanded={isExpanded}");
+    expect(dashboard).toContain('aria-label={`${isExpanded ? "Collapse" : "Expand"} ${path.category} achievements`}');
+    expect(dashboard).toContain("path.milestones.map((milestone)");
+    expect(dashboard).toContain('text-[14px]');
+    expect(dashboard).toContain('leading-5');
+    expect(dashboard).toContain('text-[#1E1E1F] dark:text-[#EAEAEA]');
+    expect(dashboard).toContain('data-achievement-path-row={path.category}');
+    expect(dashboard).toContain('data-achievement-hover-detail');
+    expect(dashboard).toContain('data-achievement-milestone-hover-detail');
+    expect(dashboard).toContain('overflow-visible');
+    expect(dashboard).toContain('animation: "none", transform: "none"');
+    expect(dashboard).toContain('milestone.unlock?.unlockedAt');
+    expect(dashboard).toContain('tabIndex={0}');
+    expect(dashboard).toContain('group-hover/milestone:opacity-100');
+    expect(dashboard).toContain('group-focus/milestone:opacity-100');
+    expect(globalStyles).toContain("[data-achievement-path-row]:active:not(:disabled)");
+    expect(globalStyles).toContain("The global active press-scale moves that hit area");
+    expect(dashboard).not.toContain("path.earnedCount} / {path.milestones.length} earned");
+    expect(dashboard).not.toContain("Next · ${path.nextMilestone.title}");
+    expect(dashboard).not.toContain("milestone.current.toLocaleString()");
     expect(dashboard).toContain("qualifying sessions");
     expect(dashboard).not.toContain("const XP_PER_LEVEL = 1000");
     expect(workspace).toContain("getProgressionSummary(progression)");
@@ -120,5 +143,34 @@ describe("Dashboard and Workspace progression integration", () => {
     expect(marker).toContain("posture === 1");
     expect(marker).toContain("posture === 10");
     expect(marker).not.toContain("animate-pulse");
+  });
+
+  it("stabilizes dark native filter and sort controls without changing their behavior", () => {
+    const dashboard = fs.readFileSync(path.resolve(import.meta.dirname, "../client/src/components/dashboard/WorkspaceDashboard.tsx"), "utf8");
+    const sessionSelects = (dashboard.match(/<select[\s\S]*?<\/select>/g) ?? []).filter((select) => select.includes("sessionFilter"));
+
+    expect(sessionSelects).toHaveLength(1);
+    for (const select of sessionSelects) {
+      expect(select).toContain("[color-scheme:light] dark:[color-scheme:dark]");
+      expect(select).toContain("transition-[background-color,border-color,color] duration-150");
+      expect(select).not.toContain("transition-all");
+    }
+
+    const sessionHistory = dashboard.slice(
+      dashboard.indexOf('activeTab === "sessions"'),
+      dashboard.indexOf('activeTab === "files"'),
+    );
+
+    expect(sessionHistory).toContain('placeholder="Search records..."');
+    expect(sessionHistory).toContain("transition-[background-color] duration-150");
+    expect(sessionHistory).toContain("isolate bg-white dark:bg-neutral-950");
+    expect(sessionHistory).toContain("bg-white dark:bg-neutral-950 [contain:paint]");
+    expect(sessionHistory).toContain("transition-colors duration-150 group");
+    expect(sessionHistory).toContain('<Select value={sessionSort} onValueChange={(value) => setSessionSort(value as typeof sessionSort)}>');
+    expect(sessionHistory).toContain("data-session-sort-trigger");
+    expect(sessionHistory).toContain('aria-label="Sort Session History"');
+    expect(sessionHistory).toContain("z-[250] min-w-[var(--radix-select-trigger-width)]");
+    expect(sessionHistory).not.toContain('<select\n                      value={sessionSort}');
+    expect(sessionHistory).not.toContain("transition-all");
   });
 });

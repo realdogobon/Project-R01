@@ -92,7 +92,7 @@ export const LibraryHub: React.FC<LibraryHubProps> = ({
     }
   });
 
-  const { width, height, x, y, startResize } = useResizable({
+  const { width, height, x, y, resizing, startResize, windowRef } = useResizable({
     persistKey: 'library_v2',
     initialWidth: 840,
     initialHeight: 610
@@ -409,15 +409,12 @@ export const LibraryHub: React.FC<LibraryHubProps> = ({
 
 
           <motion.div
+            ref={windowRef}
             initial={{ opacity: 0, scale: 0.97, y: 10 }}
             animate={{
               opacity: 1,
               scale: 1,
-              y: 0,
-              width: window.innerWidth < 640 ? '100%' : width,
-              height: window.innerWidth < 640 ? '100%' : height,
-              left: window.innerWidth < 640 ? 0 : x,
-              top: window.innerWidth < 640 ? 0 : y
+              y: 0
             }}
             exit={{
               opacity: 0,
@@ -428,17 +425,28 @@ export const LibraryHub: React.FC<LibraryHubProps> = ({
               transition: { duration: 0.3, ease: "easeIn" }
             }}
             onDoubleClick={(e) => e.stopPropagation()}
-            transition={{ duration: 0.25, type: 'spring', damping: 25, stiffness: 200 }}
-            style={{ position: window.innerWidth < 640 ? 'fixed' : 'absolute' }}
+            transition={{
+              default: { duration: 0 },
+              opacity: { duration: 0.25 },
+              scale: resizing ? { duration: 0 } : { type: 'spring', damping: 25, stiffness: 200 },
+              y: resizing ? { duration: 0 } : { type: 'spring', damping: 25, stiffness: 200 },
+            }}
+            style={{
+              position: window.innerWidth < 640 ? 'fixed' : 'absolute',
+              width: window.innerWidth < 640 ? '100%' : width,
+              height: window.innerWidth < 640 ? '100%' : height,
+              left: window.innerWidth < 640 ? 0 : x,
+              top: window.innerWidth < 640 ? 0 : y,
+            }}
           className="bg-[#FCF5F3] dark:bg-[#20202A] sm:rounded-[14px] shadow-2xl flex flex-col overflow-hidden border-none sm:border border-black/5 dark:border-white/5"
         >
 
           <div className="hidden sm:block">
 
-            <div className="absolute top-0 left-0 w-full h-1 cursor-n-resize z-[160]" onMouseDown={(e) => startResize('n', e)} />
-            <div className="absolute bottom-0 left-0 w-full h-1 cursor-s-resize z-[160]" onMouseDown={(e) => startResize('s', e)} />
-            <div className="absolute top-0 left-0 h-full w-1 cursor-w-resize z-[160]" onMouseDown={(e) => startResize('w', e)} />
-            <div className="absolute top-0 right-0 h-full w-1 cursor-e-resize z-[160]" onMouseDown={(e) => startResize('e', e)} />
+            <div className="absolute top-0 left-0 w-full h-2 cursor-n-resize z-[160]" onMouseDown={(e) => startResize('n', e)} />
+            <div className="absolute bottom-0 left-0 w-full h-2 cursor-s-resize z-[160]" onMouseDown={(e) => startResize('s', e)} />
+            <div className="absolute top-0 left-0 h-full w-2 cursor-w-resize z-[160]" onMouseDown={(e) => startResize('w', e)} />
+            <div className="absolute top-0 right-0 h-full w-2 cursor-e-resize z-[160]" onMouseDown={(e) => startResize('e', e)} />
 
 
             <div className="absolute top-[38px] left-0 w-2 h-[calc(100%-46px)] cursor-move z-[155]" onMouseDown={(e) => startResize('move', e)} />
@@ -446,10 +454,10 @@ export const LibraryHub: React.FC<LibraryHubProps> = ({
             <div className="absolute bottom-0 left-[8px] w-[calc(100%-16px)] h-2 cursor-move z-[155]" onMouseDown={(e) => startResize('move', e)} />
 
             {/* Corners */}
-            <div className="absolute top-0 left-0 w-4 h-4 cursor-nw-resize z-[170]" onMouseDown={(e) => startResize('nw', e)} />
-            <div className="absolute top-0 right-0 w-4 h-4 cursor-ne-resize z-[170]" onMouseDown={(e) => startResize('ne', e)} />
-            <div className="absolute bottom-0 left-0 w-4 h-4 cursor-sw-resize z-[170]" onMouseDown={(e) => startResize('sw', e)} />
-            <div className="absolute bottom-0 right-0 w-4 h-4 cursor-se-resize z-[170]" onMouseDown={(e) => startResize('se', e)} />
+            <div className="absolute top-0 left-0 w-5 h-5 cursor-nw-resize z-[170]" onMouseDown={(e) => startResize('nw', e)} />
+            <div className="absolute top-0 right-0 w-5 h-5 cursor-ne-resize z-[170]" onMouseDown={(e) => startResize('ne', e)} />
+            <div className="absolute bottom-0 left-0 w-5 h-5 cursor-sw-resize z-[170]" onMouseDown={(e) => startResize('sw', e)} />
+            <div className="absolute bottom-0 right-0 w-5 h-5 cursor-se-resize z-[170]" onMouseDown={(e) => startResize('se', e)} />
           </div>
 
 

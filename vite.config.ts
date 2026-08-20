@@ -287,14 +287,11 @@ export default defineConfig({
   },
   server: {
     host: true,
-    // The managed preview is served through an HTTPS reverse proxy. Without a
-    // public client port, Vite's HMR client falls back to localhost:5173 in the
-    // browser, which is unreachable outside the sandbox. Keep the hostname
-    // dynamic (the generated preview URL changes) and route HMR through WSS/443.
-    hmr: {
-      protocol: "wss",
-      clientPort: 443,
-    },
+    // The managed preview reverse proxy does not provide a stable long-lived
+    // WebSocket upgrade route to Vite's local fallback server. Disable the
+    // development-only HMR client rather than emitting a noisy failed socket;
+    // ordinary page loads and explicit refreshes remain unchanged.
+    hmr: false,
     headers: {
       // Never cache prebundled optimized deps or Vite internals in dev —
       // stale query-hash chunks are the root cause of the dual-React

@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { MONKEYTYPE_THEMES, MONKEYTYPE_FONTS } from "../constants/themes";
+import { resetPersistedFloatingWindowGeometry } from "../hooks/useResizable";
 
 export type TypingFont = string;
 export type KeyboardThemeName = string;
@@ -782,6 +783,8 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     setDasControlFocusState("rgb");
 
     applySettingsToDom("classic", "geist-mono");
+
+    resetPersistedFloatingWindowGeometry();
 
     try {
       localStorage.removeItem("ais_keyboard_theme");

@@ -568,7 +568,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
   selectedDestinationFolder,
   setSelectedDestinationFolder,
 }) => {
-  const { width, height, x, y, startResize, fitToSize } = useResizable({
+  const { width, height, x, y, resizing, startResize, fitToSize, windowRef } = useResizable({
     persistKey: 'scanner_v2',
     initialWidth: 860,
     initialHeight: 650
@@ -597,6 +597,11 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
   const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
   const [pageAspectRatio, setPageAspectRatio] = useState(1 / 1.414);
   const [pageInputValue, setPageInputValue] = useState(() => String(scannerPage));
+  const [hasManualWindowGeometry, setHasManualWindowGeometry] = useState(false);
+  const beginManualWindowInteraction = React.useCallback((direction: Parameters<typeof startResize>[0], event: React.MouseEvent) => {
+    setHasManualWindowGeometry(true);
+    startResize(direction, event);
+  }, [startResize]);
 
   const resetUploadPresentationTimer = () => {
     if (uploadPresentationTimerRef.current !== null) {
@@ -868,7 +873,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
   }, [hasDocumentLoaded, isScannerOpen, scannerTotalPages]);
 
   useEffect(() => {
-    if (!isScannerOpen || windowSize.width < 640) return;
+    if (!isScannerOpen || windowSize.width < 640 || hasManualWindowGeometry) return;
 
     const sidebarWidth = scannerSidebarWidth;
     if (!hasDocumentLoaded && !isScannerProgressActive) {
@@ -898,7 +903,7 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
       Math.min(1240, windowSize.width - 24, fitWidth + sidebarWidth + 48),
       Math.min(900, windowSize.height - 24, fitHeight),
     );
-  }, [basePageHeight, documentWidth, fitToSize, hasDocumentLoaded, isNarrowPreview, isScannerOpen, isScannerProgressActive, isSingleBookPage, pageAspectRatio, progressDeckHeight, progressDeckWidth, stagePadding, windowSize.height, windowSize.width]);
+  }, [basePageHeight, documentWidth, fitToSize, hasDocumentLoaded, hasManualWindowGeometry, isNarrowPreview, isScannerOpen, isScannerProgressActive, isSingleBookPage, pageAspectRatio, progressDeckHeight, progressDeckWidth, stagePadding, windowSize.height, windowSize.width]);
 
   // Retain the server-detected MIME type for remote URLs whose filename is generic.
   const detectedFileType = React.useMemo(() => getScannerFileFormat(scannerFile), [scannerFile]);
@@ -1387,15 +1392,12 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
 
       {/* Premium Windows 11 Frame */}
       <motion.div
+        ref={windowRef}
         initial={{ opacity: 0, scale: 0.95, y: 20 }}
         animate={{
           opacity: 1,
           scale: 1,
-          y: 0,
-          width: window.innerWidth < 640 ? '100%' : width,
-          height: window.innerWidth < 640 ? '100%' : height,
-          left: window.innerWidth < 640 ? 0 : x,
-          top: window.innerWidth < 640 ? 0 : y
+          y: 0
         }}
         exit={{
           opacity: 0,
@@ -1406,35 +1408,46 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
           transition: { duration: 0.3, ease: "easeIn" }
         }}
         onDoubleClick={(e) => e.stopPropagation()}
-        transition={{ duration: 0.25, type: 'spring', damping: 25, stiffness: 200 }}
-        style={{ position: window.innerWidth < 640 ? 'fixed' : 'absolute' }}
+        transition={{
+          default: { duration: 0 },
+          opacity: { duration: 0.25 },
+          scale: resizing ? { duration: 0 } : { type: 'spring', damping: 25, stiffness: 200 },
+          y: resizing ? { duration: 0 } : { type: 'spring', damping: 25, stiffness: 200 },
+        }}
+        style={{
+          position: window.innerWidth < 640 ? 'fixed' : 'absolute',
+          width: window.innerWidth < 640 ? '100%' : width,
+          height: window.innerWidth < 640 ? '100%' : height,
+          left: window.innerWidth < 640 ? 0 : x,
+          top: window.innerWidth < 640 ? 0 : y,
+        }}
         data-scanner-modal-shell
         className="bg-[#FCF5F3] dark:bg-[#20202A] sm:rounded-xl shadow-[0_24px_54px_rgba(0,0,0,0.25)] overflow-hidden border-none sm:border border-black/5 dark:border-white/10 font-sans flex flex-col min-h-0"
       >
         {/* Resize & Drag Handles (Only on Desktop) */}
         <div className="hidden sm:block">
           {/* Resize Edges */}
-          <div className="absolute top-0 left-0 w-full h-1 cursor-n-resize z-[160]" onMouseDown={(e) => startResize('n', e)} />
-          <div className="absolute bottom-0 left-0 w-full h-1 cursor-s-resize z-[160]" onMouseDown={(e) => startResize('s', e)} />
-          <div className="absolute top-0 left-0 h-full w-1 cursor-w-resize z-[160]" onMouseDown={(e) => startResize('w', e)} />
-          <div className="absolute top-0 right-0 h-full w-1 cursor-e-resize z-[160]" onMouseDown={(e) => startResize('e', e)} />
+          <div className="absolute top-0 left-0 w-full h-2 cursor-n-resize z-[160]" onMouseDown={(e) => beginManualWindowInteraction('n', e)} />
+          <div className="absolute bottom-0 left-0 w-full h-2 cursor-s-resize z-[160]" onMouseDown={(e) => beginManualWindowInteraction('s', e)} />
+          <div className="absolute top-0 left-0 h-full w-2 cursor-w-resize z-[160]" onMouseDown={(e) => beginManualWindowInteraction('w', e)} />
+          <div className="absolute top-0 right-0 h-full w-2 cursor-e-resize z-[160]" onMouseDown={(e) => beginManualWindowInteraction('e', e)} />
 
           {/* Side Draggable Rails (Allows moving from any side) */}
-          <div className="absolute top-[38px] left-0 w-2 h-[calc(100%-46px)] cursor-move z-[155]" onMouseDown={(e) => startResize('move', e)} />
-          <div className="absolute top-[38px] right-0 w-2 h-[calc(100%-46px)] cursor-move z-[155]" onMouseDown={(e) => startResize('move', e)} />
-          <div className="absolute bottom-0 left-[8px] w-[calc(100%-16px)] h-2 cursor-move z-[155]" onMouseDown={(e) => startResize('move', e)} />
+          <div className="absolute top-[38px] left-0 w-2 h-[calc(100%-46px)] cursor-move z-[155]" onMouseDown={(e) => beginManualWindowInteraction('move', e)} />
+          <div className="absolute top-[38px] right-0 w-2 h-[calc(100%-46px)] cursor-move z-[155]" onMouseDown={(e) => beginManualWindowInteraction('move', e)} />
+          <div className="absolute bottom-0 left-[8px] w-[calc(100%-16px)] h-2 cursor-move z-[155]" onMouseDown={(e) => beginManualWindowInteraction('move', e)} />
 
           {/* Corners */}
-          <div className="absolute top-0 left-0 w-4 h-4 cursor-nw-resize z-[170]" onMouseDown={(e) => startResize('nw', e)} />
-          <div className="absolute top-0 right-0 w-4 h-4 cursor-ne-resize z-[170]" onMouseDown={(e) => startResize('ne', e)} />
-          <div className="absolute bottom-0 left-0 w-4 h-4 cursor-sw-resize z-[170]" onMouseDown={(e) => startResize('sw', e)} />
-          <div className="absolute bottom-0 right-0 w-4 h-4 cursor-se-resize z-[170]" onMouseDown={(e) => startResize('se', e)} />
+          <div className="absolute top-0 left-0 w-5 h-5 cursor-nw-resize z-[170]" onMouseDown={(e) => beginManualWindowInteraction('nw', e)} />
+          <div className="absolute top-0 right-0 w-5 h-5 cursor-ne-resize z-[170]" onMouseDown={(e) => beginManualWindowInteraction('ne', e)} />
+          <div className="absolute bottom-0 left-0 w-5 h-5 cursor-sw-resize z-[170]" onMouseDown={(e) => beginManualWindowInteraction('sw', e)} />
+          <div className="absolute bottom-0 right-0 w-5 h-5 cursor-se-resize z-[170]" onMouseDown={(e) => beginManualWindowInteraction('se', e)} />
         </div>
 
         {/* Title Bar Context */}
         <div
           className="h-[38px] flex items-center justify-between pl-4 pr-0 shrink-0 select-none bg-white/50 dark:bg-black/20 backdrop-blur-md border-b border-black/5 dark:border-white/5 cursor-move"
-          onMouseDown={(e) => startResize('move', e)}
+          onMouseDown={(e) => beginManualWindowInteraction('move', e)}
         >
            <div className="flex items-center gap-2.5 text-[#1E1E1E] dark:text-[#EAEAEA]">
               <Printer className="w-4 h-4" strokeWidth={1.75} />

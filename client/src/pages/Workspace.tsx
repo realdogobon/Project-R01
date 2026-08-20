@@ -3893,26 +3893,16 @@ export default function Workspace() {
                   <span className="font-serif text-[25px] md:text-[29px] font-semibold tracking-[-0.08em] leading-none">R</span>
                   <span className="font-sans text-[21px] md:text-[25px] font-semibold tracking-[-0.055em] leading-none">oyScript</span>
                   <span
-                    className="mb-[0.14em] ml-[0.24em] font-sans text-[11px] md:text-[12px] font-bold uppercase tracking-[0.075em] leading-none transition-colors duration-300"
-                    style={{ color: themeAccentColor }}
+                    className="mb-[0.02em] ml-[0.19em] text-[21px] md:text-[23px] font-normal leading-none transition-colors duration-300"
+                    style={{
+                      color: themeAccentColor,
+                      fontFamily: '"Allura", "Apple Chancery", "URW Chancery L", "Brush Script MT", cursive',
+                    }}
                   >
                     TSR
                   </span>
                 </span>
               </div>
-              {user && (
-                <>
-                  <span className="text-neutral-300 dark:text-neutral-700 mx-2 font-light text-xl">/</span>
-                  <div className="flex flex-col ml-1">
-                    <span className="text-[13px] leading-tight text-neutral-800 dark:text-neutral-200 font-medium tracking-tight truncate max-w-[200px] font-sans">
-                      {user.displayName || "User"}
-                    </span>
-                    <span className="text-[10px] leading-tight text-neutral-400 dark:text-neutral-500 font-medium tracking-normal font-sans">
-                      {displayRankTitle}
-                    </span>
-                  </div>
-                </>
-              )}
             </div>
           </div>
 

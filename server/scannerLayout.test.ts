@@ -5,6 +5,19 @@ import { describe, expect, it } from "vitest";
 const scannerModalPath = path.resolve(import.meta.dirname, "../client/src/components/DocumentScannerModal.tsx");
 
 describe("scanner action-bar layout contract", () => {
+  it("keeps a deliberate Scanner drag or resize authoritative over automatic content fitting", () => {
+    const source = fs.readFileSync(scannerModalPath, "utf8");
+
+    expect(source).toContain("const [hasManualWindowGeometry, setHasManualWindowGeometry] = useState(false);");
+    expect(source).toContain("const beginManualWindowInteraction = React.useCallback");
+    expect(source).toContain("setHasManualWindowGeometry(true);");
+    expect(source).toContain("if (!isScannerOpen || windowSize.width < 640 || hasManualWindowGeometry) return;");
+    expect(source).toContain("hasManualWindowGeometry, isNarrowPreview");
+    expect(source).toContain("beginManualWindowInteraction('se', e)");
+    expect(source).toContain("beginManualWindowInteraction('nw', e)");
+    expect(source).toContain("beginManualWindowInteraction('move', e)");
+  });
+
   it("allows fixed-width footer controls to wrap instead of overflowing the primary Scan action", () => {
     const source = fs.readFileSync(scannerModalPath, "utf8");
 
@@ -249,7 +262,7 @@ describe("scanner action-bar layout contract", () => {
     expect(templateSource).not.toContain('alert("Clipboard operations are locked.")');
   });
 
-  it("keeps status metrics font-aware and prevents the Settings theme indicator from snapping on open", () => {
+  it("keeps status metrics font-aware and makes the Settings theme indicator entry-stable", () => {
     const workspaceSource = fs.readFileSync(path.resolve(import.meta.dirname, "../client/src/pages/Workspace.tsx"), "utf8");
     const settingsSource = fs.readFileSync(path.resolve(import.meta.dirname, "../client/src/components/modals/SettingsModal.tsx"), "utf8");
 
@@ -257,9 +270,21 @@ describe("scanner action-bar layout contract", () => {
     expect(workspaceSource).toContain('Ln {position.line},');
     expect(workspaceSource).toContain('<span className="ml-2.5">Col {position.column}</span>');
     expect(workspaceSource).toContain('`Chars ${getStats().charsWithSpaces || 0}, Words ${getStats().words || 0}`');
-    expect(settingsSource).toContain('const themeIndicatorLayoutId = `settings-theme-active-${useId()}`;');
-    expect(settingsSource).toContain('layoutId={themeIndicatorLayoutId}');
-    expect(settingsSource).toContain('initial={false}');
+    expect(settingsSource).toContain('const activeThemeIndex = Math.max(');
+    expect(settingsSource).toContain('style={{ transform: `translateX(${activeThemeIndex * 100}%)` }}');
+    expect(settingsSource).toContain('w-[calc((100%-8px)/3)]');
+    expect(settingsSource).not.toContain('layoutId={themeIndicatorLayoutId}');
+    expect(settingsSource).toContain('const [showResetConfirmation, setShowResetConfirmation] = useState(false);');
+    expect(settingsSource).toContain('aria-live="polite"');
+    expect(settingsSource).toContain('<span>Settings Reset</span>');
+    expect(settingsSource).toContain('absolute bottom-6 right-6 z-20');
+    expect(settingsSource).not.toContain('absolute left-full bottom-[14px]');
+    expect(settingsSource).toContain('relative mt-auto w-full px-2 pt-4');
+    expect(settingsSource).not.toContain('absolute top-4 right-11');
+    expect(settingsSource).toContain('hover:text-neutral-700');
+    expect(settingsSource).not.toContain('hover:bg-red-500/[0.08]');
+    expect(settingsSource).toContain('title="Reset Settings"');
+    expect(settingsSource).not.toContain('className="mb-3 h-px w-full bg-neutral-200/80 dark:bg-white/[0.09]"');
   });
 
   it("keeps Exam records but excludes them from progression and false accuracy reporting", () => {
@@ -331,5 +356,88 @@ describe("scanner action-bar layout contract", () => {
     expect(glyphSource).toContain("? { y: [0, -12, 0], rotate: [0, -6, 0] }");
     expect(glyphSource).toContain('? { duration: 0.2, times: [0, 0.38, 1], ease: "easeOut" }');
     expect(glyphSource).toContain("useEffect(() => () => {");
+  });
+
+  it("keeps shared floating-window geometry pointer-coupled while preserving entry and exit motion", () => {
+    const hookSource = fs.readFileSync(path.resolve(import.meta.dirname, "../client/src/hooks/useResizable.ts"), "utf8");
+    const windowSources = [
+      fs.readFileSync(scannerModalPath, "utf8"),
+      fs.readFileSync(path.resolve(import.meta.dirname, "../client/src/components/dashboard/LibraryHub.tsx"), "utf8"),
+      fs.readFileSync(path.resolve(import.meta.dirname, "../client/src/components/dashboard/WorkspaceDashboard.tsx"), "utf8"),
+    ];
+
+    expect(hookSource).toContain("const latestStateRef = useRef(state);");
+    expect(hookSource).toContain("const pendingStateRef = useRef<WindowState | null>(null);");
+    expect(hookSource).toContain("const windowRef = useRef<HTMLDivElement | null>(null);");
+    expect(hookSource).toContain("const applyWindowGeometry = useCallback((nextState: WindowState) => {");
+    expect(hookSource).toContain("applyWindowGeometry(nextState);");
+    expect(hookSource).toContain("pendingStateRef.current = nextState;");
+    expect(hookSource).not.toContain("window.requestAnimationFrame(() => {");
+    expect(hookSource).toContain("flushPendingState();");
+    expect(hookSource).toContain("window.addEventListener('mousemove', handleMouseMove);");
+    expect(hookSource).toContain("window.addEventListener('mouseup', stopResize);");
+    expect(hookSource).toContain("window.addEventListener('blur', stopResize);");
+    expect(hookSource).toContain("useLayoutEffect(() => {");
+    expect(hookSource).toContain("newX = startPos.current.winX + (startPos.current.width - newWidth);");
+    expect(hookSource).toContain("newY = startPos.current.winY + (startPos.current.height - newHeight);");
+    expect(hookSource).not.toContain("potentialWidth !== latestStateRef.current.width");
+    expect(hookSource).not.toContain("potentialHeight !== latestStateRef.current.height");
+    expect(hookSource).toContain("export const ROYSCRIPT_WINDOW_GEOMETRY_RESET_EVENT = 'royscript-window-geometry-reset';");
+    expect(hookSource).toContain("export function resetPersistedFloatingWindowGeometry()");
+    expect(hookSource).toContain("key?.startsWith('lexkit_window_')");
+    expect(hookSource).toContain("window.dispatchEvent(new Event(ROYSCRIPT_WINDOW_GEOMETRY_RESET_EVENT));");
+    expect(hookSource).toContain("window.addEventListener(ROYSCRIPT_WINDOW_GEOMETRY_RESET_EVENT, resetToFactoryGeometry);");
+    expect(hookSource).not.toContain("if (resizing) {");
+    expect(hookSource).not.toContain("const stopResize = useCallback(async () => {");
+
+    for (const source of windowSources) {
+      expect(source).toContain("ref={windowRef}");
+      expect(source).toContain("resizing, startResize");
+      expect(source).toContain("default: { duration: 0 }");
+      expect(source).toContain("scale: resizing ? { duration: 0 }");
+      expect(source).toContain("y: resizing ? { duration: 0 }");
+      expect(source).toContain("style={{");
+      expect(source).toContain("left: window.innerWidth < 640 ? 0 : x,");
+      expect(source).toContain("top: window.innerWidth < 640 ? 0 : y,");
+      const coordinateStyleIndex = source.indexOf("left: window.innerWidth < 640 ? 0 : x,");
+      const outerAnimateIndex = source.lastIndexOf("animate={{", coordinateStyleIndex);
+      const outerAnimate = source.slice(outerAnimateIndex, source.indexOf("        exit={{", outerAnimateIndex));
+      expect(outerAnimate).not.toMatch(/\b(?:width|height|left|top):/);
+      expect(source).toContain("w-full h-2 cursor-n-resize");
+      expect(source).toContain("h-full w-2 cursor-w-resize");
+      expect(source).toContain("w-5 h-5 cursor-se-resize");
+    }
+
+    const settingsSource = fs.readFileSync(path.resolve(import.meta.dirname, "../client/src/contexts/SettingsContext.tsx"), "utf8");
+    expect(settingsSource).toContain('import { resetPersistedFloatingWindowGeometry } from "../hooks/useResizable";');
+    expect(settingsSource).toContain("resetPersistedFloatingWindowGeometry();");
+  });
+
+  it("keeps the Settings drawer on one motion-owned entry path and uses native neutral reset feedback", () => {
+    const settingsSource = fs.readFileSync(path.resolve(import.meta.dirname, "../client/src/components/modals/SettingsModal.tsx"), "utf8");
+    const workspaceSource = fs.readFileSync(path.resolve(import.meta.dirname, "../client/src/pages/Workspace.tsx"), "utf8");
+    const drawerStart = settingsSource.indexOf("{/* Core settings cabinet drawer panel */}");
+    const drawerEnd = settingsSource.indexOf("{/* Scoped CSS Blocker injected directly inside panel */}");
+    const drawerSource = settingsSource.slice(drawerStart, drawerEnd);
+
+    expect(drawerSource).toContain("initial={false}");
+    expect(drawerSource).toContain('animate={{ x: isOpen ? 0 : "100%" }}');
+    expect(drawerSource).not.toContain('opacity: isOpen ? 1 : 0');
+    expect(drawerSource).toContain('ease: [0.22, 0.61, 0.36, 1], duration: 0.6');
+    expect(drawerSource).not.toContain("transition-all");
+    expect(drawerSource).not.toContain('transform: "none !important"');
+    expect(settingsSource).toContain("inert={!isOpen}");
+    expect(settingsSource).toContain('style={{ pointerEvents: isOpen ? "auto" : "none" }}');
+    expect(settingsSource).toContain("Settings Reset");
+    expect(settingsSource).not.toContain("Settings saved");
+    expect(settingsSource).toContain("text-[13px] font-normal text-neutral-500 dark:text-neutral-400");
+    expect(settingsSource).not.toContain("text-emerald-600 dark:text-emerald-300");
+    expect(settingsSource).toContain("absolute bottom-6 right-6 z-20");
+    expect(settingsSource).not.toContain("absolute left-full bottom-[14px] z-20 ml-3");
+    expect(workspaceSource).toContain('data-royscript-wordmark aria-label="RoyScript TSR"');
+    expect(workspaceSource).not.toContain("mx-2 font-light text-xl");
+    expect(workspaceSource).toContain('fontFamily: \'"Allura", "Apple Chancery", "URW Chancery L", "Brush Script MT", cursive\'');
+    expect(workspaceSource).toContain("text-[21px] md:text-[23px] font-normal");
+    expect(workspaceSource).toContain("mb-[0.02em] ml-[0.19em]");
   });
 });

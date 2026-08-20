@@ -116,6 +116,17 @@
     transform: none !important;
   }
 
+  /* Achievement path controls use the chevron itself as a direct hit target.
+     The global active press-scale moves that hit area between pointer-down and
+     pointer-up, swallowing the first click. Keep the row geometrically stable
+     while allowing its chevron's own expanded-state rotation to remain intact. */
+  [data-achievement-path-row],
+  [data-achievement-path-row]:hover:not(:disabled),
+  [data-achievement-path-row]:active:not(:disabled) {
+    animation: none !important;
+    transform: none !important;
+  }
+
   /* A completed exam remains visibly distinct without dimming its toolbar or
      the floating Task View that lives in the toolbar slot. */
   .lexkit-sealed-document .lexkit-content-editable,

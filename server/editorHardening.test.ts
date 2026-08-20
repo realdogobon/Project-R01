@@ -258,7 +258,8 @@ describe("approved editor hardening contracts", () => {
     expect(workspace).toContain(">oyScript</span>");
     expect(workspace).toContain("TSR\n                  </span>");
     expect(workspace).toContain("tracking-[-0.055em]");
-    expect(workspace).toContain("tracking-[0.075em]");
+    expect(workspace).toContain('fontFamily: \'"Allura", "Apple Chancery", "URW Chancery L", "Brush Script MT", cursive\'');
+    expect(workspace).toContain("text-[21px] md:text-[23px] font-normal");
     expect(workspace).not.toContain('aria-hidden="true" className="h-4 w-px');
   });
 

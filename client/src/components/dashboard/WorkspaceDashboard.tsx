@@ -4,7 +4,7 @@ import { useSettings, THEME_OPTIONS } from "../../contexts/SettingsContext";
 import { useResizable } from "../../hooks/useResizable";
 import {
   X, FileText, BarChart2, Trash2, Share2,
-  Calendar, Clipboard, ChevronRight, Archive,
+  Calendar, Clipboard, ChevronRight, ChevronDown, Archive,
   Award, TrendingUp, Sparkles, Flame, Check, HelpCircle,
   User, Trophy, Target, Shield, Zap, CheckCircle, Save, LogOut, Cloud, RefreshCw, PartyPopper, PlaySquare, Pause, RotateCcw,
   ArrowLeft, Plus, Minus, Lock, UserPlus
@@ -13,6 +13,7 @@ import { motion, AnimatePresence, useReducedMotion } from "motion/react";
 import { ExportEngine } from "../../lib/ExportEngine";
 import { getLevelDefinition, getProgressionSummary } from "../../lib/progression";
 import { LevelStateMarker } from "./LevelStateMarker";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 
 interface WorkspaceDashboardProps {
   isOpen: boolean;
@@ -21,6 +22,8 @@ interface WorkspaceDashboardProps {
   onOpenAuth?: () => void;
   onBeforeSwitch?: (proceed: () => void) => void;
 }
+
+const ACHIEVEMENT_PATHS = ["Foundation", "Velocity", "Precision", "Endurance", "Consistency", "Craft"] as const;
 
 export function WorkspaceDashboard({ isOpen, onClose, onLoadFileToEditor, onOpenAuth, onBeforeSwitch }: WorkspaceDashboardProps) {
   const { user, sessions, files, progression, achievements, deleteFile, deleteSession, signOut, updateProfile, guestUid, linkedAccounts, switchToAccount, removeLinkedAccount } = useAuth();
@@ -57,6 +60,7 @@ export function WorkspaceDashboard({ isOpen, onClose, onLoadFileToEditor, onOpen
   
   // Set default active tab to "overview"
   const [activeTab, setActiveTab] = useState<"overview" | "sessions" | "files" | "achievements">("overview");
+  const [expandedAchievementPath, setExpandedAchievementPath] = useState<(typeof ACHIEVEMENT_PATHS)[number] | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [shareToastText, setShareToastText] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -380,7 +384,7 @@ export function WorkspaceDashboard({ isOpen, onClose, onLoadFileToEditor, onOpen
     : progressionSummary.credits;
 
   // Load Window Resize State to match Library and Scanner windows 1:1
-  const { width, height, x, y, startResize } = useResizable({
+  const { width, height, x, y, resizing, startResize, windowRef } = useResizable({
     persistKey: "workspace_dashboard_v4",
     initialWidth: 1060,
     initialHeight: 700,
@@ -490,6 +494,15 @@ export function WorkspaceDashboard({ isOpen, onClose, onLoadFileToEditor, onOpen
 
   const badges = achievements;
   const achievementIconByCategory = { Foundation: Award, Velocity: Zap, Precision: Target, Endurance: Flame, Consistency: Shield, Craft: Trophy };
+  const achievementPaths = useMemo(() => ACHIEVEMENT_PATHS.map((category) => {
+    const milestones = badges.filter((badge) => badge.category === category);
+    return {
+      category,
+      milestones,
+      earnedCount: milestones.filter((milestone) => milestone.unlocked).length,
+      nextMilestone: milestones.find((milestone) => !milestone.unlocked) ?? null,
+    };
+  }).filter((path) => path.milestones.length > 0), [badges]);
 
   // Filtering and sorting lists by search query, filters, and criteria
   const filteredSessions = useMemo(() => {
@@ -596,15 +609,12 @@ export function WorkspaceDashboard({ isOpen, onClose, onLoadFileToEditor, onOpen
       `}</style>
 
       <motion.div
+        ref={windowRef}
         initial={{ opacity: 0, scale: 0.97, y: 10 }}
         animate={{
           opacity: 1,
           scale: 1,
-          y: 0,
-          width: window.innerWidth < 640 ? '100%' : width,
-          height: window.innerWidth < 640 ? '100%' : height,
-          left: window.innerWidth < 640 ? 0 : x,
-          top: window.innerWidth < 640 ? 0 : y
+          y: 0
         }}
         exit={{
           opacity: 0,
@@ -615,25 +625,36 @@ export function WorkspaceDashboard({ isOpen, onClose, onLoadFileToEditor, onOpen
           transition: { duration: 0.3, ease: "easeIn" }
         }}
         onDoubleClick={(e) => e.stopPropagation()}
-        transition={{ duration: 0.25, type: 'spring', damping: 25, stiffness: 200 }}
-        style={{ position: window.innerWidth < 640 ? 'fixed' : 'absolute' }}
+        transition={{
+          default: { duration: 0 },
+          opacity: { duration: 0.25 },
+          scale: resizing ? { duration: 0 } : { type: 'spring', damping: 25, stiffness: 200 },
+          y: resizing ? { duration: 0 } : { type: 'spring', damping: 25, stiffness: 200 },
+        }}
+        style={{
+          position: window.innerWidth < 640 ? 'fixed' : 'absolute',
+          width: window.innerWidth < 640 ? '100%' : width,
+          height: window.innerWidth < 640 ? '100%' : height,
+          left: window.innerWidth < 640 ? 0 : x,
+          top: window.innerWidth < 640 ? 0 : y,
+        }}
         className="bg-[#FCF5F3] dark:bg-[#20202A] sm:rounded-[14px] shadow-2xl flex flex-col overflow-hidden border-none sm:border border-black/5 dark:border-white/5 text-neutral-900 dark:text-neutral-100"
       >
         {/* Resize & Drag Handles (Only on Desktop) */}
         <div className="hidden sm:block">
-          <div className="absolute top-0 left-0 w-full h-1 cursor-n-resize z-[160]" onMouseDown={(e) => startResize('n', e)} />
-          <div className="absolute bottom-0 left-0 w-full h-1 cursor-s-resize z-[160]" onMouseDown={(e) => startResize('s', e)} />
-          <div className="absolute top-0 left-0 h-full w-1 cursor-w-resize z-[160]" onMouseDown={(e) => startResize('w', e)} />
-          <div className="absolute top-0 right-0 h-full w-1 cursor-e-resize z-[160]" onMouseDown={(e) => startResize('e', e)} />
+          <div className="absolute top-0 left-0 w-full h-2 cursor-n-resize z-[160]" onMouseDown={(e) => startResize('n', e)} />
+          <div className="absolute bottom-0 left-0 w-full h-2 cursor-s-resize z-[160]" onMouseDown={(e) => startResize('s', e)} />
+          <div className="absolute top-0 left-0 h-full w-2 cursor-w-resize z-[160]" onMouseDown={(e) => startResize('w', e)} />
+          <div className="absolute top-0 right-0 h-full w-2 cursor-e-resize z-[160]" onMouseDown={(e) => startResize('e', e)} />
 
           <div className="absolute top-[38px] left-0 w-2 h-[calc(100%-46px)] cursor-move z-[155]" onMouseDown={(e) => startResize('move', e)} />
           <div className="absolute top-[38px] right-0 w-2 h-[calc(100%-46px)] cursor-move z-[155]" onMouseDown={(e) => startResize('move', e)} />
           <div className="absolute bottom-0 left-[8px] w-[calc(100%-16px)] h-2 cursor-move z-[155]" onMouseDown={(e) => startResize('move', e)} />
 
-          <div className="absolute top-0 left-0 w-4 h-4 cursor-nw-resize z-[170]" onMouseDown={(e) => startResize('nw', e)} />
-          <div className="absolute top-0 right-0 w-4 h-4 cursor-ne-resize z-[170]" onMouseDown={(e) => startResize('ne', e)} />
-          <div className="absolute bottom-0 left-0 w-4 h-4 cursor-sw-resize z-[170]" onMouseDown={(e) => startResize('sw', e)} />
-          <div className="absolute bottom-0 right-0 w-4 h-4 cursor-se-resize z-[170]" onMouseDown={(e) => startResize('se', e)} />
+          <div className="absolute top-0 left-0 w-5 h-5 cursor-nw-resize z-[170]" onMouseDown={(e) => startResize('nw', e)} />
+          <div className="absolute top-0 right-0 w-5 h-5 cursor-ne-resize z-[170]" onMouseDown={(e) => startResize('ne', e)} />
+          <div className="absolute bottom-0 left-0 w-5 h-5 cursor-sw-resize z-[170]" onMouseDown={(e) => startResize('sw', e)} />
+          <div className="absolute bottom-0 right-0 w-5 h-5 cursor-se-resize z-[170]" onMouseDown={(e) => startResize('se', e)} />
         </div>
 
         <AnimatePresence>
@@ -1423,7 +1444,7 @@ export function WorkspaceDashboard({ isOpen, onClose, onLoadFileToEditor, onOpen
                         placeholder="Search records..."
                         value={searchQuery}
                         onChange={e => setSearchQuery(e.target.value)}
-                        className="w-full bg-black/5 dark:bg-white/5 border border-transparent rounded-lg px-3 py-1.5 text-[13px] text-[#202020] dark:text-[#EAEAEA] outline-none transition-all focus:bg-black/[0.08] dark:focus:bg-white/[0.08]"
+                        className="w-full bg-black/5 dark:bg-white/5 border border-transparent rounded-lg px-3 py-1.5 text-[13px] text-[#202020] dark:text-[#EAEAEA] outline-none transition-[background-color] duration-150 focus:bg-black/[0.08] dark:focus:bg-white/[0.08]"
                       />
                       {searchQuery && (
                         <button
@@ -1444,24 +1465,36 @@ export function WorkspaceDashboard({ isOpen, onClose, onLoadFileToEditor, onOpen
                     <select
                       value={sessionFilter}
                       onChange={(e) => setSessionFilter(e.target.value as any)}
-                      className="bg-neutral-100 dark:bg-neutral-900/50 border border-neutral-200/40 dark:border-neutral-800/45 rounded-lg px-2.5 py-1 text-[11px] font-medium text-neutral-600 dark:text-neutral-300 outline-none cursor-pointer hover:bg-neutral-200/40 dark:hover:bg-neutral-800/60 transition-all"
+                      className="bg-neutral-100 dark:bg-neutral-900/50 border border-neutral-200/40 dark:border-neutral-800/45 rounded-lg px-2.5 py-1 text-[11px] font-medium text-neutral-600 dark:text-neutral-300 outline-none cursor-pointer hover:bg-neutral-200/40 dark:hover:bg-neutral-800/60 [color-scheme:light] dark:[color-scheme:dark] transition-[background-color,border-color,color] duration-150"
                     >
                       <option value="all">All Modes</option>
                       <option value="Practice">Practice Run</option>
                       <option value="Exam">Exam Run</option>
                     </select>
 
-                    {/* Sort Criteria */}
-                    <select
-                      value={sessionSort}
-                      onChange={(e) => setSessionSort(e.target.value as any)}
-                      className="bg-neutral-100 dark:bg-neutral-900/50 border border-neutral-200/40 dark:border-neutral-800/45 rounded-lg px-2.5 py-1 text-[11px] font-medium text-neutral-600 dark:text-neutral-300 outline-none cursor-pointer hover:bg-neutral-200/40 dark:hover:bg-neutral-800/60 transition-all"
-                    >
-                      <option value="newest">Newest on Top</option>
-                      <option value="oldest">Oldest on Top</option>
-                      <option value="speed">Highest Speed</option>
-                      <option value="accuracy">Highest Accuracy</option>
-                    </select>
+                    {/* Sort Criteria — rendered by the app rather than the host browser so the
+                        native picker’s transient compositor surface cannot flash through. */}
+                    <Select value={sessionSort} onValueChange={(value) => setSessionSort(value as typeof sessionSort)}>
+                      <SelectTrigger
+                        data-session-sort-trigger
+                        size="sm"
+                        className="h-[28px] bg-neutral-100 dark:bg-neutral-900/50 border border-neutral-200/40 dark:border-neutral-800/45 rounded-lg px-2.5 py-1 text-[11px] font-medium text-neutral-600 dark:text-neutral-300 cursor-pointer hover:bg-neutral-200/40 dark:hover:bg-neutral-800/60 shadow-none transition-colors duration-150 focus-visible:ring-0 focus-visible:border-neutral-200/40 dark:focus-visible:border-neutral-800/45 [&>svg]:size-3 [&>svg]:opacity-70"
+                        aria-label="Sort Session History"
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent
+                        position="popper"
+                        align="start"
+                        sideOffset={4}
+                        className="z-[250] min-w-[var(--radix-select-trigger-width)] rounded-lg border-neutral-200/50 bg-neutral-50 p-1 text-neutral-700 shadow-lg shadow-black/10 dark:border-neutral-800/70 dark:bg-neutral-950 dark:text-neutral-200 dark:shadow-black/30"
+                      >
+                        <SelectItem value="newest" className="py-1.5 pr-7 pl-2 text-[11px] focus:bg-neutral-200/70 dark:focus:bg-neutral-800/80">Newest on Top</SelectItem>
+                        <SelectItem value="oldest" className="py-1.5 pr-7 pl-2 text-[11px] focus:bg-neutral-200/70 dark:focus:bg-neutral-800/80">Oldest on Top</SelectItem>
+                        <SelectItem value="speed" className="py-1.5 pr-7 pl-2 text-[11px] focus:bg-neutral-200/70 dark:focus:bg-neutral-800/80">Highest Speed</SelectItem>
+                        <SelectItem value="accuracy" className="py-1.5 pr-7 pl-2 text-[11px] focus:bg-neutral-200/70 dark:focus:bg-neutral-800/80">Highest Accuracy</SelectItem>
+                      </SelectContent>
+                    </Select>
 
                     <div className="ml-auto text-[10px] font-mono font-medium text-neutral-400 dark:text-neutral-500">
                       Found {filteredSessions.length} record{filteredSessions.length !== 1 ? "s" : ""}
@@ -1470,7 +1503,7 @@ export function WorkspaceDashboard({ isOpen, onClose, onLoadFileToEditor, onOpen
                 </div>
 
                 {/* Logs Content List */}
-                <div className="flex-1 overflow-y-auto custom-scrollbar pr-1 space-y-3">
+                <div className="flex-1 overflow-y-auto custom-scrollbar pr-1 space-y-3 isolate bg-white dark:bg-neutral-950">
                   {filteredSessions.length === 0 ? (
                     <div className="h-full flex flex-col items-center justify-center text-center p-8 select-none">
                       <BarChart2 className="w-12 h-12 text-gray-300 dark:text-zinc-700 mb-4" strokeWidth={1.25} />
@@ -1480,7 +1513,7 @@ export function WorkspaceDashboard({ isOpen, onClose, onLoadFileToEditor, onOpen
                       </p>
                     </div>
                   ) : (
-                    <div className="flex flex-col border border-neutral-200/30 dark:border-neutral-800/30 rounded-xl overflow-hidden bg-neutral-50/20 dark:bg-neutral-900/5 divide-y divide-neutral-200/35 dark:divide-neutral-800/35">
+                    <div className="flex flex-col border border-neutral-200/30 dark:border-neutral-800/30 rounded-xl overflow-hidden bg-white dark:bg-neutral-950 [contain:paint] divide-y divide-neutral-200/35 dark:divide-neutral-800/35">
                       {/* Column Header */}
                       <div className={`${isWide ? "flex" : "hidden"} items-center px-4 py-2 bg-neutral-100/50 dark:bg-neutral-900/30 text-[9px] font-bold uppercase tracking-wider text-neutral-400 dark:text-neutral-500 select-none`}>
                         <div className="w-[125px] shrink-0">Timestamp</div>
@@ -1496,7 +1529,7 @@ export function WorkspaceDashboard({ isOpen, onClose, onLoadFileToEditor, onOpen
                       {filteredSessions.map((session) => (
                         <div
                           key={session.id}
-                          className={`flex ${isWide ? "flex-row items-center py-2.5" : "flex-col py-3.5"} px-4 text-[12px] hover:bg-neutral-100/30 dark:hover:bg-neutral-900/25 transition-all group`}
+                          className={`flex ${isWide ? "flex-row items-center py-2.5" : "flex-col py-3.5"} px-4 text-[12px] hover:bg-neutral-100/30 dark:hover:bg-neutral-900/25 transition-colors duration-150 group`}
                         >
                           {/* 1. Timestamp */}
                           <div className={`w-[125px] shrink-0 text-[11px] font-mono text-neutral-400 dark:text-neutral-500 flex items-center gap-1.5 ${isWide ? "mb-0" : "mb-2"}`}>
@@ -1827,73 +1860,85 @@ export function WorkspaceDashboard({ isOpen, onClose, onLoadFileToEditor, onOpen
             {/* 4. ACHIEVEMENTS TAB */}
             {activeTab === "achievements" && (
               <div className="flex-1 flex flex-col p-6 overflow-y-auto custom-scrollbar">
-                <div className="mb-6">
+                <div className="mb-5">
                   <h2 className="text-[18px] font-semibold tracking-tight text-neutral-800 dark:text-neutral-100">Milestones & Achievements</h2>
                   <p className="text-[12px] text-neutral-400 dark:text-neutral-500 mt-1">
                     Permanent Practice and drafting milestones, earned through measured work.
                   </p>
                 </div>
 
-                {/* Achievements List */}
-                <div className="space-y-3">
-                  {badges.map((b) => {
-                    const BadgeIcon = achievementIconByCategory[b.category];
+                {/* Achievement Paths */}
+                <div className="flex flex-col gap-3 pl-0.5">
+                  {achievementPaths.map((path) => {
+                    const PathIcon = achievementIconByCategory[path.category];
+                    const isExpanded = expandedAchievementPath === path.category;
+                    const hoverMilestone = path.nextMilestone ?? [...path.milestones].reverse().find((milestone) => milestone.unlocked) ?? path.milestones[0];
+                    const hoverDetail = hoverMilestone.unlocked && hoverMilestone.unlock?.unlockedAt
+                      ? `${hoverMilestone.description} (earned ${new Date(hoverMilestone.unlock.unlockedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })})`
+                      : hoverMilestone.description;
                     return (
-                      <div
-                        key={b.id}
-                        className={`p-4 rounded-xl border flex items-center justify-between gap-4 transition-all duration-300 ${
-                          b.unlocked
-                            ? "bg-neutral-50/50 dark:bg-neutral-900/10 border-neutral-200/30 dark:border-neutral-800/30 opacity-100"
-                            : "bg-neutral-50/20 dark:bg-neutral-900/5 border-transparent opacity-40"
-                        }`}
-                      >
-                        <div className="flex items-center gap-4 min-w-0">
-                          <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 border transition-colors ${
-                            b.unlocked
-                              ? "bg-neutral-100/50 dark:bg-[#20202A]/50 text-neutral-800 dark:text-neutral-100 border-neutral-200/40 dark:border-neutral-800/40"
-                              : "bg-neutral-100/20 dark:bg-neutral-900/20 text-neutral-400 border-transparent"
-                          }`}>
-                            <BadgeIcon className="w-4 h-4" style={{ color: b.unlocked ? themeAccentColor : undefined }} />
+                      <div key={path.category} className="overflow-visible">
+                        <button
+                          type="button"
+                          onClick={() => setExpandedAchievementPath(isExpanded ? null : path.category)}
+                          aria-expanded={isExpanded}
+                          aria-controls={`achievement-path-${path.category.toLowerCase()}`}
+                          aria-label={`${isExpanded ? "Collapse" : "Expand"} ${path.category} achievements`}
+                          data-achievement-path-row={path.category}
+                          className="group flex w-full items-center gap-3 p-1 -ml-1 rounded text-left transition-colors hover:translate-y-0 hover:scale-100 active:scale-100 hover:bg-black/5 dark:hover:bg-white/5 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-neutral-400 dark:focus-visible:ring-neutral-600"
+                        >
+                          <div className="flex h-5 w-5 shrink-0 items-center justify-center text-neutral-500 dark:text-neutral-400">
+                            <PathIcon className="h-3.5 w-3.5" style={{ color: path.earnedCount > 0 ? themeAccentColor : undefined, animation: "none", transform: "none" }} />
                           </div>
-                          <div className="min-w-0">
-                            <p className="text-[8px] font-semibold uppercase tracking-[0.12em] text-neutral-400 dark:text-neutral-500 mb-0.5">
-                              {b.category}
-                            </p>
-                            <h3 className="text-[13px] font-medium text-neutral-800 dark:text-neutral-100 tracking-tight">
-                              {b.title}
-                            </h3>
-                            <p className="text-[10px] text-neutral-400 dark:text-neutral-500 mt-0.5">
-                              {b.description}
-                            </p>
+                          <div className="relative h-5 min-w-0 flex-1 overflow-hidden">
+                            <h3 className="absolute inset-0 flex items-center text-[14px] leading-5 text-[#1E1E1F] transition-[opacity,transform] duration-150 group-hover:-translate-y-1 group-hover:opacity-0 group-focus-visible:-translate-y-1 group-focus-visible:opacity-0 dark:text-[#EAEAEA]">{path.category}</h3>
+                            <span data-achievement-hover-detail className="absolute inset-0 flex items-center truncate text-[11px] text-neutral-500 opacity-0 transition-[opacity,transform] duration-150 group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:translate-y-0 group-focus-visible:opacity-100 dark:text-neutral-400">{hoverDetail}</span>
                           </div>
-                        </div>
+                          <ChevronDown className={`h-3.5 w-3.5 shrink-0 text-neutral-400 transition-transform duration-150 ${isExpanded ? "rotate-180" : ""}`} style={{ animation: "none" }} />
+                        </button>
 
-                        <div className="shrink-0">
-                          {b.unlocked ? (
-                            <div className="shrink-0 flex items-center justify-center pr-1" title="Milestone Completed">
-                              <svg
-                                className="w-5 h-5 text-emerald-500"
-                                fill="none"
-                                viewBox="0 0 24 24"
-                                stroke="currentColor"
-                                strokeWidth={3.5}
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                              >
-                                <motion.path
-                                  d="M5 13l4 4L19 7"
-                                  initial={{ pathLength: 0 }}
-                                  animate={{ pathLength: 1 }}
-                                  transition={{ duration: 0.5, ease: "easeOut", delay: 0.15 }}
-                                />
-                              </svg>
-                            </div>
-                          ) : (
-                            <span className="text-[9px] font-bold uppercase tracking-wider text-neutral-400 dark:text-neutral-500 bg-neutral-100 dark:bg-neutral-800 px-2 py-0.5 rounded-md">
-                              {b.current.toLocaleString()} / {b.target.toLocaleString()} · {b.rule}
-                            </span>
+                        <AnimatePresence initial={false}>
+                          {isExpanded && (
+                            <motion.div
+                              id={`achievement-path-${path.category.toLowerCase()}`}
+                              initial={{ height: 0, opacity: 0 }}
+                              animate={{ height: "auto", opacity: 1 }}
+                              exit={{ height: 0, opacity: 0 }}
+                              transition={{ duration: 0.18, ease: "easeOut" }}
+                              className="ml-7 mt-1 overflow-hidden border-l border-neutral-200/55 pl-3 dark:border-neutral-800/60"
+                            >
+                              <div className="flex flex-col gap-1">
+                                {path.milestones.map((milestone) => (
+                                  <div
+                                    key={milestone.id}
+                                    tabIndex={0}
+                                    data-achievement-milestone-row={milestone.id}
+                                    aria-label={milestone.unlocked && milestone.unlock?.unlockedAt
+                                      ? `${milestone.title}. ${milestone.description}. Earned ${new Date(milestone.unlock.unlockedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}.`
+                                      : `${milestone.title}. ${milestone.description}.`}
+                                    className={`group/milestone flex items-center gap-3 rounded py-1.5 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-neutral-400 dark:focus-visible:ring-neutral-600 ${milestone.unlocked ? "" : "opacity-70"}`}
+                                  >
+                                    <div className="flex h-5 w-5 shrink-0 items-center justify-center">
+                                      {milestone.unlocked ? (
+                                        <Check className="h-3.5 w-3.5" style={{ color: themeAccentColor, animation: "none", transform: "none" }} aria-label="Milestone Completed" />
+                                      ) : (
+                                        <Lock className="h-3.5 w-3.5 text-neutral-400 dark:text-neutral-500" style={{ animation: "none", transform: "none" }} aria-label="Milestone Locked" />
+                                      )}
+                                    </div>
+                                    <div className="relative h-5 min-w-0 flex-1 overflow-hidden">
+                                      <p className="absolute inset-0 flex items-center text-[13px] text-[#1E1E1F] transition-[opacity,transform] duration-150 group-hover/milestone:-translate-y-1 group-hover/milestone:opacity-0 group-focus/milestone:-translate-y-1 group-focus/milestone:opacity-0 dark:text-[#EAEAEA]">{milestone.title}</p>
+                                      <span data-achievement-milestone-hover-detail aria-hidden="true" className="absolute inset-0 flex items-center truncate text-[11px] text-neutral-500 opacity-0 transition-[opacity,transform] duration-150 group-hover/milestone:translate-y-0 group-hover/milestone:opacity-100 group-focus/milestone:translate-y-0 group-focus/milestone:opacity-100 dark:text-neutral-400">
+                                        {milestone.unlocked && milestone.unlock?.unlockedAt
+                                          ? `${milestone.description} (earned ${new Date(milestone.unlock.unlockedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })})`
+                                          : milestone.description}
+                                      </span>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </motion.div>
                           )}
-                        </div>
+                        </AnimatePresence>
                       </div>
                     );
                   })}

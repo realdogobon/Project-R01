@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useId } from "react";
+import React, { useState, useEffect } from "react";
 /* Faithful Notepads reference shell: compact glyph rail, 60px title row, flat Fluent surfaces, 20px content inset, and a dedicated detail frame. RoyScript setting controls and state behavior remain adapted inside this shell. */
 import {
   X,
@@ -304,8 +304,10 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     useState<SettingsCategory>("appearance");
   const [isSavingPreset, setIsSavingPreset] = useState(false);
   const [newPresetName, setNewPresetName] = useState("");
+  const [showResetConfirmation, setShowResetConfirmation] = useState(false);
   const scrollRef = React.useRef<HTMLDivElement>(null);
   const panelRef = React.useRef<HTMLDivElement>(null);
+  const resetConfirmationTimerRef = React.useRef<number | null>(null);
   const viewRef = React.useRef<SettingsView>(view);
   const activeCategoryRef = React.useRef<SettingsCategory>(activeCategory);
   const navigationQueueRef = React.useRef<SettingsNavigationIntent[]>([]);
@@ -428,6 +430,11 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   useEffect(() => {
     if (!isOpen) {
       clearNavigationQueue();
+      setShowResetConfirmation(false);
+      if (resetConfirmationTimerRef.current !== null) {
+        window.clearTimeout(resetConfirmationTimerRef.current);
+        resetConfirmationTimerRef.current = null;
+      }
       viewRef.current = "main";
       activeCategoryRef.current = "appearance";
       setView("main");
@@ -436,7 +443,12 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   }, [isOpen]);
 
   useEffect(() => {
-    return () => clearNavigationQueue();
+    return () => {
+      clearNavigationQueue();
+      if (resetConfirmationTimerRef.current !== null) {
+        window.clearTimeout(resetConfirmationTimerRef.current);
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -454,22 +466,31 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const handleResetSettings = () => {
     resetToDefaults();
     enqueueNavigation({ kind: "reset" });
+    setShowResetConfirmation(true);
+    if (resetConfirmationTimerRef.current !== null) {
+      window.clearTimeout(resetConfirmationTimerRef.current);
+    }
+    resetConfirmationTimerRef.current = window.setTimeout(() => {
+      setShowResetConfirmation(false);
+      resetConfirmationTimerRef.current = null;
+    }, 2400);
   };
 
   return (
-    <AnimatePresence>
-      {isOpen && (
-        <div
-          className="fixed inset-0 z-[100] flex items-center justify-center select-none font-sans"
-          data-settings-panel="true"
-        >
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center select-none font-sans"
+      data-settings-panel="true"
+      aria-hidden={!isOpen}
+      inert={!isOpen}
+      style={{ pointerEvents: isOpen ? "auto" : "none" }}
+    >
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+            initial={false}
+            animate={{ opacity: isOpen ? 1 : 0 }}
+            transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
             onClick={handleCloseSettings}
             className={cn(
-              "fixed inset-0 bg-neutral-950/20 dark:bg-black/60 transition-opacity transform-gpu",
+              "fixed inset-0 bg-neutral-950/20 dark:bg-black/60 transform-gpu",
               !betterPerformance && "backdrop-blur-[2px]",
             )}
           />
@@ -481,22 +502,20 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             aria-modal="true"
             aria-label="Settings"
             tabIndex={-1}
-            initial={{ x: "100%", opacity: 0.8 }}
-            animate={{ x: 0, opacity: 1 }}
-            exit={{ x: "100%", opacity: 0.8 }}
+            initial={false}
+            animate={{ x: isOpen ? 0 : "100%" }}
             transition={
               betterPerformance
                 ? { type: "tween", ease: "linear", duration: 0.12 }
-                : { type: "tween", ease: [0.16, 1, 0.3, 1], duration: 0.3 }
+                : { type: "tween", ease: [0.22, 0.61, 0.36, 1], duration: 0.6 }
             }
             className={cn(
-              "fixed right-0 top-0 bottom-0 w-[430px] max-w-full h-full flex flex-col z-[105] overflow-hidden transform-gpu transition-all bg-[#f5f5f5] dark:bg-[#222222] border-l border-neutral-300 dark:border-white/[0.12] shadow-2xl",
+              "fixed right-0 top-0 bottom-0 w-[430px] max-w-full h-full flex flex-col z-[105] overflow-hidden transform-gpu bg-[#f5f5f5] dark:bg-[#222222] border-l border-neutral-300 dark:border-white/[0.12] shadow-2xl",
             )}
             style={{
               fontFamily: "var(--app-font-family), monospace",
-              transform: "none !important", // Strict blocker for page scale
             }}
-          >
+            >
             {/* Scoped CSS Blocker injected directly inside panel */}
             <style
               dangerouslySetInnerHTML={{
@@ -532,6 +551,24 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             `,
               }}
             />
+
+            <AnimatePresence initial={false}>
+              {showResetConfirmation && (
+                <motion.div
+                  key="settings-reset-confirmation"
+                  role="status"
+                  aria-live="polite"
+                  initial={{ opacity: 0, x: 4 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 2 }}
+                  transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
+                  className="pointer-events-none absolute bottom-6 right-6 z-20 flex items-center gap-1.5 whitespace-nowrap text-[13px] font-normal text-neutral-500 dark:text-neutral-400"
+                >
+                  <Check aria-hidden="true" className="size-3.5" strokeWidth={1.8} />
+                  <span>Settings Reset</span>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             {/* Notepads-style title row: compact, flat, and anchored to the content frame. */}
             <div className="mx-[18px] h-[60px] flex items-end justify-between border-b border-neutral-300/80 dark:border-white/[0.18] shrink-0">
@@ -637,18 +674,17 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                   );
                 })}
 
-                <div className="mt-auto w-full px-2 pt-4">
-                  <div className="mb-3 h-px w-full bg-neutral-200/80 dark:bg-white/[0.09]" />
+                <div className="relative mt-auto w-full px-2 pt-4">
                   <button
                     type="button"
-                    title="Reset settings"
-                    aria-label="Reset settings"
+                    title="Reset Settings"
+                    aria-label="Reset Settings"
                     data-settings-reset="true"
                     onClick={handleResetSettings}
-                    className="group flex h-11 w-full items-center justify-center text-neutral-400 transition-colors duration-150 hover:bg-red-500/[0.08] hover:text-red-500 dark:text-neutral-500 dark:hover:bg-red-400/[0.10] dark:hover:text-red-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-red-400/60"
+                    className="group flex h-11 w-full items-center justify-center text-neutral-400 transition-colors duration-150 hover:text-neutral-700 dark:text-neutral-500 dark:hover:text-neutral-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-neutral-400 dark:focus-visible:ring-white/40"
                   >
                     <RotateCcw aria-hidden="true" className="size-[18px]" strokeWidth={1.7} />
-                    <span className="sr-only">Reset settings</span>
+                    <span className="sr-only">Reset Settings</span>
                   </button>
                 </div>
               </nav>
@@ -1532,9 +1568,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             </div>
             </div>
           </motion.div>
-        </div>
-      )}
-    </AnimatePresence>
+    </div>
   );
 }
 
@@ -1546,18 +1580,6 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 ───────────────────────────────────────────────────────────── */
 function ThemeSwitcher({ className }: { className?: string }) {
   const { theme, setTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
-  const themeIndicatorLayoutId = `settings-theme-active-${useId()}`;
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  if (!mounted) {
-    return (
-      <div className="h-8 w-24 rounded-full bg-neutral-100 dark:bg-neutral-900 animate-pulse" />
-    );
-  }
 
   const themes = [
     { key: "system", icon: Monitor, label: "System theme" },
@@ -1566,34 +1588,35 @@ function ThemeSwitcher({ className }: { className?: string }) {
   ] as const;
 
   const currentTheme = theme ?? "system";
+  const activeThemeIndex = Math.max(
+    0,
+    themes.findIndex(({ key }) => key === currentTheme),
+  );
 
   return (
     <div
       className={cn(
-        "relative isolate flex h-8 rounded-full border border-neutral-200 dark:border-white/10 bg-neutral-100 dark:bg-white/[0.06] p-1",
+        "relative isolate flex h-8 w-24 rounded-full border border-neutral-200 dark:border-white/10 bg-neutral-100 dark:bg-white/[0.06] p-1",
         className,
       )}
     >
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-y-1 left-1 w-[calc((100%-8px)/3)] rounded-full bg-neutral-300/40 transition-transform duration-150 ease-out dark:bg-white/10"
+        style={{ transform: `translateX(${activeThemeIndex * 100}%)` }}
+      />
       {themes.map(({ key, icon: Icon, label }) => {
         const isActive = currentTheme === key;
 
         return (
           <button
             aria-label={label}
-            className="relative h-6 w-8 rounded-full flex items-center justify-center cursor-pointer select-none group"
+            className="relative h-6 min-w-0 flex-1 rounded-full flex items-center justify-center cursor-pointer select-none group"
             key={key}
             onClick={() => setTheme(key)}
             type="button"
             style={{ transform: "none" }}
           >
-            {isActive && (
-              <motion.div
-                className="absolute inset-0 rounded-full bg-neutral-300/40 dark:bg-white/10"
-                initial={false}
-                layoutId={themeIndicatorLayoutId}
-                transition={{ type: "spring", stiffness: 380, damping: 26 }}
-              />
-            )}
             <Icon
               className={cn(
                 "relative z-10 w-3.5 h-3.5 transition-colors",
