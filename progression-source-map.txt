@@ -1,0 +1,2 @@
+client/src/components/dashboard/WorkspaceDashboard.tsx:178:  // Experience level calculation values
+server/scannerLayout.test.ts:170:    expect(exitSource).toContain("Exit request must always fail silently at the app level.");

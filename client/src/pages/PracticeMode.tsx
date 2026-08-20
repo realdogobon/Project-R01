@@ -19,7 +19,7 @@ import {
   PRACTICE_AI_CUSTOM_MIN_WORDS,
   PRACTICE_AI_CUSTOM_MAX_WORDS,
 } from "../lib/practice-ai";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
 import { TypingScreen } from "../components/typing/TypingScreen";
 import type { ReplayEvent } from "../lib/typing-engine";
 
@@ -245,11 +245,14 @@ function buildSessionFingerprint(cfg: {
 function ResilientResultsChart({
   children,
 }: {
-  children: (revision: number) => React.ReactNode;
+  children: (measurement: { width: number; height: number; revision: number }) => React.ReactNode;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [isMeasurable, setIsMeasurable] = useState(false);
-  const [revision, setRevision] = useState(0);
+  const [measurement, setMeasurement] = useState<{
+    width: number;
+    height: number;
+    revision: number;
+  } | null>(null);
   const lastMeasurementRef = useRef("");
 
   React.useLayoutEffect(() => {
@@ -257,44 +260,140 @@ function ResilientResultsChart({
     if (!container) return;
 
     let frame = 0;
-    let settleTimer: number | undefined;
-    const measure = () => {
-      const { width, height } = container.getBoundingClientRect();
-      const canMeasure = width > 32 && height >= 160;
-      const measurement = canMeasure ? `${Math.round(width)}x${Math.round(height)}` : "";
-
-      setIsMeasurable(canMeasure);
-      if (canMeasure && measurement !== lastMeasurementRef.current) {
-        lastMeasurementRef.current = measurement;
-        setRevision((current) => current + 1);
+    const settleTimers: number[] = [];
+    let recoveryInterval: number | null = null;
+    let recoveryTimeout: number | null = null;
+    const stopRecoveryPoll = () => {
+      if (recoveryInterval !== null) {
+        window.clearInterval(recoveryInterval);
+        recoveryInterval = null;
+      }
+      if (recoveryTimeout !== null) {
+        window.clearTimeout(recoveryTimeout);
+        recoveryTimeout = null;
       }
     };
     const scheduleMeasure = () => {
       window.cancelAnimationFrame(frame);
       frame = window.requestAnimationFrame(measure);
     };
-    const observer = typeof ResizeObserver === "undefined"
+    // A few browser/host combinations do not reliably surface a display:none →
+    // visible transition to ResizeObserver when a chart was already mounted.
+    // Poll only while recovering from an unsafe box, then stop immediately once
+    // the host is measurable. This keeps the fallback silent and bounded.
+    const startRecoveryPoll = () => {
+      if (recoveryInterval !== null) return;
+      recoveryInterval = window.setInterval(() => {
+        const { width, height } = container.getBoundingClientRect();
+        if (width > 32 && height >= 160) {
+          stopRecoveryPoll();
+          scheduleMeasure();
+        }
+      }, 80);
+      recoveryTimeout = window.setTimeout(stopRecoveryPoll, 2_000);
+    };
+    const measure = () => {
+      const { width, height } = container.getBoundingClientRect();
+      const canMeasure = width > 32 && height >= 160;
+      const roundedWidth = Math.round(width);
+      const roundedHeight = Math.round(height);
+      const nextMeasurement = canMeasure ? `${roundedWidth}x${roundedHeight}` : "";
+
+      setMeasurement((current) => {
+        if (!canMeasure) {
+          // A hidden result screen can later return at exactly the same size.
+          // Forget the old size so the next measurable frame remounts the chart
+          // instead of treating a null measurement as already up to date.
+          lastMeasurementRef.current = "";
+          startRecoveryPoll();
+          return current === null ? current : null;
+        }
+        stopRecoveryPoll();
+        if (nextMeasurement === lastMeasurementRef.current) return current;
+
+        lastMeasurementRef.current = nextMeasurement;
+        return {
+          width: roundedWidth,
+          height: roundedHeight,
+          revision: (current?.revision ?? -1) + 1,
+        };
+      });
+    };
+    const ResizeObserverCtor = "ResizeObserver" in window ? window.ResizeObserver : undefined;
+    const observer = !ResizeObserverCtor
       ? null
-      : new ResizeObserver(scheduleMeasure);
+      : new ResizeObserverCtor(scheduleMeasure);
+    const IntersectionObserverCtor = "IntersectionObserver" in window ? window.IntersectionObserver : undefined;
+    let wasLayoutVisible: boolean | null = null;
+    // ResizeObserver handles normal hide/reveal transitions. IntersectionObserver
+    // is a non-state-changing fallback only for desktop environments without it.
+    // Updating React state from visibility callbacks can make a remounted chart
+    // retrigger visibility and create an update feedback loop.
+    const visibilityObserver = ResizeObserverCtor || !IntersectionObserverCtor
+      ? null
+      : new IntersectionObserverCtor((entries) => {
+          const entry = entries[0];
+          if (!entry) return;
+          const isLayoutVisible =
+            entry.isIntersecting &&
+            entry.intersectionRect.width > 32 &&
+            entry.intersectionRect.height >= 160;
+          if (wasLayoutVisible === null) {
+            wasLayoutVisible = isLayoutVisible;
+            if (isLayoutVisible) scheduleMeasure();
+            return;
+          }
+          if (wasLayoutVisible === isLayoutVisible) return;
+
+          wasLayoutVisible = isLayoutVisible;
+          // Forget only the cached dimensions. The next settled visible frame
+          // creates a new revision without synchronously changing state inside
+          // the observer callback.
+          lastMeasurementRef.current = "";
+          if (isLayoutVisible) scheduleMeasure();
+        });
+    // Direct visibility changes made by a parent, transition helper, or host
+    // shell can bypass a ResizeObserver notification. Watching the container's
+    // own layout-affecting attributes gives the recovery poll a deterministic
+    // entry point without rendering visible error UI.
+    const mutationObserver = "MutationObserver" in window
+      ? new MutationObserver(() => {
+          lastMeasurementRef.current = "";
+          startRecoveryPoll();
+          scheduleMeasure();
+        })
+      : null;
+    const visualViewport = window.visualViewport;
 
     observer?.observe(container);
+    visibilityObserver?.observe(container);
+    mutationObserver?.observe(container, { attributes: true, attributeFilter: ["class", "style"] });
     window.addEventListener("resize", scheduleMeasure);
+    visualViewport?.addEventListener("resize", scheduleMeasure);
     document.addEventListener("visibilitychange", scheduleMeasure);
     scheduleMeasure();
-    settleTimer = window.setTimeout(scheduleMeasure, 220);
+    settleTimers.push(
+      window.setTimeout(scheduleMeasure, 80),
+      window.setTimeout(scheduleMeasure, 220),
+      window.setTimeout(scheduleMeasure, 520),
+    );
 
     return () => {
       observer?.disconnect();
+      visibilityObserver?.disconnect();
+      mutationObserver?.disconnect();
       window.cancelAnimationFrame(frame);
-      window.clearTimeout(settleTimer);
+      settleTimers.forEach((timer) => window.clearTimeout(timer));
+      stopRecoveryPoll();
       window.removeEventListener("resize", scheduleMeasure);
+      visualViewport?.removeEventListener("resize", scheduleMeasure);
       document.removeEventListener("visibilitychange", scheduleMeasure);
     };
   }, []);
 
   return (
     <div ref={containerRef} data-practice-results-chart className="h-[200px] min-h-[200px] w-full">
-      {isMeasurable ? children(revision) : null}
+      {measurement ? children(measurement) : null}
     </div>
   );
 }
@@ -3195,8 +3294,7 @@ export function PracticeMode({
         {/* ── Chart ── */}
         <div className="w-full mt-8 animate-in fade-in duration-700" style={{ animationDelay: '0.55s', animationFillMode: 'both' }}>
               <ResilientResultsChart>
-                {(chartRevision) => <ResponsiveContainer key={chartRevision} width="100%" height="100%">
-                  <LineChart data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+                {({ width, height, revision: chartRevision }) => <LineChart key={chartRevision} width={width} height={height} data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
                     <CartesianGrid stroke="currentColor" strokeOpacity={0.06} vertical={false} />
                     <XAxis
                       axisLine={false}
@@ -3239,8 +3337,7 @@ export function PracticeMode({
                       strokeWidth={2}
                       type="monotone"
                     />
-                  </LineChart>
-                </ResponsiveContainer>}
+                  </LineChart>}
               </ResilientResultsChart>
         </div>
 

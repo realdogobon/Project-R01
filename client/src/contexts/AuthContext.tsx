@@ -1,4 +1,16 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
+import {
+  applyPracticeSessionToProgression,
+  createEmptyAchievementLedger,
+  createEmptyProgressionRecord,
+  getAchievementProgress,
+  migrateLegacyProgression,
+  PROGRESSION_POLICY_VERSION,
+  reconcileAchievementLedger,
+  type AchievementLedger,
+  type AchievementProgress,
+  type ProgressionRecord,
+} from "../lib/progression";
 
 // ─── Crypto Utilities ─────────────────────────────────────────────────────────
 
@@ -102,12 +114,93 @@ export interface TypingSession {
   owner_id: string;
   date: string;
   speed: number;
-  accuracy: number;
+  /** Exam accuracy is unavailable because sealed Exam mode does not score correctness. */
+  accuracy: number | null;
   type: "Practice" | "Exam";
   duration: number;
   passageTitle: string;
   content: string;
   replayEvents?: string;
+}
+
+export interface PendingLevelUpMilestone {
+  id: string;
+  previousLevel: number;
+  previousLevelXP: number;
+  previousLevelGoal: number;
+  nextLevel: number;
+  nextLevelXP: number;
+  nextLevelGoal: number;
+  createdAt: string;
+}
+
+function getLevelUpMilestoneStorageKey(uid: string) {
+  return `typing_suite_pending_level_ups_${uid}`;
+}
+
+function getProgressionStorageKey(uid: string) {
+  return `typing_suite_progression_v1_${uid}`;
+}
+
+function getAchievementLedgerStorageKey(uid: string) {
+  return `typing_suite_achievement_ledger_v1_${uid}`;
+}
+
+function readProgressionRecord(uid: string): ProgressionRecord | null {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(getProgressionStorageKey(uid)) || "null");
+    return parsed && typeof parsed === "object" && typeof parsed.level === "number" && Array.isArray(parsed.creditedSessionIds)
+      ? parsed as ProgressionRecord
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeProgressionRecord(uid: string, record: ProgressionRecord) {
+  localStorage.setItem(getProgressionStorageKey(uid), JSON.stringify(record));
+}
+
+function readAchievementLedger(uid: string): AchievementLedger {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(getAchievementLedgerStorageKey(uid)) || "null");
+    return parsed && typeof parsed === "object" && parsed.unlocks && typeof parsed.unlocks === "object"
+      ? parsed as AchievementLedger
+      : createEmptyAchievementLedger();
+  } catch {
+    return createEmptyAchievementLedger();
+  }
+}
+
+function writeAchievementLedger(uid: string, ledger: AchievementLedger) {
+  localStorage.setItem(getAchievementLedgerStorageKey(uid), JSON.stringify(ledger));
+}
+
+export function getPendingLevelUpMilestones(uid: string): PendingLevelUpMilestone[] {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(getLevelUpMilestoneStorageKey(uid)) || "[]");
+    return Array.isArray(parsed) ? parsed.flatMap((milestone) => {
+      if (!milestone || typeof milestone.id !== "string" || typeof milestone.previousLevel !== "number" || typeof milestone.previousLevelXP !== "number" || typeof milestone.nextLevel !== "number" || typeof milestone.nextLevelXP !== "number") {
+        return [];
+      }
+      return [{
+        ...milestone,
+        previousLevelGoal: typeof milestone.previousLevelGoal === "number" ? milestone.previousLevelGoal : 1000,
+        nextLevelGoal: typeof milestone.nextLevelGoal === "number" ? milestone.nextLevelGoal : 1000,
+      } as PendingLevelUpMilestone];
+    }) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writePendingLevelUpMilestones(uid: string, milestones: PendingLevelUpMilestone[]) {
+  localStorage.setItem(getLevelUpMilestoneStorageKey(uid), JSON.stringify(milestones));
+}
+
+export function acknowledgePendingLevelUpMilestone(uid: string, milestoneId: string) {
+  const remaining = getPendingLevelUpMilestones(uid).filter((milestone) => milestone.id !== milestoneId);
+  writePendingLevelUpMilestones(uid, remaining);
 }
 
 export interface CloudFile {
@@ -122,6 +215,8 @@ interface AuthContextType {
   user: UserProfile | null;
   sessions: TypingSession[];
   files: CloudFile[];
+  progression: ProgressionRecord;
+  achievements: AchievementProgress[];
   isLoading: boolean;
   error: string | null;
   guestUid: string;
@@ -134,7 +229,7 @@ interface AuthContextType {
   removeLinkedAccount: (uid: string) => void;
   addSession: (
     speed: number,
-    accuracy: number,
+    accuracy: number | null,
     type: "Practice" | "Exam",
     duration: number,
     passageTitle: string,
@@ -156,6 +251,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [sessions, setSessions] = useState<TypingSession[]>([]);
   const [files, setFiles] = useState<CloudFile[]>([]);
+  const [progression, setProgression] = useState<ProgressionRecord>(createEmptyProgressionRecord);
+  const [achievements, setAchievements] = useState<AchievementProgress[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [linkedAccounts, setLinkedAccounts] = useState<LinkedAccountInfo[]>([]);
@@ -195,6 +292,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!user) {
       setSessions([]);
       setFiles([]);
+      setProgression(createEmptyProgressionRecord());
+      setAchievements([]);
       return;
     }
 
@@ -209,6 +308,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .filter((f) => f.owner_id === user.uid)
       .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
     setFiles(userFiles);
+
+    const storedProgression = readProgressionRecord(user.uid);
+    const loadedProgression = !storedProgression || storedProgression.version < PROGRESSION_POLICY_VERSION
+      ? migrateLegacyProgression(userSessions)
+      : storedProgression;
+    writeProgressionRecord(user.uid, loadedProgression);
+    setProgression(loadedProgression);
+
+    const reconciledLedger = reconcileAchievementLedger(
+      readAchievementLedger(user.uid),
+      userSessions,
+      userFiles,
+      new Date().toISOString(),
+    );
+    writeAchievementLedger(user.uid, reconciledLedger);
+    setAchievements(getAchievementProgress(reconciledLedger, userSessions, userFiles));
   }, [user]);
 
   // ── Guest-data migration helper ────────────────────────────────────────────
@@ -458,7 +573,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // ── Data actions ───────────────────────────────────────────────────────────
 
   const addSession = async (
-    speed: number, accuracy: number, type: "Practice" | "Exam",
+    speed: number, accuracy: number | null, type: "Practice" | "Exam",
     duration: number, passageTitle: string, content: string, replayEvents?: string
   ) => {
     if (!user) return;
@@ -470,13 +585,51 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const localSessions: TypingSession[] = JSON.parse(localStorage.getItem("typing_suite_sessions") || "[]");
     localSessions.push(sessionObj);
     localStorage.setItem("typing_suite_sessions", JSON.stringify(localSessions));
+
+    if (type === "Practice") {
+      const accountSessions = localSessions.filter((session) => session.owner_id === user.uid);
+      const historyById = new Map(accountSessions.map((session) => [session.id, session]));
+      const applied = applyPracticeSessionToProgression(
+        (() => {
+          const storedProgression = readProgressionRecord(user.uid);
+          return !storedProgression || storedProgression.version < PROGRESSION_POLICY_VERSION
+            ? migrateLegacyProgression(accountSessions.filter((session) => session.id !== sessionObj.id))
+            : storedProgression;
+        })(),
+        sessionObj,
+        historyById,
+      );
+      writeProgressionRecord(user.uid, applied.record);
+      setProgression(applied.record);
+
+      if (applied.milestone) {
+        const pendingMilestones = getPendingLevelUpMilestones(user.uid);
+        pendingMilestones.push({
+          id: `level_up_${sessionObj.id}_${applied.milestone.previousLevel}`,
+          ...applied.milestone,
+          createdAt: sessionObj.date,
+        });
+        writePendingLevelUpMilestones(user.uid, pendingMilestones);
+      }
+    }
+    const accountSessions = localSessions.filter((session) => session.owner_id === user.uid);
+    const accountFiles = JSON.parse(localStorage.getItem("typing_suite_files") || "[]") as CloudFile[];
+    const userFiles = accountFiles.filter((file) => file.owner_id === user.uid);
+    const reconciledLedger = reconcileAchievementLedger(readAchievementLedger(user.uid), accountSessions, userFiles, sessionObj.date);
+    writeAchievementLedger(user.uid, reconciledLedger);
+    setAchievements(getAchievementProgress(reconciledLedger, accountSessions, userFiles));
     setSessions((prev) => [sessionObj, ...prev]);
   };
 
   const deleteSession = async (sessionId: string) => {
     if (!user) return;
     const localSessions: TypingSession[] = JSON.parse(localStorage.getItem("typing_suite_sessions") || "[]");
-    localStorage.setItem("typing_suite_sessions", JSON.stringify(localSessions.filter((s) => s.id !== sessionId)));
+    const remainingSessions = localSessions.filter((session) => session.id !== sessionId);
+    localStorage.setItem("typing_suite_sessions", JSON.stringify(remainingSessions));
+    const userSessions = remainingSessions.filter((session) => session.owner_id === user.uid);
+    const localFiles: CloudFile[] = JSON.parse(localStorage.getItem("typing_suite_files") || "[]");
+    const userFiles = localFiles.filter((file) => file.owner_id === user.uid);
+    setAchievements(getAchievementProgress(readAchievementLedger(user.uid), userSessions, userFiles));
     setSessions((prev) => prev.filter((s) => s.id !== sessionId));
   };
 
@@ -488,6 +641,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const idx = localFiles.findIndex((f) => f.id === id);
     if (idx >= 0) localFiles[idx] = fileObj; else localFiles.push(fileObj);
     localStorage.setItem("typing_suite_files", JSON.stringify(localFiles));
+    const accountSessions = JSON.parse(localStorage.getItem("typing_suite_sessions") || "[]") as TypingSession[];
+    const userSessions = accountSessions.filter((session) => session.owner_id === user.uid);
+    const userFiles = localFiles.filter((file) => file.owner_id === user.uid);
+    const reconciledLedger = reconcileAchievementLedger(readAchievementLedger(user.uid), userSessions, userFiles, fileObj.updatedAt);
+    writeAchievementLedger(user.uid, reconciledLedger);
+    setAchievements(getAchievementProgress(reconciledLedger, userSessions, userFiles));
     setFiles((prev) => [fileObj, ...prev.filter((f) => f.id !== id)]);
     return id;
   };
@@ -495,7 +654,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const deleteFile = async (fileId: string) => {
     if (!user) return;
     const localFiles: CloudFile[] = JSON.parse(localStorage.getItem("typing_suite_files") || "[]");
-    localStorage.setItem("typing_suite_files", JSON.stringify(localFiles.filter((f) => f.id !== fileId)));
+    const remainingFiles = localFiles.filter((file) => file.id !== fileId);
+    localStorage.setItem("typing_suite_files", JSON.stringify(remainingFiles));
+    const localSessions: TypingSession[] = JSON.parse(localStorage.getItem("typing_suite_sessions") || "[]");
+    const userSessions = localSessions.filter((session) => session.owner_id === user.uid);
+    const userFiles = remainingFiles.filter((file) => file.owner_id === user.uid);
+    setAchievements(getAchievementProgress(readAchievementLedger(user.uid), userSessions, userFiles));
     setFiles((prev) => prev.filter((f) => f.id !== fileId));
   };
 
@@ -514,7 +678,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   return (
     <AuthContext.Provider
       value={{
-        user, sessions, files, isLoading, error,
+        user, sessions, files, progression, achievements, isLoading, error,
         guestUid, linkedAccounts,
         signIn, signUp, signInWithGoogle, signOut,
         switchToAccount, removeLinkedAccount,

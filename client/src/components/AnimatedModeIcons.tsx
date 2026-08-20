@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'motion/react';
 
 
@@ -31,13 +31,104 @@ export function AnimatedPracticeIcon({
     "KeyN", "KeyM", "Comma", "Period", "Slash", "ShiftRight", "ControlRight", "AltRight",
   ]);
   const activeCodes = active ? activeKeyCodes : [];
-  const leftHandActive = activeCodes.some((code) => leftHandKeyCodes.has(code) || code === "Space");
+  // Spacebar uses one deliberate touch-typing hand. Keeping it out of the
+  // left-hand route prevents a single Space press from creating a duplicate
+  // two-hand stroke in the compact title-bar glyph.
+  const leftHandActive = activeCodes.some((code) => leftHandKeyCodes.has(code));
   const rightHandActive = activeCodes.some((code) => rightHandKeyCodes.has(code) || code === "Space");
   const hasActiveKeys = leftHandActive || rightHandActive;
+  type TypingHand = "left" | "right";
+  // Each distinct physical key signal starts one complete existing hand
+  // stroke. During fast input, only the *other* hand may be queued behind the
+  // current stroke. This preserves the readable, alternating rhythm instead
+  // of merging left and right into one duplicate-looking two-hand pulse.
+  const RAPID_TYPING_PULSE_MS = 220;
+  const [typingPulse, setTypingPulse] = useState({ left: false, right: false, run: 0 });
+  const activeKeySignatureRef = useRef("");
+  const typingPulseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const typingPulseRef = useRef({ left: false, right: false, run: 0 });
+  const queuedTypingHandRef = useRef<TypingHand | null>(null);
+
+  const startTypingPulse = (hand: TypingHand): void => {
+    const nextPulse = {
+      left: hand === "left",
+      right: hand === "right",
+      run: typingPulseRef.current.run + 1,
+    };
+    typingPulseRef.current = nextPulse;
+    setTypingPulse(nextPulse);
+    if (typingPulseTimerRef.current) clearTimeout(typingPulseTimerRef.current);
+    typingPulseTimerRef.current = setTimeout(() => {
+      const queuedHand = queuedTypingHandRef.current;
+      queuedTypingHandRef.current = null;
+      if (queuedHand) {
+        startTypingPulse(queuedHand);
+        return;
+      }
+
+      const restingPulse = { ...typingPulseRef.current, left: false, right: false };
+      typingPulseRef.current = restingPulse;
+      setTypingPulse(restingPulse);
+      typingPulseTimerRef.current = null;
+    }, RAPID_TYPING_PULSE_MS);
+  };
+
+  useEffect(() => {
+    if (!active || !hasActiveKeys) {
+      activeKeySignatureRef.current = "";
+      return;
+    }
+
+    const signature = [...activeCodes].sort().join("|");
+    if (signature === activeKeySignatureRef.current) return;
+
+    activeKeySignatureRef.current = signature;
+    const incomingHands = activeCodes.flatMap<TypingHand>((code) => {
+      if (code === "Space") return ["right"];
+      if (leftHandKeyCodes.has(code)) return ["left"];
+      if (rightHandKeyCodes.has(code)) return ["right"];
+      return [];
+    });
+
+    incomingHands.forEach((incomingHand) => {
+      const currentHand: TypingHand | null = typingPulseRef.current.left
+        ? "left"
+        : typingPulseRef.current.right
+          ? "right"
+          : null;
+
+      if (!currentHand) {
+        startTypingPulse(incomingHand);
+        return;
+      }
+
+      if (incomingHand !== currentHand && queuedTypingHandRef.current !== incomingHand) {
+        queuedTypingHandRef.current = incomingHand;
+      }
+    });
+  }, [active, activeCodes, hasActiveKeys, leftHandActive, rightHandActive]);
+
+  useEffect(() => () => {
+    if (typingPulseTimerRef.current) clearTimeout(typingPulseTimerRef.current);
+  }, []);
+
+  useEffect(() => {
+    if (active) return;
+    if (typingPulseTimerRef.current) clearTimeout(typingPulseTimerRef.current);
+    typingPulseTimerRef.current = null;
+    activeKeySignatureRef.current = "";
+    queuedTypingHandRef.current = null;
+    const restingPulse = { ...typingPulseRef.current, left: false, right: false };
+    typingPulseRef.current = restingPulse;
+    setTypingPulse(restingPulse);
+  }, [active]);
+
+  const leftHandTyping = typingPulse.left;
+  const rightHandTyping = typingPulse.right;
   // Hover restores the original full typing-preview loop. Real typing always
   // wins: while any compatible key is held, the hand follows only the
   // keyboard window's active-key state and never keeps an idle loop alive.
-  const shouldHoverAnimate = isHovered && !hasActiveKeys;
+  const shouldHoverAnimate = isHovered && !hasActiveKeys && !leftHandTyping && !rightHandTyping;
   const restingSparkPath = "M 50 25 C 50 15, 35 15, 45 8 C 55 1, 55 12, 50 15 C 45 18, 55 30, 50 25";
   const activeSparkPath = "M 50 25 C 45 10, 35 10, 45 5 C 55 -5, 60 10, 50 12 C 40 14, 55 30, 50 25";
   const hoverSparkPath = "M 50 25 C 47 12, 37 12, 47 7 C 57 -3, 62 12, 52 14 C 42 16, 57 32, 50 25";
@@ -98,9 +189,11 @@ export function AnimatedPracticeIcon({
 
 
         <motion.g
+          key={`practice-left-pulse-${leftHandTyping ? typingPulse.run : "rest"}`}
+          initial={leftHandTyping ? { y: 0, rotate: 0 } : false}
           animate={
-            leftHandActive
-              ? { y: -5, rotate: 2 }
+            leftHandTyping
+              ? { y: [0, -12, 0], rotate: [0, 6, 0] }
               : shouldHoverAnimate
                 ? {
                     y: [0, -6, 2, -4, 0, -5, 0],
@@ -109,8 +202,8 @@ export function AnimatedPracticeIcon({
                 : { y: 0, rotate: 0 }
           }
           transition={
-            leftHandActive
-              ? { duration: 0.1, ease: "easeOut" }
+            leftHandTyping
+              ? { duration: 0.2, times: [0, 0.38, 1], ease: "easeOut" }
               : shouldHoverAnimate
                 ? { duration: 0.9, repeat: Infinity, ease: "easeInOut" }
                 : { type: "spring", stiffness: 70, damping: 18 }
@@ -124,9 +217,11 @@ export function AnimatedPracticeIcon({
 
         {/* Right Hand */}
         <motion.g
+          key={`practice-right-pulse-${rightHandTyping ? typingPulse.run : "rest"}`}
+          initial={rightHandTyping ? { y: 0, rotate: 0 } : false}
           animate={
-            rightHandActive
-              ? { y: -5, rotate: -2 }
+            rightHandTyping
+              ? { y: [0, -12, 0], rotate: [0, -6, 0] }
               : shouldHoverAnimate
                 ? {
                     y: [0, -3, 0, -6, 2, -4, 0],
@@ -135,8 +230,8 @@ export function AnimatedPracticeIcon({
                 : { y: 0, rotate: 0 }
           }
           transition={
-            rightHandActive
-              ? { duration: 0.1, ease: "easeOut" }
+            rightHandTyping
+              ? { duration: 0.2, times: [0, 0.38, 1], ease: "easeOut" }
               : shouldHoverAnimate
                 ? { duration: 0.85, repeat: Infinity, delay: 0.1, ease: "easeInOut" }
                 : { type: "spring", stiffness: 70, damping: 18 }

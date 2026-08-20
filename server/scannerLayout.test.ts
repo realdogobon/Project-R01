@@ -261,4 +261,75 @@ describe("scanner action-bar layout contract", () => {
     expect(settingsSource).toContain('layoutId={themeIndicatorLayoutId}');
     expect(settingsSource).toContain('initial={false}');
   });
+
+  it("keeps Exam records but excludes them from progression and false accuracy reporting", () => {
+    const workspaceSource = fs.readFileSync(path.resolve(import.meta.dirname, "../client/src/pages/Workspace.tsx"), "utf8");
+    const dashboardSource = fs.readFileSync(path.resolve(import.meta.dirname, "../client/src/components/dashboard/WorkspaceDashboard.tsx"), "utf8");
+    const authSource = fs.readFileSync(path.resolve(import.meta.dirname, "../client/src/contexts/AuthContext.tsx"), "utf8");
+    const progressionSource = fs.readFileSync(path.resolve(import.meta.dirname, "../client/src/lib/progression.ts"), "utf8");
+
+    expect(authSource).toContain("accuracy: number | null;");
+    expect(authSource).toContain('if (type === "Practice") {');
+    expect(authSource).toContain("applyPracticeSessionToProgression(");
+    expect(progressionSource).toContain('session.type === "Practice"');
+    expect(progressionSource).toContain('if (normalized.completedAt || normalized.creditedSessionIds.includes(session.id) || !isQualifyingPracticeSession');
+    expect(workspaceSource).toContain("getProgressionSummary(progression)");
+    expect(dashboardSource).toContain("getProgressionSummary(progression)");
+    expect(workspaceSource).toContain('wpm || 0,\n        null,\n        "Exam",');
+    expect(workspaceSource).toContain('wpm || 0,\n          null,\n          "Exam",');
+    expect(workspaceSource).not.toContain('99,\n        "Exam",');
+    expect(dashboardSource).toContain("const scoredPracticeSessions = sessions.filter(");
+    expect(dashboardSource).toContain('session.type === "Practice" && typeof session.accuracy === "number"');
+    expect(dashboardSource).toContain(': "—"}');
+  });
+
+  it("persists one-time Practice level milestones and presents the real progress handoff", () => {
+    const dashboardSource = fs.readFileSync(path.resolve(import.meta.dirname, "../client/src/components/dashboard/WorkspaceDashboard.tsx"), "utf8");
+    const authSource = fs.readFileSync(path.resolve(import.meta.dirname, "../client/src/contexts/AuthContext.tsx"), "utf8");
+
+    expect(authSource).toContain('export interface PendingLevelUpMilestone');
+    expect(authSource).toContain('if (type === "Practice") {');
+    expect(authSource).toContain('applyPracticeSessionToProgression(');
+    expect(authSource).toContain('previousLevelGoal: typeof milestone.previousLevelGoal === "number" ? milestone.previousLevelGoal : 1000');
+    expect(authSource).toContain('nextLevelGoal: typeof milestone.nextLevelGoal === "number" ? milestone.nextLevelGoal : 1000');
+    expect(dashboardSource).toContain('const [activeLevelUpMilestone, setActiveLevelUpMilestone]');
+    expect(dashboardSource).toContain('const duration = levelUpPhase === "filling" ? 900 : levelUpPhase === "hold" ? 2000 : 600;');
+    expect(dashboardSource).toContain('Math.round((displayedLevelUpMilestone.previousLevelXP / displayedLevelUpMilestone.previousLevelGoal) * 100)');
+    expect(dashboardSource).toContain('acknowledgePendingLevelUpMilestone(user.uid, activeLevelUpMilestone.id)');
+    expect(dashboardSource).toContain('const isDashboardOpenRef = useRef(isOpen);');
+    expect(dashboardSource).toContain('if (!isDashboardOpenRef.current || !user) return;');
+    expect(dashboardSource).toContain('if (!isDashboardOpenRef.current) return;');
+    expect(dashboardSource).toContain('{isHoldingLevelUp && (');
+  });
+
+  it("keeps real Practice keystrokes visibly pulsed through the title-bar typing glyph", () => {
+    const glyphSource = fs.readFileSync(path.resolve(import.meta.dirname, "../client/src/components/AnimatedModeIcons.tsx"), "utf8");
+
+    expect(glyphSource).toContain("const RAPID_TYPING_PULSE_MS = 220;");
+    expect(glyphSource).toContain("const [typingPulse, setTypingPulse] = useState({ left: false, right: false, run: 0 });");
+    expect(glyphSource).toContain("const activeKeySignatureRef = useRef(\"\");");
+    expect(glyphSource).toContain("const signature = [...activeCodes].sort().join(\"|\");");
+    expect(glyphSource).toContain("const typingPulseRef = useRef({ left: false, right: false, run: 0 });");
+    expect(glyphSource).toContain("const queuedTypingHandRef = useRef<TypingHand | null>(null);");
+    expect(glyphSource).toContain("const startTypingPulse = (hand: TypingHand): void => {");
+    expect(glyphSource).toContain("run: typingPulseRef.current.run + 1,");
+    expect(glyphSource).toContain('left: hand === "left",');
+    expect(glyphSource).toContain('right: hand === "right",');
+    expect(glyphSource).toContain('if (code === "Space") return ["right"];');
+    expect(glyphSource).toContain("const leftHandActive = activeCodes.some((code) => leftHandKeyCodes.has(code));");
+    expect(glyphSource).toContain('const rightHandActive = activeCodes.some((code) => rightHandKeyCodes.has(code) || code === "Space");');
+    expect(glyphSource).toContain("if (incomingHand !== currentHand && queuedTypingHandRef.current !== incomingHand)");
+    expect(glyphSource).not.toContain("const queuedTypingPulseRef = useRef({ left: false, right: false });");
+    expect(glyphSource).not.toContain("const startTypingPulse = (hands: { left: boolean; right: boolean }): void => {");
+    expect(glyphSource).toContain("setTimeout(() => {");
+    expect(glyphSource).toContain("}, RAPID_TYPING_PULSE_MS);");
+    expect(glyphSource).toContain("const leftHandTyping = typingPulse.left;");
+    expect(glyphSource).toContain("const rightHandTyping = typingPulse.right;");
+    expect(glyphSource).toContain("key={`practice-left-pulse-${leftHandTyping ? typingPulse.run : \"rest\"}`}");
+    expect(glyphSource).toContain("key={`practice-right-pulse-${rightHandTyping ? typingPulse.run : \"rest\"}`}");
+    expect(glyphSource).toContain("? { y: [0, -12, 0], rotate: [0, 6, 0] }");
+    expect(glyphSource).toContain("? { y: [0, -12, 0], rotate: [0, -6, 0] }");
+    expect(glyphSource).toContain('? { duration: 0.2, times: [0, 0.38, 1], ease: "easeOut" }');
+    expect(glyphSource).toContain("useEffect(() => () => {");
+  });
 });

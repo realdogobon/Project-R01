@@ -69,6 +69,7 @@ import { PracticeMode } from "./PracticeMode";
 import { DocumentScannerModal } from "../components/DocumentScannerModal";
 import { LibraryHub } from "../components/dashboard/LibraryHub";
 import { useAuth, getAvatarColor } from "../contexts/AuthContext";
+import { getProgressionSummary } from "../lib/progression";
 import { AccountPicker } from "../components/AccountPicker";
 import type { PracticeConfig } from "../pages/PracticeMode";
 import { AuthModal } from "../components/modals/AuthModal";
@@ -429,25 +430,10 @@ export default function Workspace() {
     }
   };
 
-  const { user, signOut, addSession, saveFile: saveFileToCloud, sessions, linkedAccounts, guestUid, switchToAccount, removeLinkedAccount } = useAuth();
-
-  const totalXP = React.useMemo(() => {
-    return (sessions || []).reduce((acc, s) => {
-      const base = s.type === "Exam" ? 250 : 120;
-      const speedBonus = s.speed * (s.type === "Exam" ? 6 : 3);
-      const precisionBonus = s.accuracy >= 95 ? 50 : 0;
-      return acc + base + speedBonus + precisionBonus;
-    }, 0);
-  }, [sessions]);
-
-  const level = Math.floor(totalXP / 1000) + 1;
-  const displayRankTitle = React.useMemo(() => {
-    if (level >= 10) return "Legendary Typist";
-    if (level >= 7) return "Grand Archivist";
-    if (level >= 4) return "Speed Sage";
-    if (level >= 2) return "Adept Scribe";
-    return "Novice Copyist";
-  }, [level]);
+  const { user, signOut, addSession, saveFile: saveFileToCloud, sessions, progression, linkedAccounts, guestUid, switchToAccount, removeLinkedAccount } = useAuth();
+  const progressionSummary = React.useMemo(() => getProgressionSummary(progression), [progression]);
+  const level = progressionSummary.level;
+  const displayRankTitle = progressionSummary.title;
   const { accent, fontCssFamily } = useSettings();
   useSoundEngine();
   useAmbientEngine();
@@ -3291,7 +3277,7 @@ export default function Workspace() {
 
       addSession(
         wpm || 0,
-        99,
+        null,
         "Exam",
         Math.floor(durationSeconds),
         `Exam - ${fileName}`,
@@ -3323,7 +3309,7 @@ export default function Workspace() {
       try {
         await addSession(
           wpm || 0,
-          99,
+          null,
           "Exam",
           Math.floor(durationSeconds),
           `Exam - ${fileName}`,

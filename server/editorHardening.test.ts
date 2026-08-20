@@ -122,7 +122,7 @@ describe("approved editor hardening contracts", () => {
     expect(preview).toMatch(/…$/);
   });
 
-  it("layers the Practice hover preview beneath real keyboard-driven hand movement", () => {
+  it("layers the Practice hover preview beneath distinct real keyboard-driven hand strokes", () => {
     const icons = readProjectFile("client/src/components/AnimatedModeIcons.tsx");
     const practiceIcon = icons.slice(icons.indexOf("export function AnimatedPracticeIcon"), icons.indexOf("export function AnimatedWriteIcon"));
     const workspace = readProjectFile("client/src/pages/Workspace.tsx");
@@ -133,10 +133,23 @@ describe("approved editor hardening contracts", () => {
     expect(practiceIcon).toContain("leftHandKeyCodes");
     expect(practiceIcon).toContain("rightHandKeyCodes");
     expect(practiceIcon).toContain("const hasActiveKeys = leftHandActive || rightHandActive");
-    expect(practiceIcon).toContain("const shouldHoverAnimate = isHovered && !hasActiveKeys");
+    expect(practiceIcon).toContain("const shouldHoverAnimate = isHovered && !hasActiveKeys && !leftHandTyping && !rightHandTyping");
     expect(practiceIcon).not.toContain("window.addEventListener('keydown'");
-    expect(practiceIcon).toContain("leftHandActive\n              ? { duration: 0.1, ease: \"easeOut\" }");
-    expect(practiceIcon).toContain("rightHandActive\n              ? { duration: 0.1, ease: \"easeOut\" }");
+    expect(practiceIcon).toContain("const RAPID_TYPING_PULSE_MS = 220;");
+    expect(practiceIcon).toContain("const queuedTypingHandRef = useRef<TypingHand | null>(null);");
+    expect(practiceIcon).toContain('if (code === "Space") return ["right"];');
+    expect(practiceIcon).toContain("const leftHandActive = activeCodes.some((code) => leftHandKeyCodes.has(code));");
+    expect(practiceIcon).toContain('const rightHandActive = activeCodes.some((code) => rightHandKeyCodes.has(code) || code === "Space");');
+    expect(practiceIcon).not.toContain("const queuedTypingPulseRef = useRef({ left: false, right: false });");
+    expect(practiceIcon).toContain("const activeKeySignatureRef = useRef(\"\");");
+    expect(practiceIcon).toContain("const signature = [...activeCodes].sort().join(\"|\");");
+    expect(practiceIcon).toContain("const leftHandTyping = typingPulse.left;");
+    expect(practiceIcon).toContain("const rightHandTyping = typingPulse.right;");
+    expect(practiceIcon).toContain("key={`practice-left-pulse-${leftHandTyping ? typingPulse.run : \"rest\"}`}");
+    expect(practiceIcon).toContain("key={`practice-right-pulse-${rightHandTyping ? typingPulse.run : \"rest\"}`}");
+    expect(practiceIcon).toContain("? { y: [0, -12, 0], rotate: [0, 6, 0] }");
+    expect(practiceIcon).toContain("? { y: [0, -12, 0], rotate: [0, -6, 0] }");
+    expect(practiceIcon).toContain("? { duration: 0.2, times: [0, 0.38, 1], ease: \"easeOut\" }");
     expect(practiceIcon).toContain("y: [0, -6, 2, -4, 0, -5, 0]");
     expect(practiceIcon).toContain("rotate: [0, 4, -2, -3, 0, 2, 0]");
     expect(practiceIcon).toContain("duration: 0.9, repeat: Infinity, ease: \"easeInOut\"");
@@ -178,15 +191,62 @@ describe("approved editor hardening contracts", () => {
     expect(practice).toContain("latestCompletedResultRef.current = null;");
   });
 
-  it("uses a visibility-safe ResizeObserver guard for the Practice results graph", () => {
+  it("uses measured dimensions with an observer-safe fallback for the Practice results graph", () => {
     const practice = readProjectFile("client/src/pages/PracticeMode.tsx");
 
     expect(practice).toContain("function ResilientResultsChart");
-    expect(practice).toContain("new ResizeObserver(scheduleMeasure)");
+    expect(practice).toContain('"ResizeObserver" in window ? window.ResizeObserver : undefined');
     expect(practice).toContain("document.addEventListener(\"visibilitychange\", scheduleMeasure)");
+    expect(practice).toContain("visualViewport?.addEventListener(\"resize\", scheduleMeasure)");
+    expect(practice).toContain("lastMeasurementRef.current = \"\"");
+    expect(practice).toContain("hidden result screen can later return at exactly the same size");
+    expect(practice).toContain('"IntersectionObserver" in window ? window.IntersectionObserver : undefined');
+    expect(practice).toContain("let wasLayoutVisible: boolean | null = null;");
+    expect(practice).toContain("IntersectionObserver\n    // is a non-state-changing fallback only for desktop environments without it.");
+    expect(practice).toContain("if (isLayoutVisible) scheduleMeasure();");
+    expect(practice).toContain("visibilityObserver?.observe(container);");
+    expect(practice).toContain("visibilityObserver?.disconnect();");
+    expect(practice).toContain('const mutationObserver = "MutationObserver" in window');
+    expect(practice).toContain('attributeFilter: ["class", "style"]');
+    expect(practice).toContain("const startRecoveryPoll = () => {");
+    expect(practice).toContain("recoveryInterval = window.setInterval");
+    expect(practice).toContain("recoveryTimeout = window.setTimeout(stopRecoveryPoll, 2_000);");
+    expect(practice).toContain("stopRecoveryPoll();\n          scheduleMeasure();");
+    expect(practice).toContain("mutationObserver?.disconnect();");
+    expect(practice).toContain("children: (measurement: { width: number; height: number; revision: number })");
     expect(practice).toContain("data-practice-results-chart");
     expect(practice).toContain("<ResilientResultsChart>");
-    expect(practice).toContain("<ResponsiveContainer key={chartRevision}");
+    expect(practice).toContain("<LineChart key={chartRevision} width={width} height={height}");
+    expect(practice).not.toContain("<ResponsiveContainer key={chartRevision}");
+  });
+
+  it("resynchronizes the Practice caret after settled layout reflow and keeps the delayed focus cue non-interactive", () => {
+    const typingScreen = readProjectFile("client/src/components/typing/TypingScreen.tsx");
+    const typingEngine = readProjectFile("client/src/lib/typing-engine.ts");
+
+    expect(typingEngine).toContain("public resyncCaretAfterReflow()");
+    expect(typingEngine).toContain("this.updateScroll();");
+    expect(typingEngine).toContain("this.updateCursor(true);");
+    expect(typingEngine).toContain("private updateCursor(immediate = false)");
+    expect(typingEngine).toContain("this.isFirstCursorUpdate || immediate");
+
+    expect(typingScreen).toContain("const scheduleCaretResync = () =>");
+    expect(typingScreen).toContain("const observedEngine = engineRef.current;");
+    expect(typingScreen).toContain("engineRef.current === observedEngine");
+    expect(typingScreen).toContain("observedEngine.resyncCaretAfterReflow();");
+    expect(typingScreen).toContain('window.addEventListener("resize", onWindowResize)');
+    expect(typingScreen).toContain("cancelCaretResync();");
+    expect(typingScreen).toContain("const [isCaretResyncing, setIsCaretResyncing] = useState(false);");
+
+    expect(typingScreen).toContain("const [isFocusPromptVisible, setIsFocusPromptVisible] = useState(false);");
+    expect(typingScreen).toContain("window.setTimeout(() => setIsFocusPromptVisible(true), 1000)");
+    expect(typingScreen).toContain("{isFocusPromptVisible && (");
+    expect(typingScreen).toContain("pointer-events-none flex items-center justify-center");
+    expect(typingScreen).toContain("<MousePointer2");
+    expect(typingScreen).toContain("click or press any key to focus");
+    expect(typingScreen).toContain('isFocusPromptVisible && "opacity-25 blur-[4px]"');
+    expect(typingScreen).toContain('text-base text-center text-neutral-700 dark:text-neutral-300');
+    expect(typingScreen).not.toContain('className="absolute inset-0 z-40 flex cursor-pointer flex-col items-center justify-center gap-3 bg-white/45 dark:bg-[#111213]/45"');
   });
 
   it("uses a capital-R unified title-bar wordmark without a detached TSR divider", () => {

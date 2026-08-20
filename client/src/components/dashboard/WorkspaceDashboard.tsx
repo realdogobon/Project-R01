@@ -1,5 +1,5 @@
-import React, { useState, useTransition, useMemo } from "react";
-import { useAuth, TypingSession, CloudFile, LinkedAccountInfo, getAvatarColor } from "../../contexts/AuthContext";
+import React, { useState, useTransition, useMemo, useRef } from "react";
+import { useAuth, TypingSession, CloudFile, LinkedAccountInfo, getAvatarColor, PendingLevelUpMilestone, getPendingLevelUpMilestones, acknowledgePendingLevelUpMilestone } from "../../contexts/AuthContext";
 import { useSettings, THEME_OPTIONS } from "../../contexts/SettingsContext";
 import { useResizable } from "../../hooks/useResizable";
 import {
@@ -9,8 +9,10 @@ import {
   User, Trophy, Target, Shield, Zap, CheckCircle, Save, LogOut, Cloud, RefreshCw, PartyPopper, PlaySquare, Pause, RotateCcw,
   ArrowLeft, Plus, Minus, Lock, UserPlus
 } from "lucide-react";
-import { motion, AnimatePresence } from "motion/react";
+import { motion, AnimatePresence, useReducedMotion } from "motion/react";
 import { ExportEngine } from "../../lib/ExportEngine";
+import { getLevelDefinition, getProgressionSummary } from "../../lib/progression";
+import { LevelStateMarker } from "./LevelStateMarker";
 
 interface WorkspaceDashboardProps {
   isOpen: boolean;
@@ -21,7 +23,7 @@ interface WorkspaceDashboardProps {
 }
 
 export function WorkspaceDashboard({ isOpen, onClose, onLoadFileToEditor, onOpenAuth, onBeforeSwitch }: WorkspaceDashboardProps) {
-  const { user, sessions, files, deleteFile, deleteSession, signOut, updateProfile, guestUid, linkedAccounts, switchToAccount, removeLinkedAccount } = useAuth();
+  const { user, sessions, files, progression, achievements, deleteFile, deleteSession, signOut, updateProfile, guestUid, linkedAccounts, switchToAccount, removeLinkedAccount } = useAuth();
   const { accent } = useSettings();
 
   const [editName, setEditName] = useState("");
@@ -169,75 +171,94 @@ export function WorkspaceDashboard({ isOpen, onClose, onLoadFileToEditor, onOpen
     }
     return errors;
   }, [replaySession, dashboardReplayLog]);
-  // Simulated states for level up animation sequence
-  const [isSimulatingLevelUp, setIsSimulatingLevelUp] = useState(false);
-  const [simulatedLevel, setSimulatedLevel] = useState<number | null>(null);
-  const [simulatedProgress, setSimulatedProgress] = useState<number | null>(null);
-  const [showLevelUpAnim, setShowLevelUpAnim] = useState(false);
-
-  // Experience level calculation values
-  const totalXP = useMemo(() => {
-    return sessions.reduce((acc, s) => {
-      const base = s.type === "Exam" ? 250 : 120;
-      const speedBonus = s.speed * (s.type === "Exam" ? 6 : 3);
-      const precisionBonus = s.accuracy >= 95 ? 50 : 0;
-      return acc + base + speedBonus + precisionBonus;
-    }, 0);
-  }, [sessions]);
-
-  const XP_PER_LEVEL = 1000;
-  const level = Math.floor(totalXP / XP_PER_LEVEL) + 1;
-  const currentLevelXP = totalXP % XP_PER_LEVEL;
-  const progressPercent = Math.min(100, Math.round((currentLevelXP / XP_PER_LEVEL) * 100));
-
-  const [prevLevel, setPrevLevel] = useState(level);
-
-  // Check if we need to show level up animation on mount
+  // A real Practice crossing is persisted before this UI opens. It is only
+  // acknowledged after the user has seen the full handoff sequence.
+  const [activeLevelUpMilestone, setActiveLevelUpMilestone] = useState<PendingLevelUpMilestone | null>(null);
+  const [levelUpPhase, setLevelUpPhase] = useState<"filling" | "hold" | "handoff" | null>(null);
+  const [milestoneVisualProgress, setMilestoneVisualProgress] = useState<number | null>(null);
+  const prefersReducedMotion = useReducedMotion();
+  const isDashboardOpenRef = useRef(isOpen);
   React.useEffect(() => {
-    if (!user) return;
-    const key = `typing_suite_last_seen_level_${user.uid}`;
-    const lastSeenStr = localStorage.getItem(key);
-    const lastSeenLevel = lastSeenStr ? parseInt(lastSeenStr) : level;
+    isDashboardOpenRef.current = isOpen;
+  }, [isOpen]);
+  // Read the durable event synchronously for the first open render. The state
+  // effect below claims it immediately afterwards; this prevents a one-frame
+  // flash of the settled destination level before the earned handoff begins.
+  const openingLevelUpMilestone = useMemo(() => {
+    if (!user || !isOpen || activeLevelUpMilestone) return null;
+    return getPendingLevelUpMilestones(user.uid)[0] ?? null;
+  }, [user?.uid, isOpen, activeLevelUpMilestone]);
 
-    if (!lastSeenStr || level <= lastSeenLevel) {
-      if (level !== lastSeenLevel) {
-        localStorage.setItem(key, level.toString());
-      }
-      return;
+  const progressionSummary = useMemo(() => getProgressionSummary(progression), [progression]);
+  const level = progressionSummary.level;
+  const progressPercent = progressionSummary.progressPercent;
+
+  React.useEffect(() => {
+    if (!user || !isOpen || activeLevelUpMilestone) return;
+    const nextMilestone = getPendingLevelUpMilestones(user.uid)[0];
+    if (!nextMilestone) return;
+    setActiveLevelUpMilestone(nextMilestone);
+    setMilestoneVisualProgress(
+      prefersReducedMotion
+        ? Math.round((nextMilestone.nextLevelXP / nextMilestone.nextLevelGoal) * 100)
+        : Math.round((nextMilestone.previousLevelXP / nextMilestone.previousLevelGoal) * 100),
+    );
+    setLevelUpPhase(prefersReducedMotion ? "handoff" : "filling");
+  }, [user?.uid, isOpen, progression.level, progression.levelCredits, activeLevelUpMilestone, prefersReducedMotion]);
+
+  React.useEffect(() => {
+    if (!activeLevelUpMilestone || !levelUpPhase || !isOpen || prefersReducedMotion) return;
+    if (levelUpPhase !== "filling" && levelUpPhase !== "handoff") return;
+    const nextProgress = levelUpPhase === "filling"
+      ? 100
+      : Math.round((activeLevelUpMilestone.nextLevelXP / activeLevelUpMilestone.nextLevelGoal) * 100);
+    const frame = window.requestAnimationFrame(() => setMilestoneVisualProgress(nextProgress));
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeLevelUpMilestone, levelUpPhase, isOpen, prefersReducedMotion]);
+
+  React.useEffect(() => {
+    if (!activeLevelUpMilestone || !levelUpPhase || !isOpen) return;
+
+    if (prefersReducedMotion) {
+      const acknowledgement = window.setTimeout(() => {
+        if (!isDashboardOpenRef.current || !user) return;
+        acknowledgePendingLevelUpMilestone(user.uid, activeLevelUpMilestone.id);
+        setActiveLevelUpMilestone(null);
+        setLevelUpPhase(null);
+      }, 0);
+      return () => window.clearTimeout(acknowledgement);
     }
 
-    // Only play animation if the dashboard is currently visible
-    if (!isOpen) return;
-
-    setIsSimulatingLevelUp(true);
-    setSimulatedLevel(level - 1);
-    
-    let current = 0;
-    const interval = setInterval(() => {
-      current = Math.min(100, current + 2);
-      setSimulatedProgress(current);
-      
-      if (current >= 100) {
-        clearInterval(interval);
-        
-        setSimulatedLevel(level);
-        setShowLevelUpAnim(true);
-        
-        localStorage.setItem(key, level.toString());
-        
-        setTimeout(() => {
-          setShowLevelUpAnim(false);
-          setTimeout(() => {
-            setIsSimulatingLevelUp(false);
-            setSimulatedLevel(null);
-            setSimulatedProgress(null);
-          }, 600);
-        }, 10000);
+    const duration = levelUpPhase === "filling" ? 900 : levelUpPhase === "hold" ? 2000 : 600;
+    const timeout = window.setTimeout(() => {
+      // Closing the Dashboard must never consume the persisted reward. Its
+      // visual state can reset, and reopening will reclaim the same milestone.
+      if (!isDashboardOpenRef.current) return;
+      if (levelUpPhase === "filling") {
+        setLevelUpPhase("hold");
+        return;
       }
-    }, 30);
+      if (levelUpPhase === "hold") {
+        setMilestoneVisualProgress(0);
+        setLevelUpPhase("handoff");
+        return;
+      }
+      if (user) acknowledgePendingLevelUpMilestone(user.uid, activeLevelUpMilestone.id);
+      setActiveLevelUpMilestone(null);
+      setLevelUpPhase(null);
+      setMilestoneVisualProgress(null);
+    }, duration);
 
-    return () => clearInterval(interval);
-  }, [level, user?.uid, isOpen]);
+    return () => window.clearTimeout(timeout);
+  }, [activeLevelUpMilestone, levelUpPhase, isOpen, prefersReducedMotion, user?.uid]);
+
+  React.useEffect(() => {
+    if (!isOpen && activeLevelUpMilestone) {
+      setActiveLevelUpMilestone(null);
+      setLevelUpPhase(null);
+      setMilestoneVisualProgress(null);
+    }
+  }, [isOpen, activeLevelUpMilestone]);
 
   // Effect for replay animation
   React.useEffect(() => {
@@ -287,8 +308,25 @@ export function WorkspaceDashboard({ isOpen, onClose, onLoadFileToEditor, onOpen
     }
   }, [replayIndex]);
 
-  const displayLevel = simulatedLevel !== null ? simulatedLevel : level;
-  const displayProgress = simulatedProgress !== null ? simulatedProgress : progressPercent;
+  const displayedLevelUpMilestone = activeLevelUpMilestone ?? openingLevelUpMilestone;
+  const displayedLevelUpPhase = levelUpPhase ?? (openingLevelUpMilestone
+    ? (prefersReducedMotion ? "handoff" : "filling")
+    : null);
+  const isHoldingLevelUp = displayedLevelUpPhase === "hold";
+  const displayLevel = displayedLevelUpMilestone
+    ? (displayedLevelUpPhase === "handoff" ? displayedLevelUpMilestone.nextLevel : displayedLevelUpMilestone.previousLevel)
+    : level;
+  const displayProgress = displayedLevelUpMilestone
+    ? (milestoneVisualProgress ?? (displayedLevelUpPhase === "handoff"
+      ? 0
+      : Math.round((displayedLevelUpMilestone.previousLevelXP / displayedLevelUpMilestone.previousLevelGoal) * 100)))
+    : progressPercent;
+  const levelBarInitialProgress = displayedLevelUpMilestone
+    ? (displayedLevelUpPhase === "handoff" ? 0 : Math.round((displayedLevelUpMilestone.previousLevelXP / displayedLevelUpMilestone.previousLevelGoal) * 100))
+    : displayProgress;
+  const levelBarKey = displayedLevelUpMilestone
+    ? (displayedLevelUpPhase === "handoff" ? `${displayedLevelUpMilestone.id}-handoff` : displayedLevelUpMilestone.id)
+    : `settled-${level}`;
 
   const replayWordSegments = useMemo(() => {
     if (!replaySession || !replaySession.content) return { chars: [], segments: [] };
@@ -333,14 +371,13 @@ export function WorkspaceDashboard({ isOpen, onClose, onLoadFileToEditor, onOpen
     return Math.round((correct / replayedText.length) * 100);
   }, [replayedText, replayWordSegments]);
 
-  const displayRankTitle = useMemo(() => {
-    const lvl = simulatedLevel !== null ? simulatedLevel : level;
-    if (lvl >= 10) return "Legendary Typist";
-    if (lvl >= 7) return "Grand Archivist";
-    if (lvl >= 4) return "Speed Sage";
-    if (lvl >= 2) return "Adept Scribe";
-    return "Novice Copyist";
-  }, [level, simulatedLevel]);
+  const displayRankTitle = getLevelDefinition(displayLevel).title;
+  const displayLevelGoal = displayedLevelUpMilestone
+    ? (displayedLevelUpPhase === "handoff" ? displayedLevelUpMilestone.nextLevelGoal : displayedLevelUpMilestone.previousLevelGoal)
+    : progressionSummary.requiredCredits;
+  const displayLevelCredits = displayedLevelUpMilestone
+    ? (displayedLevelUpPhase === "handoff" ? displayedLevelUpMilestone.nextLevelXP : Math.round((displayProgress / 100) * displayedLevelUpMilestone.previousLevelGoal))
+    : progressionSummary.credits;
 
   // Load Window Resize State to match Library and Scanner windows 1:1
   const { width, height, x, y, startResize } = useResizable({
@@ -409,7 +446,10 @@ export function WorkspaceDashboard({ isOpen, onClose, onLoadFileToEditor, onOpen
   };
 
   const handleShareSession = (session: TypingSession) => {
-    const text = `RoyScript TSR Suite - Practice Result\n-----------------------------------\nSpeed: ${session.speed} WPM\nAccuracy: ${session.accuracy}%\nMode: ${session.type} Run\nDuration: ${Math.floor(session.duration / 60)}m ${session.duration % 60}s\nPassage: "${session.passageTitle}"\nDate: ${new Date(session.date).toLocaleString()}\n-----------------------------------\nVerified on RoyScript TSR Suite.`;
+    const accuracyLine = session.type === "Practice" && typeof session.accuracy === "number"
+      ? `Accuracy: ${session.accuracy}%\n`
+      : "";
+    const text = `RoyScript TSR Suite - ${session.type} Result\n-----------------------------------\nSpeed: ${session.speed} WPM\n${accuracyLine}Mode: ${session.type} Run\nDuration: ${Math.floor(session.duration / 60)}m ${session.duration % 60}s\nPassage: "${session.passageTitle}"\nDate: ${new Date(session.date).toLocaleString()}\n-----------------------------------\nVerified on RoyScript TSR Suite.`;
     copyToClipboard(text);
   };
 
@@ -429,8 +469,14 @@ export function WorkspaceDashboard({ isOpen, onClose, onLoadFileToEditor, onOpen
   }, [sessions]);
 
   const avgAccuracy = useMemo(() => {
-    if (sessions.length === 0) return 0;
-    return Math.round(sessions.reduce((acc, s) => acc + s.accuracy, 0) / sessions.length);
+    const scoredPracticeSessions = sessions.filter(
+      (session) => session.type === "Practice" && typeof session.accuracy === "number"
+    );
+    if (scoredPracticeSessions.length === 0) return 0;
+    return Math.round(
+      scoredPracticeSessions.reduce((acc, session) => acc + (session.accuracy as number), 0) /
+      scoredPracticeSessions.length
+    );
   }, [sessions]);
 
   const totalWordsTyped = useMemo(() => {
@@ -442,59 +488,8 @@ export function WorkspaceDashboard({ isOpen, onClose, onLoadFileToEditor, onOpen
     }, 0);
   }, [sessions]);
 
-  // Premium Achievement Badges (Uses vector-style icons instead of emojis)
-  const badges = useMemo(() => {
-    return [
-      {
-        id: "speed_30",
-        title: "Swift Runner",
-        desc: "Exceeded 30 WPM speed run",
-        unlocked: peakWPM >= 30,
-        icon: Zap,
-        rule: "WPM >= 30"
-      },
-      {
-        id: "speed_60",
-        title: "Sonic Gazelle",
-        desc: "Broke the 60 WPM barrier",
-        unlocked: peakWPM >= 60,
-        icon: Flame,
-        rule: "WPM >= 60"
-      },
-      {
-        id: "speed_100",
-        title: "Warp Master",
-        desc: "Phenomenal 100+ WPM score",
-        unlocked: peakWPM >= 100,
-        icon: Trophy,
-        rule: "WPM >= 100"
-      },
-      {
-        id: "accuracy_100",
-        title: "Sniper Target",
-        desc: "A perfect 100% precision score",
-        unlocked: sessions.some(s => s.accuracy === 100),
-        icon: Target,
-        rule: "100% Accuracy"
-      },
-      {
-        id: "scribe_5",
-        title: "Archivist",
-        desc: "Archived 5+ cloud documents",
-        unlocked: files.length >= 5,
-        icon: Shield,
-        rule: "Cloud Files >= 5"
-      },
-      {
-        id: "veteran_10",
-        title: "Super Trainer",
-        desc: "Completed over 10 practice trials",
-        unlocked: sessions.length >= 10,
-        icon: Award,
-        rule: "Runs >= 10"
-      }
-    ];
-  }, [peakWPM, sessions, files]);
+  const badges = achievements;
+  const achievementIconByCategory = { Foundation: Award, Velocity: Zap, Precision: Target, Endurance: Flame, Consistency: Shield, Craft: Trophy };
 
   // Filtering and sorting lists by search query, filters, and criteria
   const filteredSessions = useMemo(() => {
@@ -527,7 +522,9 @@ export function WorkspaceDashboard({ isOpen, onClose, onLoadFileToEditor, onOpen
         return b.speed - a.speed;
       }
       if (sessionSort === "accuracy") {
-        return b.accuracy - a.accuracy;
+        const accuracyB = typeof b.accuracy === "number" ? b.accuracy : -1;
+        const accuracyA = typeof a.accuracy === "number" ? a.accuracy : -1;
+        return accuracyB - accuracyA;
       }
       return 0;
     });
@@ -1160,9 +1157,9 @@ export function WorkspaceDashboard({ isOpen, onClose, onLoadFileToEditor, onOpen
 
               {[
                 { id: "overview", label: "Profile Overview" },
-                { id: "sessions", label: "Session History", badge: sessions.length },
-                { id: "files", label: "Cloud Drafts", badge: files.length },
-                { id: "achievements", label: "Achievements", badge: badges.filter(b => b.unlocked).length }
+                { id: "sessions", label: "Session History" },
+                { id: "files", label: "Cloud Drafts" },
+                { id: "achievements", label: "Achievements" }
               ].map(item => {
                 const isActive = activeTab === item.id;
                 return (
@@ -1185,11 +1182,6 @@ export function WorkspaceDashboard({ isOpen, onClose, onLoadFileToEditor, onOpen
                       </div>
                       <span className="text-[13px] text-[#1E1E1F] dark:text-[#EAEAEA]">{item.label}</span>
                     </div>
-                    {item.badge !== undefined && (
-                      <span className="text-[11px] font-mono text-gray-400 dark:text-zinc-500 px-1.5">
-                        {item.badge}
-                      </span>
-                    )}
                   </label>
                 );
               })}
@@ -1347,116 +1339,32 @@ export function WorkspaceDashboard({ isOpen, onClose, onLoadFileToEditor, onOpen
                 >
                   <div className="flex justify-between items-center mb-2.5">
                     <span className="text-[11px] font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400 flex items-center gap-2">
-                      <div className="w-7 h-7 relative overflow-visible shrink-0 flex items-center justify-center">
-                        <AnimatePresence mode="wait">
-                          {!showLevelUpAnim ? (
-                            <motion.div
-                              key="ladder"
-                              initial={{ opacity: 0, scale: 0.8 }}
-                              animate={{ opacity: 1, scale: 1 }}
-                              exit={{ opacity: 0, scale: 0.8 }}
-                              transition={{ duration: 0.3 }}
-                              className="w-full h-full flex items-center justify-center"
-                            >
-                              <svg width="28" height="28" viewBox="0 0 28 28" fill="none" className="overflow-visible text-neutral-700 dark:text-neutral-300">
-                                {/* Ladder rails */}
-                                <line x1="9" y1="2" x2="9" y2="26" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" className="text-neutral-300 dark:text-neutral-700" />
-                                <line x1="19" y1="2" x2="19" y2="26" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" className="text-neutral-300 dark:text-neutral-700" />
-                                
-                                {/* Rungs */}
-                                {[6, 11, 16, 21].map(y => (
-                                  <line key={y} x1="9" y1={y} x2="19" y2={y} stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" className="text-neutral-300 dark:text-neutral-700" />
-                                ))}
-
-                                {/* Boy climbing */}
-                                {(() => {
-                                  const boyY = 20 - (displayProgress / 100) * 16;
-                                  return (
-                                    <g style={{ transform: `translateY(${boyY}px)`, transition: 'transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)' }}>
-                                      {/* Head */}
-                                      <circle cx="14" cy="2" r="2.2" fill="currentColor" />
-                                      {/* Cap */}
-                                      <path d="M 11.8 2 A 2.2 2.2 0 0 1 16.2 2 Z" fill={themeAccentColor} />
-                                      {/* Torso */}
-                                      <rect x="12.5" y="4" width="3" height="5.5" rx="1" fill={themeAccentColor} />
-                                      {/* Arms reaching to rails */}
-                                      <path d="M 12.5 5 Q 9 3.5 9 5" stroke={themeAccentColor} strokeWidth="1" strokeLinecap="round" fill="none" />
-                                      <path d="M 15.5 5 Q 19 3.5 19 5" stroke={themeAccentColor} strokeWidth="1" strokeLinecap="round" fill="none" />
-                                      {/* Legs */}
-                                      <path d="M 13 9.5 L 11 11.5" stroke="currentColor" strokeWidth="1" strokeLinecap="round" />
-                                      <path d="M 15 9.5 L 17 11.5" stroke="currentColor" strokeWidth="1" strokeLinecap="round" />
-                                    </g>
-                                  );
-                                })()}
-                              </svg>
-                            </motion.div>
-                          ) : (
-                            <motion.div
-                              key="trophy"
-                              initial={{ opacity: 0, scale: 0.6, rotate: -20 }}
-                              animate={{ opacity: 1, scale: 1.1, rotate: 0 }}
-                              exit={{ opacity: 0, scale: 0.6 }}
-                              transition={{ type: "spring", stiffness: 200, damping: 12 }}
-                              className="w-full h-full flex items-center justify-center"
-                            >
-                              <svg width="28" height="28" viewBox="0 0 28 28" fill="none" className="overflow-visible text-neutral-700 dark:text-neutral-300">
-                                {/* Small pedestal */}
-                                <rect x="7" y="24" width="14" height="2.5" rx="0.5" fill="currentColor" className="text-neutral-300 dark:text-neutral-700" />
-                                
-                                {/* Boy holding trophy */}
-                                <g>
-                                  {/* Head */}
-                                  <circle cx="14" cy="11" r="2.2" fill="currentColor" />
-                                  {/* Cap */}
-                                  <path d="M 11.8 11 A 2.2 2.2 0 0 1 16.2 11 Z" fill={themeAccentColor} />
-                                  {/* Torso */}
-                                  <rect x="12.5" y="13.2" width="3" height="6" rx="1" fill={themeAccentColor} />
-                                  {/* Arms raised holding trophy */}
-                                  <path d="M 12.5 14.5 Q 9 12 7 8" stroke={themeAccentColor} strokeWidth="1" strokeLinecap="round" fill="none" />
-                                  <path d="M 15.5 14.5 Q 19 12 21 8" stroke={themeAccentColor} strokeWidth="1" strokeLinecap="round" fill="none" />
-                                  {/* Legs */}
-                                  <line x1="13" y1="19.2" x2="12" y2="24" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
-                                  <line x1="15" y1="19.2" x2="16" y2="24" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
-
-                                  {/* Trophy */}
-                                  <g transform="translate(10.5, 3)">
-                                    {/* Cup */}
-                                    <path d="M 1 1 H 6 V 3.5 C 6 4.8 4.8 5.5 3.5 5.5 C 2.2 5.5 1 4.8 1 3.5 Z" fill="#FBBF24" />
-                                    {/* Base */}
-                                    <line x1="3.5" y1="5.5" x2="3.5" y2="7" stroke="#D97706" strokeWidth="0.8" />
-                                    <line x1="2" y1="7" x2="5" y2="7" stroke="#D97706" strokeWidth="0.8" />
-                                  </g>
-                                </g>
-
-                                {/* Animated Sparkles */}
-                                <g className="animate-pulse">
-                                  <circle cx="6" cy="4" r="1" fill="#FBBF24" className="animate-ping" style={{ animationDuration: '1.2s' }} />
-                                  <circle cx="22" cy="5" r="0.8" fill="#FBBF24" />
-                                  <circle cx="14" cy="1" r="1.2" fill="#FBBF24" className="animate-ping" style={{ animationDuration: '1.8s' }} />
-                                </g>
-                              </svg>
-                            </motion.div>
-                          )}
-                        </AnimatePresence>
-                      </div>
+                      <LevelStateMarker level={displayLevel} accentColor={themeAccentColor} celebrating={isHoldingLevelUp} />
                       Level {displayLevel} • {displayRankTitle}
                     </span>
                     <span className="text-[10px] font-mono font-medium text-neutral-400 dark:text-neutral-500">
-                      {isSimulatingLevelUp && displayProgress < 100 ? "Leveling..." : `${displayLevel === level ? currentLevelXP : 0} / ${XP_PER_LEVEL} XP`}
+                      {activeLevelUpMilestone && levelUpPhase === "filling"
+                        ? "Leveling..."
+                        : `${displayLevelCredits.toLocaleString()} / ${displayLevelGoal.toLocaleString()} qualifying sessions`}
                     </span>
                   </div>
                   <div className="w-full h-1 bg-neutral-200/60 dark:bg-neutral-800/60 rounded-full overflow-hidden relative">
                     <motion.div
-                      initial={{ width: 0 }}
+                      key={levelBarKey}
+                      initial={{ width: `${levelBarInitialProgress}%` }}
                       animate={{ width: `${displayProgress}%` }}
-                      transition={isSimulatingLevelUp ? { duration: 0.1, ease: "linear" } : { duration: 0.6, ease: "easeOut" }}
+                      transition={levelUpPhase === "filling"
+                        ? { duration: 0.9, ease: [0.22, 1, 0.36, 1] }
+                        : levelUpPhase === "handoff"
+                          ? { duration: prefersReducedMotion ? 0 : 0.6, ease: [0.22, 1, 0.36, 1] }
+                          : { duration: 0.6, ease: "easeOut" }}
                       className="h-full rounded-full"
                       style={{ backgroundColor: themeAccentColor }}
                     />
                   </div>
 
                   <AnimatePresence>
-                    {showLevelUpAnim && (
+                    {isHoldingLevelUp && (
                       <motion.div
                         initial={{ opacity: 0, height: 0, y: -5 }}
                         animate={{ opacity: 1, height: "auto", y: 0 }}
@@ -1473,6 +1381,22 @@ export function WorkspaceDashboard({ isOpen, onClose, onLoadFileToEditor, onOpen
                           <Sparkles className="w-3 h-3 text-neutral-400/60 dark:text-neutral-500/60 absolute -top-3 -left-2 animate-pulse" />
                           <Sparkles className="w-2.5 h-2.5 text-neutral-400/60 dark:text-neutral-500/60 absolute top-0.5 -right-3 animate-ping" />
                           <Sparkles className="w-2 h-2 text-neutral-400/60 dark:text-neutral-500/60 absolute -bottom-2 left-6 animate-pulse" />
+                          {!prefersReducedMotion && [
+                            { x: -18, y: -13, color: "#fb923c" },
+                            { x: -9, y: 13, color: "#fbbf24" },
+                            { x: 8, y: -16, color: "#f97316" },
+                            { x: 17, y: 10, color: "#fdba74" },
+                            { x: 24, y: -8, color: "#fb923c" },
+                          ].map((particle, index) => (
+                            <motion.span
+                              key={index}
+                              initial={{ opacity: 0, x: 0, y: 0, rotate: 0 }}
+                              animate={{ opacity: [0, 1, 0], x: particle.x, y: particle.y, rotate: 90 + index * 45 }}
+                              transition={{ duration: 0.75, delay: 0.08 + index * 0.04, ease: "easeOut" }}
+                              className="absolute left-1/2 top-1/2 h-1 w-1 rounded-[1px]"
+                              style={{ backgroundColor: particle.color }}
+                            />
+                          ))}
                         </div>
                       </motion.div>
                     )}
@@ -1607,7 +1531,9 @@ export function WorkspaceDashboard({ isOpen, onClose, onLoadFileToEditor, onOpen
                           <div className={`w-[85px] shrink-0 text-center flex ${isWide ? "block mb-0 py-0 border-b-0" : "items-center justify-between mb-1 py-1 border-b border-neutral-200/10 dark:border-neutral-800/10"}`}>
                             <span className={`${isWide ? "hidden" : ""} text-[9px] uppercase tracking-wider font-bold text-neutral-400`}>Accuracy</span>
                             <span className="font-semibold font-mono text-[13px] text-neutral-800 dark:text-neutral-200">
-                              {session.accuracy}%
+                              {session.type === "Practice" && typeof session.accuracy === "number"
+                                ? `${session.accuracy}%`
+                                : "—"}
                             </span>
                           </div>
 
@@ -1904,14 +1830,14 @@ export function WorkspaceDashboard({ isOpen, onClose, onLoadFileToEditor, onOpen
                 <div className="mb-6">
                   <h2 className="text-[18px] font-semibold tracking-tight text-neutral-800 dark:text-neutral-100">Milestones & Achievements</h2>
                   <p className="text-[12px] text-neutral-400 dark:text-neutral-500 mt-1">
-                    Your professional writing speedrun achievements and rewards.
+                    Permanent Practice and drafting milestones, earned through measured work.
                   </p>
                 </div>
 
                 {/* Achievements List */}
                 <div className="space-y-3">
                   {badges.map((b) => {
-                    const BadgeIcon = b.icon;
+                    const BadgeIcon = achievementIconByCategory[b.category];
                     return (
                       <div
                         key={b.id}
@@ -1930,11 +1856,14 @@ export function WorkspaceDashboard({ isOpen, onClose, onLoadFileToEditor, onOpen
                             <BadgeIcon className="w-4 h-4" style={{ color: b.unlocked ? themeAccentColor : undefined }} />
                           </div>
                           <div className="min-w-0">
+                            <p className="text-[8px] font-semibold uppercase tracking-[0.12em] text-neutral-400 dark:text-neutral-500 mb-0.5">
+                              {b.category}
+                            </p>
                             <h3 className="text-[13px] font-medium text-neutral-800 dark:text-neutral-100 tracking-tight">
                               {b.title}
                             </h3>
                             <p className="text-[10px] text-neutral-400 dark:text-neutral-500 mt-0.5">
-                              {b.desc}
+                              {b.description}
                             </p>
                           </div>
                         </div>
@@ -1961,7 +1890,7 @@ export function WorkspaceDashboard({ isOpen, onClose, onLoadFileToEditor, onOpen
                             </div>
                           ) : (
                             <span className="text-[9px] font-bold uppercase tracking-wider text-neutral-400 dark:text-neutral-500 bg-neutral-100 dark:bg-neutral-800 px-2 py-0.5 rounded-md">
-                              {b.rule}
+                              {b.current.toLocaleString()} / {b.target.toLocaleString()} · {b.rule}
                             </span>
                           )}
                         </div>

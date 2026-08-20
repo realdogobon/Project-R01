@@ -11,7 +11,7 @@ import { ClassicKeyboard, cn } from "../keyboard/ClassicKeyboard";
 import { DasKeyboard } from "../keyboard/das/DasKeyboard";
 import { useSettings } from "../../contexts/SettingsContext";
 import { useSoundEngine } from "../../hooks/useSoundEngine";
-import { ArrowLeft, RotateCcw, ShieldAlert, X, ArrowRight } from "lucide-react";
+import { ArrowLeft, RotateCcw, ShieldAlert, X, ArrowRight, MousePointer2 } from "lucide-react";
 import { TypingEngine, ReplayEvent } from "../../lib/typing-engine";
 import { SessionRecoveryOverlay } from "./SessionRecoveryOverlay";
 
@@ -318,6 +318,8 @@ export function TypingScreen({
   );
   const [strictViolation, setStrictViolation] = useState<string | null>(null);
   const [isFocused, setIsFocused] = useState(true);
+  const [isFocusPromptVisible, setIsFocusPromptVisible] = useState(false);
+  const [isCaretResyncing, setIsCaretResyncing] = useState(false);
 
 
   const [virtualShiftActive, setVirtualShiftActive] = useState(false);
@@ -329,6 +331,8 @@ export function TypingScreen({
   const wordsContainerRef = useRef<HTMLDivElement>(null);
   const cursorRef = useRef<HTMLDivElement>(null);
   const engineRef = useRef<TypingEngine | null>(null);
+  const caretResyncFrameRef = useRef<number | null>(null);
+  const caretResyncSettleFrameRef = useRef<number | null>(null);
 
   // Text preview box: how many whole lines it shows, and the pixel height
   // of one line — both computed from real measurements instead of a fixed
@@ -610,6 +614,20 @@ export function TypingScreen({
     return () => window.removeEventListener("keydown", handleGlobalKeyFocus, true);
   }, [isFocused, countdown, strictViolation]);
 
+  // Mirror Monkeytype's focus-notice timing: an accidental, brief blur does
+  // not interrupt the typing view, while a genuine unfocused state receives a
+  // calm input cue after the layout has remained idle for one second.
+  useEffect(() => {
+    const shouldShowPrompt = !isFocused && countdown === null && strictViolation === null;
+    if (!shouldShowPrompt) {
+      setIsFocusPromptVisible(false);
+      return;
+    }
+
+    const timer = window.setTimeout(() => setIsFocusPromptVisible(true), 1000);
+    return () => window.clearTimeout(timer);
+  }, [isFocused, countdown, strictViolation]);
+
   // After a tab switch the input loses focus (isFocused=false) and stays that
   // way until the user manually clicks or presses a key. Auto-refocus when the
   // tab becomes visible again so the Das keyboard is immediately live — RGB
@@ -784,6 +802,40 @@ export function TypingScreen({
   useEffect(() => {
     const outer = textAreaOuterRef.current;
     if (!outer) return;
+    let resizeSettleTimer: number | null = null;
+
+    const cancelCaretResync = () => {
+      if (caretResyncFrameRef.current !== null) {
+        cancelAnimationFrame(caretResyncFrameRef.current);
+        caretResyncFrameRef.current = null;
+      }
+      if (caretResyncSettleFrameRef.current !== null) {
+        cancelAnimationFrame(caretResyncSettleFrameRef.current);
+        caretResyncSettleFrameRef.current = null;
+      }
+    };
+
+    const scheduleCaretResync = () => {
+      const observedEngine = engineRef.current;
+      if (!observedEngine || observedEngine.isFinished()) return;
+
+      setIsCaretResyncing(true);
+      cancelCaretResync();
+      // The first frame allows React/CSS reflow to commit; the second samples
+      // the settled character geometry. Capturing this exact engine instance
+      // prevents a stale resize callback from touching a replacement session.
+      caretResyncFrameRef.current = requestAnimationFrame(() => {
+        caretResyncSettleFrameRef.current = requestAnimationFrame(() => {
+          if (engineRef.current === observedEngine && !observedEngine.isFinished()) {
+            observedEngine.resyncCaretAfterReflow();
+          }
+          setIsCaretResyncing(false);
+          caretResyncFrameRef.current = null;
+          caretResyncSettleFrameRef.current = null;
+        });
+      });
+    };
+
     const recompute = () => {
       const probeH = lineProbeRef.current?.offsetHeight || 0;
       const lineH = probeH > 0 ? probeH + 4 : 44;
@@ -793,11 +845,23 @@ export function TypingScreen({
       const clamped = Math.max(MIN_LINES, Math.min(PREFERRED_MAX_LINES, fitLines || MIN_LINES));
       setLineHeightPx(lineH);
       setVisibleLines(clamped);
+      scheduleCaretResync();
     };
     recompute();
     const observer = new ResizeObserver(recompute);
     observer.observe(outer);
-    return () => observer.disconnect();
+    const onWindowResize = () => {
+      if (resizeSettleTimer !== null) window.clearTimeout(resizeSettleTimer);
+      resizeSettleTimer = window.setTimeout(scheduleCaretResync, 120);
+    };
+    window.addEventListener("resize", onWindowResize);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", onWindowResize);
+      if (resizeSettleTimer !== null) window.clearTimeout(resizeSettleTimer);
+      cancelCaretResync();
+      setIsCaretResyncing(false);
+    };
   }, []);
 
 
@@ -923,14 +987,24 @@ export function TypingScreen({
         </div>
 
         <div className="relative w-full overflow-hidden transition-[height] duration-150 ease-out" style={{ height: lineHeightPx * visibleLines }} onClick={() => inputRef.current?.focus()}>
-          <div ref={wordsContainerRef} className="relative w-full text-2xl leading-relaxed flex flex-wrap gap-x-2.5 gap-y-1 transition-transform duration-100 ease-out will-change-transform" style={{ fontFamily: "var(--app-font-family, monospace)" }}>
+          <div
+            ref={wordsContainerRef}
+            className={cn(
+              "relative w-full text-2xl leading-relaxed flex flex-wrap gap-x-2.5 gap-y-1 will-change-transform",
+              isFocusPromptVisible && "opacity-25 blur-[4px]",
+            )}
+            style={{
+              fontFamily: "var(--app-font-family, monospace)",
+              transition: "transform 100ms ease-out, opacity 250ms ease, filter 250ms ease",
+            }}
+          >
 
 
             <div
                key={`cursor-${testSessionId}`}
                id="typing-hardware-cursor"
                ref={cursorRef}
-               className={cn("absolute top-0 left-0 w-0.5 h-[1.2em] rounded-full z-30 pointer-events-none bg-[var(--typing-accent)] typing-cursor", (isFocused && countdown === null) ? "opacity-100" : "opacity-0")}
+               className={cn("absolute top-0 left-0 w-0.5 h-[1.2em] rounded-full z-30 pointer-events-none bg-[var(--typing-accent)] typing-cursor", (isFocused && countdown === null && !isCaretResyncing) ? "opacity-100" : "opacity-0")}
                style={{ transition: "opacity 0.1s" }}
             />
 
@@ -939,16 +1013,17 @@ export function TypingScreen({
           </div>
 
           <AnimatePresence>
-            {!isFocused && countdown === null && (
+            {isFocusPromptVisible && (
               <motion.div
                 animate={{ opacity: 1 }}
-                className="absolute inset-0 z-40 flex cursor-pointer flex-col items-center justify-center gap-3 bg-white/45 dark:bg-[#111213]/45"
+                className="absolute inset-0 z-40 pointer-events-none flex items-center justify-center"
                 exit={{ opacity: 0 }}
                 initial={{ opacity: 0 }}
-                transition={{ duration: 0.2 }}
+                transition={{ duration: 0.15 }}
               >
-                <div className="flex items-center gap-2 text-neutral-500 dark:text-neutral-400 text-xs bg-neutral-100/50 dark:bg-neutral-900/50 px-3 py-1 rounded-full shadow-sm border border-neutral-200 dark:border-white/10">
-                  <span>Click or press any key to focus</span>
+                <div className="flex items-center gap-2 font-mono text-base text-center text-neutral-700 dark:text-neutral-300 select-none">
+                  <MousePointer2 className="h-4 w-4" strokeWidth={1.75} />
+                  <span>click or press any key to focus</span>
                 </div>
               </motion.div>
             )}

@@ -99,6 +99,17 @@ export class TypingEngine {
     return this.finished;
   }
 
+  /**
+   * Re-measure the already-active caret after an external layout reflow
+   * (for example, a viewport resize). This deliberately does not mutate
+   * typing state, stats, words, or replay data.
+   */
+  public resyncCaretAfterReflow() {
+    if (this.finished || !this.cursorElem || !this.wordsContainer) return;
+    this.updateScroll();
+    this.updateCursor(true);
+  }
+
 
   private handleKeyUp = (e: KeyboardEvent) => {
     this.config.onSound("up", e.code);
@@ -389,7 +400,7 @@ export class TypingEngine {
     }
   }
 
-  private updateCursor() {
+  private updateCursor(immediate = false) {
      if (!this.cursorElem) return;
 
 
@@ -428,7 +439,7 @@ export class TypingEngine {
             const targetX = charRect.left - contRect.left + (attachAtRight ? charRect.width : 0) - 1;
             const targetY = charRect.top - contRect.top + 2;
 
-            if (this.isFirstCursorUpdate) {
+            if (this.isFirstCursorUpdate || immediate) {
                this.cursorElem!.style.transform = `translate(${targetX}px, ${targetY}px)`;
                this.isFirstCursorUpdate = false;
             } else {
@@ -545,4 +556,3 @@ export class TypingEngine {
      this.config.onFinish(wpm, acc, this.elapsedSeconds, finalTypedText, this.wpmHistory, this.replayLog, Array.from(this.errorIndices));
   }
 }
-

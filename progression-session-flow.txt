@@ -1,0 +1,186 @@
+client/src/contexts/AuthContext.tsx-96-  /** false for OAuth accounts (Google, etc.) that have no local password */
+client/src/contexts/AuthContext.tsx-97-  requiresPassword: boolean;
+client/src/contexts/AuthContext.tsx-98-}
+client/src/contexts/AuthContext.tsx-99-
+client/src/contexts/AuthContext.tsx:100:export interface TypingSession {
+client/src/contexts/AuthContext.tsx-101-  id: string;
+client/src/contexts/AuthContext.tsx-102-  owner_id: string;
+client/src/contexts/AuthContext.tsx-103-  date: string;
+client/src/contexts/AuthContext.tsx-104-  speed: number;
+--
+client/src/contexts/AuthContext.tsx-119-}
+client/src/contexts/AuthContext.tsx-120-
+client/src/contexts/AuthContext.tsx-121-interface AuthContextType {
+client/src/contexts/AuthContext.tsx-122-  user: UserProfile | null;
+client/src/contexts/AuthContext.tsx:123:  sessions: TypingSession[];
+client/src/contexts/AuthContext.tsx-124-  files: CloudFile[];
+client/src/contexts/AuthContext.tsx-125-  isLoading: boolean;
+client/src/contexts/AuthContext.tsx-126-  error: string | null;
+client/src/contexts/AuthContext.tsx-127-  guestUid: string;
+--
+client/src/contexts/AuthContext.tsx-131-  signInWithGoogle: () => Promise<void>;
+client/src/contexts/AuthContext.tsx-132-  signOut: () => Promise<void>;
+client/src/contexts/AuthContext.tsx-133-  switchToAccount: (uid: string, password?: string) => Promise<void>;
+client/src/contexts/AuthContext.tsx-134-  removeLinkedAccount: (uid: string) => void;
+client/src/contexts/AuthContext.tsx:135:  addSession: (
+client/src/contexts/AuthContext.tsx-136-    speed: number,
+client/src/contexts/AuthContext.tsx-137-    accuracy: number,
+client/src/contexts/AuthContext.tsx-138-    type: "Practice" | "Exam",
+client/src/contexts/AuthContext.tsx-139-    duration: number,
+--
+client/src/contexts/AuthContext.tsx-153-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+client/src/contexts/AuthContext.tsx-154-
+client/src/contexts/AuthContext.tsx-155-export function AuthProvider({ children }: { children: React.ReactNode }) {
+client/src/contexts/AuthContext.tsx-156-  const [user, setUser] = useState<UserProfile | null>(null);
+client/src/contexts/AuthContext.tsx:157:  const [sessions, setSessions] = useState<TypingSession[]>([]);
+client/src/contexts/AuthContext.tsx-158-  const [files, setFiles] = useState<CloudFile[]>([]);
+client/src/contexts/AuthContext.tsx-159-  const [isLoading, setIsLoading] = useState(true);
+client/src/contexts/AuthContext.tsx-160-  const [error, setError] = useState<string | null>(null);
+client/src/contexts/AuthContext.tsx-161-  const [linkedAccounts, setLinkedAccounts] = useState<LinkedAccountInfo[]>([]);
+--
+client/src/contexts/AuthContext.tsx-192-
+client/src/contexts/AuthContext.tsx-193-  // ── Load sessions & files when user changes ────────────────────────────────
+client/src/contexts/AuthContext.tsx-194-  useEffect(() => {
+client/src/contexts/AuthContext.tsx-195-    if (!user) {
+client/src/contexts/AuthContext.tsx:196:      setSessions([]);
+client/src/contexts/AuthContext.tsx-197-      setFiles([]);
+client/src/contexts/AuthContext.tsx-198-      return;
+client/src/contexts/AuthContext.tsx-199-    }
+client/src/contexts/AuthContext.tsx-200-
+client/src/contexts/AuthContext.tsx-201-    const localSessions: TypingSession[] = JSON.parse(localStorage.getItem("typing_suite_sessions") || "[]");
+client/src/contexts/AuthContext.tsx-202-    const userSessions = localSessions
+client/src/contexts/AuthContext.tsx-203-      .filter((s) => s.owner_id === user.uid)
+client/src/contexts/AuthContext.tsx-204-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+client/src/contexts/AuthContext.tsx:205:    setSessions(userSessions);
+client/src/contexts/AuthContext.tsx-206-
+client/src/contexts/AuthContext.tsx-207-    const localFiles: CloudFile[] = JSON.parse(localStorage.getItem("typing_suite_files") || "[]");
+client/src/contexts/AuthContext.tsx-208-    const userFiles = localFiles
+client/src/contexts/AuthContext.tsx-209-      .filter((f) => f.owner_id === user.uid)
+--
+client/src/contexts/AuthContext.tsx-372-    setError(null);
+client/src/contexts/AuthContext.tsx-373-    try {
+client/src/contexts/AuthContext.tsx-374-      localStorage.removeItem("typing_suite_current_uid");
+client/src/contexts/AuthContext.tsx-375-      setUser(null);
+client/src/contexts/AuthContext.tsx:376:      setSessions([]);
+client/src/contexts/AuthContext.tsx-377-      setFiles([]);
+client/src/contexts/AuthContext.tsx-378-      refreshLinkedAccounts();
+client/src/contexts/AuthContext.tsx-379-    } catch (err: any) {
+client/src/contexts/AuthContext.tsx-380-      setError(err?.message || "Failed to sign out.");
+--
+client/src/contexts/AuthContext.tsx-389-    // Switch to guest
+client/src/contexts/AuthContext.tsx-390-    if (uid === guestUid) {
+client/src/contexts/AuthContext.tsx-391-      localStorage.removeItem("typing_suite_current_uid");
+client/src/contexts/AuthContext.tsx-392-      setUser(null);
+client/src/contexts/AuthContext.tsx:393:      setSessions([]);
+client/src/contexts/AuthContext.tsx-394-      setFiles([]);
+client/src/contexts/AuthContext.tsx-395-      return;
+client/src/contexts/AuthContext.tsx-396-    }
+client/src/contexts/AuthContext.tsx-397-
+--
+client/src/contexts/AuthContext.tsx-448-    // If removing the current user, sign them out
+client/src/contexts/AuthContext.tsx-449-    if (user?.uid === uid) {
+client/src/contexts/AuthContext.tsx-450-      localStorage.removeItem("typing_suite_current_uid");
+client/src/contexts/AuthContext.tsx-451-      setUser(null);
+client/src/contexts/AuthContext.tsx:452:      setSessions([]);
+client/src/contexts/AuthContext.tsx-453-      setFiles([]);
+client/src/contexts/AuthContext.tsx-454-    }
+client/src/contexts/AuthContext.tsx-455-    refreshLinkedAccounts();
+client/src/contexts/AuthContext.tsx-456-  };
+client/src/contexts/AuthContext.tsx-457-
+client/src/contexts/AuthContext.tsx-458-  // ── Data actions ───────────────────────────────────────────────────────────
+client/src/contexts/AuthContext.tsx-459-
+client/src/contexts/AuthContext.tsx:460:  const addSession = async (
+client/src/contexts/AuthContext.tsx-461-    speed: number, accuracy: number, type: "Practice" | "Exam",
+client/src/contexts/AuthContext.tsx-462-    duration: number, passageTitle: string, content: string, replayEvents?: string
+client/src/contexts/AuthContext.tsx-463-  ) => {
+client/src/contexts/AuthContext.tsx-464-    if (!user) return;
+--
+client/src/contexts/AuthContext.tsx-469-    };
+client/src/contexts/AuthContext.tsx-470-    const localSessions: TypingSession[] = JSON.parse(localStorage.getItem("typing_suite_sessions") || "[]");
+client/src/contexts/AuthContext.tsx-471-    localSessions.push(sessionObj);
+client/src/contexts/AuthContext.tsx-472-    localStorage.setItem("typing_suite_sessions", JSON.stringify(localSessions));
+client/src/contexts/AuthContext.tsx:473:    setSessions((prev) => [sessionObj, ...prev]);
+client/src/contexts/AuthContext.tsx-474-  };
+client/src/contexts/AuthContext.tsx-475-
+client/src/contexts/AuthContext.tsx-476-  const deleteSession = async (sessionId: string) => {
+client/src/contexts/AuthContext.tsx-477-    if (!user) return;
+client/src/contexts/AuthContext.tsx-478-    const localSessions: TypingSession[] = JSON.parse(localStorage.getItem("typing_suite_sessions") || "[]");
+client/src/contexts/AuthContext.tsx-479-    localStorage.setItem("typing_suite_sessions", JSON.stringify(localSessions.filter((s) => s.id !== sessionId)));
+client/src/contexts/AuthContext.tsx:480:    setSessions((prev) => prev.filter((s) => s.id !== sessionId));
+client/src/contexts/AuthContext.tsx-481-  };
+client/src/contexts/AuthContext.tsx-482-
+client/src/contexts/AuthContext.tsx-483-  const saveFile = async (title: string, content: string, fileId?: string): Promise<string> => {
+client/src/contexts/AuthContext.tsx-484-    if (!user) throw new Error("Authentication required to save file.");
+--
+client/src/contexts/AuthContext.tsx-517-        user, sessions, files, isLoading, error,
+client/src/contexts/AuthContext.tsx-518-        guestUid, linkedAccounts,
+client/src/contexts/AuthContext.tsx-519-        signIn, signUp, signInWithGoogle, signOut,
+client/src/contexts/AuthContext.tsx-520-        switchToAccount, removeLinkedAccount,
+client/src/contexts/AuthContext.tsx:521:        addSession, deleteSession, saveFile, deleteFile,
+client/src/contexts/AuthContext.tsx-522-        clearError, updateProfile,
+client/src/contexts/AuthContext.tsx-523-      }}
+client/src/contexts/AuthContext.tsx-524-    >
+client/src/contexts/AuthContext.tsx-525-      {children}
+--
+client/src/pages/PracticeMode.tsx-328-  forceStep?: number | null;
+client/src/pages/PracticeMode.tsx-329-  onForceStepDone?: () => void;
+client/src/pages/PracticeMode.tsx-330-  onStateChange?: (state: { step: number; wpm: number; accuracy: number; weakKeys: string[]; problemKeys: string[]; timerRunning: boolean; typedTextLength: number; activeKeyCodes: string[] }) => void;
+client/src/pages/PracticeMode.tsx-331-}) {
+client/src/pages/PracticeMode.tsx:332:  const { user, addSession } = useAuth();
+client/src/pages/PracticeMode.tsx-333-  const keystrokeLogRef = useRef<{ char: string; index: number; timestamp: number; latency: number; key: string; isCorrect: boolean }[]>([]);
+client/src/pages/PracticeMode.tsx-334-
+client/src/pages/PracticeMode.tsx-335-  // ── Per-account exact-resume session store ──────────────────────────────
+client/src/pages/PracticeMode.tsx-336-  // Keyed by accountUid so switching between real accounts (or to/from
+--
+client/src/pages/PracticeMode.tsx-397-        return newPb;
+client/src/pages/PracticeMode.tsx-398-      });
+client/src/pages/PracticeMode.tsx-399-
+client/src/pages/PracticeMode.tsx-400-
+client/src/pages/PracticeMode.tsx:401:      if (user && addSession) {
+client/src/pages/PracticeMode.tsx:402:        addSession(wpm, accuracy, "Practice", Math.floor(elapsedTime), title || "Quick Practice", text, JSON.stringify(replayLog))
+client/src/pages/PracticeMode.tsx-403-          .catch(e => console.error("Cloud practice run upload failed:", e));
+client/src/pages/PracticeMode.tsx-404-      }
+client/src/pages/PracticeMode.tsx-405-    }
+client/src/pages/PracticeMode.tsx-406-  }, [step]);
+--
+client/src/pages/Workspace.tsx-428-      return defaultValue;
+client/src/pages/Workspace.tsx-429-    }
+client/src/pages/Workspace.tsx-430-  };
+client/src/pages/Workspace.tsx-431-
+client/src/pages/Workspace.tsx:432:  const { user, signOut, addSession, saveFile: saveFileToCloud, sessions, linkedAccounts, guestUid, switchToAccount, removeLinkedAccount } = useAuth();
+client/src/pages/Workspace.tsx-433-
+client/src/pages/Workspace.tsx-434-  const totalXP = React.useMemo(() => {
+client/src/pages/Workspace.tsx-435-    return (sessions || []).reduce((acc, s) => {
+client/src/pages/Workspace.tsx-436-      const base = s.type === "Exam" ? 250 : 120;
+--
+client/src/pages/Workspace.tsx-3279-    setExamStatus("timeout");
+client/src/pages/Workspace.tsx-3280-    setIsDirty(true);
+client/src/pages/Workspace.tsx-3281-    sealActiveTab(true);
+client/src/pages/Workspace.tsx-3282-
+client/src/pages/Workspace.tsx:3283:    if (user && addSession) {
+client/src/pages/Workspace.tsx-3284-      const content = editorRef.current ? editorRef.current.getMarkdown() : "";
+client/src/pages/Workspace.tsx-3285-      const chars = content.length;
+client/src/pages/Workspace.tsx-3286-
+client/src/pages/Workspace.tsx-3287-      // Calculate actual duration spent
+client/src/pages/Workspace.tsx-3288-      const durationSeconds = examTotalSeconds - examRemainingSeconds;
+client/src/pages/Workspace.tsx-3289-      const durationMinutes = Math.max(0.1, durationSeconds / 60);
+client/src/pages/Workspace.tsx-3290-      const wpm = Math.round((chars / 5) / durationMinutes);
+client/src/pages/Workspace.tsx-3291-
+client/src/pages/Workspace.tsx:3292:      addSession(
+client/src/pages/Workspace.tsx-3293-        wpm || 0,
+client/src/pages/Workspace.tsx-3294-        99,
+client/src/pages/Workspace.tsx-3295-        "Exam",
+client/src/pages/Workspace.tsx-3296-        Math.floor(durationSeconds),
+--
+client/src/pages/Workspace.tsx-3317-    const durationSeconds = examTotalSeconds - examRemainingSeconds;
+client/src/pages/Workspace.tsx-3318-    const durationMinutes = Math.max(0.1, durationSeconds / 60);
+client/src/pages/Workspace.tsx-3319-    const wpm = Math.round((chars / 5) / durationMinutes);
+client/src/pages/Workspace.tsx-3320-
+client/src/pages/Workspace.tsx:3321:    if (user && addSession) {
+client/src/pages/Workspace.tsx-3322-      isSavingExamRef.current = true;
+client/src/pages/Workspace.tsx-3323-      try {
+client/src/pages/Workspace.tsx:3324:        await addSession(
+client/src/pages/Workspace.tsx-3325-          wpm || 0,
+client/src/pages/Workspace.tsx-3326-          99,
+client/src/pages/Workspace.tsx-3327-          "Exam",
+client/src/pages/Workspace.tsx-3328-          Math.floor(durationSeconds),
